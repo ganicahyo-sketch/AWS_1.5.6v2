@@ -404,17 +404,17 @@ public class MainActivity extends Activity {
             try {
                 JSONObject meta = null;
                 try {
-                    meta = getJson("https://api.thingspeak.com/channels/" + URLEncoder.encode(ch,"UTF-8") + ".json"
-                            + (key.isEmpty() ? "" : "?api_key=" + URLEncoder.encode(key,"UTF-8")));
+                    meta = getJson("https://api.thingspeak.com/channels/" + URLEncoder.encode(channel,"UTF-8") + ".json"
+                            + (key.isEmpty() ? "" : "?api_key=" + URLEncoder.encode(readkey,"UTF-8")));
                 } catch (Exception ignored) {}
-                JSONObject feed = getJson("https://api.thingspeak.com/channels/" + URLEncoder.encode(ch,"UTF-8")
+                JSONObject feed = getJson("https://api.thingspeak.com/channels/" + URLEncoder.encode(channel,"UTF-8")
                         + "/feeds/last.json?timezone=Asia%2FJakarta&status=true"
-                        + (key.isEmpty() ? "" : "&api_key=" + URLEncoder.encode(key,"UTF-8")));
+                        + (key.isEmpty() ? "" : "&api_key=" + URLEncoder.encode(readkey,"UTF-8")));
                 final JSONObject metadata = meta;
                 final String[] vals = new String[8];
                 for (int i=0;i<8;i++) vals[i] = feed.optString("field"+(i+1),"");
                 final String created = feed.optString("created_at","");
-                runOnUiThread(() -> renderThingSpeak(metadata, vals, created, ch));
+                runOnUiThread(() -> renderThingSpeak(metadata, vals, created, channel));
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     statusChip.setText("THINGSPEAK GAGAL");
