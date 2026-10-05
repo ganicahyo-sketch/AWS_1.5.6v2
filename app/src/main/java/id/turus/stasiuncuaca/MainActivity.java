@@ -388,6 +388,7 @@ public class MainActivity extends Activity {
         tsLoading = true;
         String ch = prefs.getString("channel", "").trim();
         if (ch.isEmpty()) ch = DEFAULT_CHANNEL;
+
         String key = prefs.getString("read_key", "").trim();
         if (key.isEmpty()) key = DEFAULT_READ_KEY;
         if (ch.isEmpty()) {
@@ -395,6 +396,9 @@ public class MainActivity extends Activity {
             tsLoading = false;
             return;
         }
+            // FIX: variabel yang dipakai oleh lambda harus final/effectively final
+        final String channel = ch;
+        final String readKey = key;
         statusChip.setText(manual ? "MEMUAT THINGSPEAK..." : "THINGSPEAK TERHUBUNG");
         net.execute(() -> {
             try {
