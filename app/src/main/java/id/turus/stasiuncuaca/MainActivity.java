@@ -405,11 +405,11 @@ public class MainActivity extends Activity {
                 JSONObject meta = null;
                 try {
                     meta = getJson("https://api.thingspeak.com/channels/" + URLEncoder.encode(channel,"UTF-8") + ".json"
-                            + (readkey.isEmpty() ? "" : "?api_key=" + URLEncoder.encode(readkey,"UTF-8")));
+                            + (readKey.isEmpty() ? "" : "?api_key=" + URLEncoder.encode(readKey,"UTF-8")));
                 } catch (Exception ignored) {}
                 JSONObject feed = getJson("https://api.thingspeak.com/channels/" + URLEncoder.encode(channel,"UTF-8")
                         + "/feeds/last.json?timezone=Asia%2FJakarta&status=true"
-                        + (readkey.isEmpty() ? "" : "&api_key=" + URLEncoder.encode(readkey,"UTF-8")));
+                        + (readKey.isEmpty() ? "" : "&api_key=" + URLEncoder.encode(readKey,"UTF-8")));
                 final JSONObject metadata = meta;
                 final String[] vals = new String[8];
                 for (int i=0;i<8;i++) vals[i] = feed.optString("field"+(i+1),"");
