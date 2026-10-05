@@ -39,7 +39,7 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
           accept-android-sdk-licenses: 'yes'
-          log-accepted-android-sdk-licenses: 'false'
+          log-accepted-android-sdk-licenses: false
 
       - name: Set up Gradle 9.4.1
         uses: gradle/actions/setup-gradle@v6
