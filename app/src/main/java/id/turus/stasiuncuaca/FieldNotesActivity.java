@@ -1,6 +1,5 @@
 package id.turus.stasiuncuaca;
 
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -37,7 +36,7 @@ import java.util.concurrent.Executors;
  * Interpretasi tetap diberi label screening bila standar sangat tergantung
  * metode ekstraksi/laboratorium.
  */
-public class FieldNotesActivity extends Activity {
+public class FieldNotesActivity extends BaseActivity {
     private static final String PREFS = "thingspeak_config";
     private static final String KEY_NOTES = "field_notes_v153";
     private static final String KEY_FERT = "fert_history";

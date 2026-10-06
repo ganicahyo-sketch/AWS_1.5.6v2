@@ -1,6 +1,5 @@
 package id.turus.stasiuncuaca;
 
-import android.app.Activity;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -45,7 +44,7 @@ import java.util.Locale;
  * Laporan PDF mandiri: cuaca, tanah, histori, analisis, rekomendasi, dan AI.
  * Menggunakan PdfDocument bawaan Android - tanpa library tambahan.
  */
-public class PdfReportActivity extends Activity {
+public class PdfReportActivity extends BaseActivity {
     private static final String PREFS = "thingspeak_config";
     private static final ZoneId WIB = ZoneId.of("Asia/Jakarta");
     private static final DateTimeFormatter PRINT_DATE = DateTimeFormatter.ofPattern("dd MMMM yyyy HH:mm", new Locale("id", "ID"));

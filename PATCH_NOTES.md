@@ -72,3 +72,9 @@ Prediksi OPT bukan diagnosis. Verifikasi dengan gejala, populasi, luas serangan,
 - Format JSON mentah dan tanda kutip ganda tidak ditampilkan pada tabel laporan.
 - Tabel otomatis membungkus teks dan mengulang header ketika berganti halaman.
 - Histori tetap dimasukkan pada laporan ringkas maupun lengkap karena Print/Save adalah tempat tampilnya histori.
+
+## Build/UI correction - 2026-10-06
+- Fixed `CsvDownloadActivity.readAll(InputStream)` compile error reported by GitHub Actions run #25.
+- Added optional Light / Dark / System appearance selection in Settings.
+- Added theme-qualified colors and a theme-aware Activity base class only; weather, ThingSpeak, agronomy, history, CSV and PDF logic remain intact.
+- OpenAI API key remains blank by default.

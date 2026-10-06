@@ -1,6 +1,5 @@
 package id.turus.stasiuncuaca;
 
-import android.app.Activity;
 import android.app.DatePickerDialog;
 import android.content.Context;
 import android.content.Intent;
@@ -53,7 +52,7 @@ import java.util.concurrent.Executors;
  * resolution. Both sources are streamed to a temporary file so the final CSV
  * is not held fully in RAM.
  */
-public class CsvDownloadActivity extends Activity {
+public class CsvDownloadActivity extends BaseActivity {
     private static final String PREFS = "thingspeak_config";
     private static final ZoneId WIB = ZoneId.of("Asia/Jakarta");
     private static final DateTimeFormatter API_FMT =
@@ -889,6 +888,20 @@ public class CsvDownloadActivity extends Activity {
         }
 
         return column == targetColumn ? field.toString() : null;
+    }
+
+    private String readAll(InputStream in) throws Exception {
+        if (in == null) return "";
+        StringBuilder b = new StringBuilder();
+        try (BufferedReader r = new BufferedReader(
+                new InputStreamReader(in, StandardCharsets.UTF_8))) {
+            char[] buf = new char[4096];
+            int n;
+            while ((n = r.read(buf)) != -1) {
+                b.append(buf, 0, n);
+            }
+        }
+        return b.toString();
     }
 
     private String readErrorBody(HttpURLConnection c) {

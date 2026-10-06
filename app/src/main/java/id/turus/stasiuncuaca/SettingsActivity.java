@@ -1,6 +1,5 @@
 package id.turus.stasiuncuaca;
 
-import android.app.Activity;
 import android.content.Context;
 import android.os.Bundle;
 import android.text.InputType;
@@ -12,14 +11,14 @@ import android.widget.Toast;
 
 import java.util.Locale;
 
-public class SettingsActivity extends Activity {
+public class SettingsActivity extends BaseActivity {
     private static final String PREFS = "thingspeak_config";
     private static final String DEFAULT_CHANNEL = "2981880";
     private static final String DEFAULT_READ_KEY = "P4B56Z7HZM56Q7HJ";
     private static final String DEFAULT_AI_KEY = "";
     private android.content.SharedPreferences p;
     private EditText title, channel, readKey, aiKey, aiModel, crop, lat, lon, elev;
-    private Spinner cult;
+    private Spinner cult, themeMode;
     private TextView toggleRead, toggleAi;
     private EditText[] fieldName = new EditText[8];
     private EditText[] fieldUnit = new EditText[8];
@@ -31,7 +30,7 @@ public class SettingsActivity extends Activity {
         title=findViewById(R.id.appTitle); channel=findViewById(R.id.channel); readKey=findViewById(R.id.readKey);
         aiKey=findViewById(R.id.aiKey); aiModel=findViewById(R.id.aiModel); crop=findViewById(R.id.crop);
         lat=findViewById(R.id.latitude); lon=findViewById(R.id.longitude); elev=findViewById(R.id.elevation);
-        cult=findViewById(R.id.cultivation); toggleRead=findViewById(R.id.toggleReadKey); toggleAi=findViewById(R.id.toggleAiKey);
+        cult=findViewById(R.id.cultivation); themeMode=findViewById(R.id.themeMode); toggleRead=findViewById(R.id.toggleReadKey); toggleAi=findViewById(R.id.toggleAiKey);
         for(int i=0;i<8;i++){
             int n=i+1;
             fieldName[i]=findViewById(getResources().getIdentifier("fieldName"+n,"id",getPackageName()));
@@ -39,6 +38,10 @@ public class SettingsActivity extends Activity {
         }
         ArrayAdapter<String> ad=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,new String[]{"Konvensional / PHT","Organik"});
         ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); cult.setAdapter(ad);
+        ArrayAdapter<String> themeAdapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,new String[]{"Ikuti sistem","Terang","Gelap"});
+        themeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        themeMode.setAdapter(themeAdapter);
+        themeMode.setSelection(ThemeManager.getSelectionIndex(this));
         load();
         findViewById(R.id.useGps).setOnClickListener(v->startActivity(new android.content.Intent(this,MainActivity.class)));
         findViewById(R.id.saveSettings).setOnClickListener(v->save());
@@ -58,6 +61,7 @@ public class SettingsActivity extends Activity {
         aiModel.setText(p.getString("ai_model","gpt-6-luna"));
         crop.setText(p.getString("crop","Tanaman pertanian"));
         lat.setText(f(p.getFloat("latitude",Float.NaN))); lon.setText(f(p.getFloat("longitude",Float.NaN))); elev.setText(f(p.getFloat("elevation",Float.NaN)));
+        themeMode.setSelection(ThemeManager.getSelectionIndex(this));
         cult.setSelection(p.getString("farm_cultivation_mode","Konvensional / PHT").toLowerCase(Locale.US).contains("organik")?1:0);
         for(int i=0;i<8;i++){
             fieldName[i].setText(p.getString("field_name_"+(i+1),""));
@@ -77,6 +81,7 @@ public class SettingsActivity extends Activity {
                 .putString("read_key",readKey.getText().toString().trim().isEmpty()?DEFAULT_READ_KEY:readKey.getText().toString().trim())
                 .putString("ai_api_key",aiKey.getText().toString().trim()).putString("ai_model",aiModel.getText().toString().trim().isEmpty()?"gpt-6-luna":aiModel.getText().toString().trim())
                 .putString("crop",cv).putString("farm_cultivation_mode",cult.getSelectedItem().toString());
+        ThemeManager.saveMode(e, themeMode.getSelectedItemPosition());
         if(!Float.isNaN(la))e.putFloat("latitude",la); else e.remove("latitude");
         if(!Float.isNaN(lo))e.putFloat("longitude",lo); else e.remove("longitude");
         if(!Float.isNaN(el))e.putFloat("elevation",el); else e.remove("elevation");

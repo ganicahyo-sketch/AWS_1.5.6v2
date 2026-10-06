@@ -1,7 +1,6 @@
 package id.turus.stasiuncuaca;
 
 import android.Manifest;
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -33,7 +32,7 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class MainActivity extends Activity {
+public class MainActivity extends BaseActivity {
     private static final String PREFS = "thingspeak_config";
     private static final String DEFAULT_CHANNEL = "2981880";
     private static final String DEFAULT_READ_KEY = "P4B56Z7HZM56Q7HJ";

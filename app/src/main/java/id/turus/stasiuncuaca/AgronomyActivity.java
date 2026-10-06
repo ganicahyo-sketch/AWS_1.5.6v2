@@ -1,6 +1,5 @@
 package id.turus.stasiuncuaca;
 
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
@@ -24,7 +23,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** Comprehensive agronomy dashboard and evidence-assisted AI report. */
-public class AgronomyActivity extends Activity {
+public class AgronomyActivity extends BaseActivity {
     private static final String PREFS="thingspeak_config";
     private static final String DEFAULT_AI_KEY="";
     private final ExecutorService net=Executors.newSingleThreadExecutor();
