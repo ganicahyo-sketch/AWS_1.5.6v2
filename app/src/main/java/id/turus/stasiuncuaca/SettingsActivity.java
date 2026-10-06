@@ -16,7 +16,7 @@ public class SettingsActivity extends Activity {
     private static final String PREFS = "thingspeak_config";
     private static final String DEFAULT_CHANNEL = "2981880";
     private static final String DEFAULT_READ_KEY = "P4B56Z7HZM56Q7HJ";
-    private static final String DEFAULT_AI_KEY = "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";
+    private static final String DEFAULT_AI_KEY = "";
     private android.content.SharedPreferences p;
     private EditText title, channel, readKey, aiKey, aiModel, crop, lat, lon, elev;
     private Spinner cult;

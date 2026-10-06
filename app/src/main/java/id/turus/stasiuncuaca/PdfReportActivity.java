@@ -143,12 +143,13 @@ public class PdfReportActivity extends Activity {
         addAgronomyAnalysis(rc, p);
         if (complete) {
             addOptRisk(rc, p);
-            addHistory(rc, p);
             addRecommendations(rc, p);
+            addHistory(rc, p);
             addAi(rc, p);
             addSources(rc);
         } else {
             addRecommendations(rc, p);
+            addHistory(rc, p);
         }
 
         rc.finish(out);
@@ -232,15 +233,40 @@ public class PdfReportActivity extends Activity {
     }
 
     private void addHistory(ReportCanvas rc, android.content.SharedPreferences p) {
-        rc.section("5. HISTORI LAPANGAN, PEMUPUKAN & OPT");
+        rc.section("5. HISTORI TERPADU");
         List<HistoryItem> items = new ArrayList<>();
         collect(items, p.getString("field_notes_v153", "[]"), "LAPANG", "observation", "action");
         collect(items, p.getString("fert_history", "[]"), "PUPUK", "product", "note");
         collect(items, p.getString("opt_history", "[]"), "OPT", "target", "result");
         Collections.sort(items, Comparator.comparingLong(a -> -a.created));
-        if (items.isEmpty()) rc.text("Belum ada histori tersimpan.");
-        else for (int i = 0; i < Math.min(30, items.size()); i++) rc.text(items.get(i).toText());
+        if (items.isEmpty()) {
+            rc.text("Belum ada histori tersimpan.");
+        } else {
+            rc.tableHeader(new String[]{"Tanggal", "Jenis", "Kegiatan / OPT", "Detail"}, new float[]{78, 58, 175, 204});
+            for (int i = 0; i < Math.min(30, items.size()); i++) {
+                HistoryItem h = items.get(i);
+                rc.tableRow(new String[]{
+                        cleanCell(h.date),
+                        cleanCell(h.type),
+                        cleanCell(h.main),
+                        cleanCell(joinDetail(h.second, h.extra))
+                }, new float[]{78, 58, 175, 204});
+            }
+        }
         rc.line();
+    }
+
+    private String joinDetail(String second, String extra) {
+        String a = cleanCell(second);
+        String b = cleanCell(extra);
+        if (a.isEmpty()) return b;
+        if (b.isEmpty()) return a;
+        return a + "\n" + b;
+    }
+
+    private String cleanCell(String s) {
+        if (s == null) return "";
+        return s.replace('\"', '\'').replace("\n", " ").replace("\r", " ").trim();
     }
 
     private void collect(List<HistoryItem> out, String json, String type, String mainKey, String secondKey) {
@@ -321,7 +347,6 @@ public class PdfReportActivity extends Activity {
 
     private static final class HistoryItem {
         long created; String date,type,main,second,extra;
-        String toText(){StringBuilder s=new StringBuilder();s.append(date).append(" | ").append(type).append(" | ").append(main);if(second!=null&&!second.isEmpty())s.append(" | ").append(second);if(extra!=null&&!extra.trim().isEmpty())s.append(" | ").append(extra);return s.toString();}
     }
 
     private static final class PdfPrintAdapter extends PrintDocumentAdapter {
@@ -348,9 +373,10 @@ public class PdfReportActivity extends Activity {
     private static final class ReportCanvas {
         private static final int W=595,H=842,LEFT=40,RIGHT=40,TOP=42,BOTTOM=42;
         private final PdfDocument doc; private PdfDocument.Page page; private Canvas c; private Paint title,head,body,small,line; private float y;
+        private String[] lastTableHeader; private float[] lastTableWidths;
         ReportCanvas(PdfDocument doc){this.doc=doc; title=p(20,true);head=p(13,true);body=p(10,false);small=p(8,false);line=p(1,false);newPage();}
         private Paint p(float size,boolean bold){Paint x=new Paint(Paint.ANTI_ALIAS_FLAG);x.setColor(0xFF16232D);x.setTextSize(size);x.setTypeface(bold?Typeface.create(Typeface.DEFAULT,Typeface.BOLD):Typeface.DEFAULT);return x;}
-        private void newPage(){if(page!=null)doc.finishPage(page);page=doc.startPage(new PdfDocument.PageInfo.Builder(W,H,doc.getPages().size()+1).create());c=page.getCanvas();y=TOP;}
+        private void newPage(){if(page!=null)doc.finishPage(page);page=doc.startPage(new PdfDocument.PageInfo.Builder(W,H,doc.getPages().size()+1).create());c=page.getCanvas();y=TOP;if(lastTableHeader!=null)tableHeaderInternal(lastTableHeader,lastTableWidths);}
         private void need(float h){if(y+h>BOTTOM){newPage();y=TOP;}}
         void heading(String s){need(34);c.drawText(s,LEFT,y,title);y+=26;}
         void subheading(String s){need(28);c.drawText(s,LEFT,y,head);y+=22;}
@@ -359,6 +385,39 @@ public class PdfReportActivity extends Activity {
         void line(){need(12);c.drawLine(LEFT,y,W-RIGHT,y,line);y+=9;}
         void kv(String k,String v){need(17);c.drawText(k+":",LEFT,y,body);wrap("  "+v,body,17,145);}
         void text(String s){wrap(s,body,16);}
+        void tableHeader(String[] cells, float[] widths){
+            lastTableHeader=cells.clone(); lastTableWidths=widths.clone();
+            tableHeaderInternal(cells,widths);
+        }
+        private void tableHeaderInternal(String[] cells, float[] widths){
+            need(28);
+            float x=LEFT;
+            Paint header=p(8.5f,true);
+            c.drawRect(LEFT,y-11,W-RIGHT,y+7,header);
+            Paint textPaint=p(8.5f,true); textPaint.setColor(0xFFFFFFFF);
+            for(int i=0;i<cells.length;i++){String v=cells[i]==null?"":cells[i];c.drawText(v,x+4,y+2,textPaint);x+=widths[i];}
+            y+=18;
+            c.drawLine(LEFT,y,W-RIGHT,y,line);
+        }
+        void tableRow(String[] cells, float[] widths){
+            String[][] lines=new String[cells.length][];
+            int max=1;
+            for(int i=0;i<cells.length;i++){lines[i]=wrapLines(cells[i],body,widths[i]-8);max=Math.max(max,lines[i].length);}
+            float rowH=Math.max(18,max*11+7);
+            need(rowH+2);
+            float top=y-11,bottom=y+rowH-11;
+            c.drawRect(LEFT,top,W-RIGHT,bottom,line);
+            float x=LEFT;
+            for(int i=0;i<cells.length;i++){for(int j=0;j<lines[i].length;j++)c.drawText(lines[i][j],x+4,y+j*11,body);x+=widths[i];c.drawLine(x,top,x,bottom,line);}
+            y=bottom+7;
+        }
+        private String[] wrapLines(String s,Paint paint,float max){
+            if(s==null||s.trim().isEmpty()) return new String[]{""};
+            List<String> result=new ArrayList<>();
+            String[] paragraphs=s.split("\n",-1);
+            for(String para:paragraphs){String cur="";for(String w:para.trim().split("\\s+")){String nxt=cur.isEmpty()?w:cur+" "+w;if(paint.measureText(nxt)>max&&!cur.isEmpty()){result.add(cur);cur=w;}else cur=nxt;}if(!cur.isEmpty())result.add(cur);}
+            return result.isEmpty()?new String[]{""}:result.toArray(new String[0]);
+        }
         private void wrap(String s,Paint paint,float lh){wrap(s,paint,lh,LEFT);}
         private void wrap(String s,Paint paint,float lh,float x){if(s==null)return;String t=s.replace('\n',' ');String[] words=t.split("\\s+");String cur="";float max=W-RIGHT-x;for(String w:words){String nxt=cur.isEmpty()?w:cur+" "+w;if(paint.measureText(nxt)>max){need(lh);c.drawText(cur,x,y,paint);y+=lh;cur=w;}else cur=nxt;}if(!cur.isEmpty()){need(lh);c.drawText(cur,x,y,paint);y+=lh;}}
         void finish(File out)throws Exception{if(page!=null)doc.finishPage(page);try(FileOutputStream f=new FileOutputStream(out)){doc.writeTo(f);}doc.close();}

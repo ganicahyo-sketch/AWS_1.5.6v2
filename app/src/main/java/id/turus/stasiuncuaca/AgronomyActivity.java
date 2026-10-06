@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.BufferedReader;
@@ -25,7 +26,7 @@ import java.util.concurrent.Executors;
 /** Comprehensive agronomy dashboard and evidence-assisted AI report. */
 public class AgronomyActivity extends Activity {
     private static final String PREFS="thingspeak_config";
-    private static final String DEFAULT_AI_KEY="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";
+    private static final String DEFAULT_AI_KEY="";
     private final ExecutorService net=Executors.newSingleThreadExecutor();
     private android.content.SharedPreferences prefs;
     private TextView report, aiStatus;
@@ -109,7 +110,7 @@ public class AgronomyActivity extends Activity {
         s.append("\n6. REKOMENDASI TEKNIS\n");
         addRecommendations(s,crop,mode,ph,ec,ece,moist,fc,pwp,vpd,temp,rh,rain,et0,hst,method);
         s.append("\n7. CATATAN ILMIAH\n").append(AgronomyEngine.evidenceBrief()).append("\n");
-        s.append("\n8. HISTORI TERPADU (ringkas)\n").append(recent("field_notes_v153",8)).append("\nPemupukan:\n").append(recent("fert_history",8)).append("\nOPT:\n").append(recent("opt_history",8));
+        // Histori terpadu disimpan untuk laporan cetak/PDF, tetapi tidak ditampilkan pada layar analisis utama.
         String compact = compactReport(s.toString());
         report.setText(compact); prefs.edit().putString("last_agronomy_analysis",compact).apply();
     }
@@ -122,27 +123,50 @@ public class AgronomyActivity extends Activity {
                 if(t.startsWith("8. HISTORI TERPADU")) skip=false;
                 else continue;
             }
-            if(t.startsWith("PENTING:" ) || t.startsWith("Rumus skrining:" ) || t.startsWith("Stok = konsentrasi") || t.startsWith("URUTAN ANALISIS:")) continue;
+            if(t.startsWith("URUTAN ANALISIS:" ) || t.startsWith("Rumus skrining:" ) || t.startsWith("PENTING:" ) || t.startsWith("Stok = konsentrasi")) continue;
+            if(t.startsWith("SELESAI ANALISIS AWAL")) continue;
+            if(t.startsWith("Catatan: parameter yang tidak memiliki ambang universal")) continue;
             if(t.contains("tidak dikonversi otomatis") && t.startsWith("ECe lab:")) continue;
-            out.append(line).append("\\n");
+            out.append(line).append("\n");
         }
         return out.toString().trim();
     }
 
     private void showNotes(){
-        LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); int pad=(int)(16*getResources().getDisplayMetrics().density); root.setPadding(pad,pad,pad,pad);
+        ScrollView root=new ScrollView(this); int pad=(int)(16*getResources().getDisplayMetrics().density); root.setPadding(pad,pad,pad,pad);
+        LinearLayout content=new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
         TextView tv=new TextView(this); tv.setTextColor(getResources().getColor(R.color.text_main)); tv.setTextSize(14);
-        tv.setText("NOTE — METODE, RUMUS & SUMBER\\n\\n"+
-                "• EC sensor adalah parameter utama untuk input lapangan. Konversi satuan: µS/cm ÷ 1000 = dS/m. Aplikasi tidak mewajibkan ECe.\\n\\n"+
-                "• Tidak ada satu faktor universal untuk mengubah semua EC sensor lapang menjadi ECe. Hubungan tergantung metode ekstraksi, tekstur, kadar air, suhu, bulk density dan kondisi tanah. Bila ECe lab tersedia, tampilkan sebagai pembanding.\\n\\n"+
-                "• Rentang EC operasional: <1; 1–2; >2–3; >3–4; >4 dS/m. Ini screening; batas spesifik komoditas tetap diprioritaskan.\\n\\n"+
-                "• Bulk density default: tanah mineral 1,30 g/cm³; gambut 0,30 g/cm³; Input sendiri dapat dipilih.\\n\\n"+
-                "• Stok hara: konsentrasi mg/kg × BD g/cm³ × kedalaman cm × 0,10 = kg/ha. Stok bukan sama dengan serapan tanaman.\\n\\n"+
-                "• Open-Meteo soil moisture: m³/m³ × 100 = % volume.\\n\\n"+
-                "• ET₀ menggunakan pendekatan FAO-56 pada data Open-Meteo yang tersedia. VPD dibaca bersama suhu/RH dan status air tanah.\\n\\n"+
-                "• OpenAlex tetap digunakan untuk mendukung analisis berbasis literatur ilmiah.\\n\\n"+
-                "Rujukan EC/ECe: Pedosphere 32(6), 2022, DOI 10.1016/j.pedsph.2022.06.023; Journal of the Saudi Society of Agricultural Sciences 23(4), 2024, DOI 10.1016/j.jssas.2023.12.005.");
-        root.addView(tv,new LinearLayout.LayoutParams(-1,-2)); new AlertDialog.Builder(this).setTitle("NOTE — METODE & SUMBER").setView(root).setPositiveButton("TUTUP",null).show();
+        tv.setText("NOTE — INFORMASI ILMIAH, METODE & SUMBER\n\n"+
+                "ALUR ANALISIS\n"+
+                "1) Baca semua data terukur dari ThingSpeak/Open-Meteo/manual.\n"+
+                "2) Klasifikasikan tiap parameter sesuai rentang/ambang yang relevan.\n"+
+                "3) Hubungkan parameter dan tentukan faktor pembatas utama.\n"+
+                "4) Baru susun rekomendasi teknis berdasarkan bukti dan fase tanaman.\n\n"+
+                "STOK HARA TANAH\n"+
+                "Stok unsur pada lapisan tanah dihitung sebagai pendekatan massa tanah: konsentrasi (mg/kg) × bulk density (g/cm³) × kedalaman (cm) × 0,10 = kg/ha. Nilai ini adalah stok teoritis pada lapisan, bukan serapan atau ketersediaan langsung tanaman.\n\n"+
+                "KEBUTUHAN HARA / SKRINING\n"+
+                "Kebutuhan fase memakai kebutuhan musim komoditas × fraksi fase × skala target hasil × faktor dukungan soil-test, kemudian dikoreksi efisiensi pemulihan dan kredit pupuk. Ini model skrining/STCR-style, bukan QUEFTS atau STCR yang terkalibrasi lokal. Gunakan PUTS/STCR lokal bila tersedia.\n\n"+
+                "pH & KAPUR\n"+
+                "pH rendah tidak boleh langsung diubah menjadi dosis dolomit hanya dari pH. Kebutuhan pengapuran lebih kuat bila tersedia pH-buffer, Al-dd/H-dd, CEC/KTK, bahan organik, atau kebutuhan kapur laboratorium.\n\n"+
+                "EC vs ECe\n"+
+                "EC sensor adalah parameter lapangan dalam µS/cm; hubungan satuan: µS/cm ÷ 1000 = dS/m. ECe laboratorium tidak boleh dipaksakan dari satu faktor konversi universal karena bergantung metode, ekstraksi, kadar air, suhu, tekstur dan kondisi tanah.\n\n"+
+                "AIR TANAH\n"+
+                "Open-Meteo soil moisture dinyatakan sebagai m³/m³ dan untuk tampilan persentase volume dikalikan 100. FC/PWP digunakan bila tersedia untuk menilai FTSW/air tersedia.\n\n"+
+                "VPD & ET₀\n"+
+                "VPD dibaca bersama suhu/RH dan kondisi air tanah. ET₀ Open-Meteo menggunakan referensi FAO-56 Penman-Monteith pada produk yang tersedia. ET₀ adalah kebutuhan referensi, bukan kebutuhan irigasi komoditas secara langsung.\n\n"+
+                "PAR / PPFD\n"+
+                "PAR estimasi = 0,45 × shortwave; PPFD estimasi = PAR × 4,57 µmol/J. Ini estimasi broadband, bukan pengukuran quantum sensor.\n\n"+
+                "OPT\n"+
+                "Daftar OPT di mesin lokal hanya screening. AI dapat mencari OPT tambahan berdasarkan komoditas, fase, lokasi, gejala, riwayat, dan cuaca; hasil tetap merupakan risk screening, bukan diagnosis pasti.\n\n"+
+                "MODE ORGANIK\n"+
+                "Rekomendasi harus menggunakan input/proses yang diizinkan sistem organik yang berlaku dan tidak boleh menganggap semua input kimia setara dengan input organik.\n\n"+
+                "SUMBER UTAMA\n"+
+                "• Open-Meteo Historical Weather API — data historis reanalysis, variabel cuaca, tanah, ET₀, VPD dan radiasi.\n"+
+                "• OpenAlex — pencarian literatur ilmiah.\n"+
+                "• AgronomyEngine / NitrogenInference — model skrining lokal aplikasi.\n"+
+                "• Referensi EC/ECe: Pedosphere 32(6), 2022, DOI 10.1016/j.pedsph.2022.06.023; Journal of the Saudi Society of Agricultural Sciences 23(4), 2024, DOI 10.1016/j.jssas.2023.12.005.\n"+
+                "• Rujukan PPFD: Thimijan & Heins (1983), HortScience 18(6):818–822, DOI 10.21273/HORTSCI.18.6.818.");
+        content.addView(tv,new LinearLayout.LayoutParams(-1,-2)); root.addView(content,new ScrollView.LayoutParams(-1,-2)); new AlertDialog.Builder(this).setTitle("ⓘ INFORMASI ILMIAH").setView(root).setPositiveButton("TUTUP",null).show();
     }
 
     private void addRecommendations(StringBuilder s,String crop,String mode,double ph,double ec,double ece,double moist,double fc,double pwp,double vpd,double t,double rh,double rain,double et0,int hst,String method){
@@ -166,9 +190,11 @@ public class AgronomyActivity extends Activity {
     private String recent(String key,int max){try{JSONArray a=new JSONArray(prefs.getString(key,"[]"));StringBuilder s=new StringBuilder();for(int i=Math.max(0,a.length()-max);i<a.length();i++)s.append(a.optJSONObject(i)).append("\n");return s.toString().trim().isEmpty()?"(tidak ada)":s.toString();}catch(Exception e){return "(tidak ada)";}}
     private void requestAi(){
         String key=prefs.getString("ai_api_key",DEFAULT_AI_KEY).trim(); if(key.isEmpty()){aiStatus.setText("Masukkan OpenAI API key di Pengaturan.");return;}
-        final TextView button=findViewById(R.id.agroAiButton); button.setEnabled(false); aiStatus.setText("Mencari pustaka ilmiah dan menyusun analisis AI...");
+        final TextView button=findViewById(R.id.agroAiButton); button.setEnabled(false); aiStatus.setText("Menganalisis data, mencari OPT dan menyusun rekomendasi AI...");
         final String model=prefs.getString("ai_model","gpt-6-luna").trim().isEmpty()?"gpt-6-luna":prefs.getString("ai_model","gpt-6-luna").trim();
-        final String context=report.getText().toString();
+        final double aiLat=prefs.getFloat("latitude",Float.NaN);
+        final double aiLon=prefs.getFloat("longitude",Float.NaN);
+        final String context="LOKASI GPS: "+(Double.isFinite(aiLat)?String.format(Locale.US,"%.6f",aiLat):"--")+", "+(Double.isFinite(aiLon)?String.format(Locale.US,"%.6f",aiLon):"--")+"\n"+report.getText().toString();
         net.execute(()->{try{String lit=fetchOpenAlex(prefs.getString("crop","Tanaman pertanian"), context);String ans=callAi(key,model,context,lit);prefs.edit().putString("last_ai_advice",ans).putLong("last_ai_advice_epoch",System.currentTimeMillis()).apply();runOnUiThread(()->{aiStatus.setText(ans);button.setEnabled(true);});}catch(Exception e){runOnUiThread(()->{aiStatus.setText("AI gagal: "+msg(e));button.setEnabled(true);});}});
     }
     private String fetchOpenAlex(String crop,String context)throws Exception{
@@ -177,10 +203,39 @@ public class AgronomyActivity extends Activity {
         HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();c.setConnectTimeout(8000);c.setReadTimeout(12000);c.setRequestMethod("GET");if(c.getResponseCode()!=200)throw new Exception("OpenAlex HTTP "+c.getResponseCode());JSONObject r=new JSONObject(readAll(c.getInputStream()));JSONArray a=r.optJSONArray("results");StringBuilder out=new StringBuilder();if(a!=null)for(int i=0;i<a.length();i++){JSONObject w=a.optJSONObject(i);if(w==null)continue;out.append(i+1).append(") ").append(w.optString("display_name",""));out.append(" | year=").append(w.optInt("publication_year",0));String doi=w.optString("doi","");if(!doi.isEmpty())out.append(" | ").append(doi);out.append("\n");}return out.length()==0?"Tidak ada hasil OpenAlex yang cocok.":out.toString();
     }
     private String callAi(String key,String model,String ctx,String lit)throws Exception{
-        JSONObject p=new JSONObject();p.put("model",model);p.put("store",false);p.put("max_output_tokens",1800);
-        p.put("instructions","Anda adalah agronom pendamping petani Indonesia. WAJIB bekerja berurutan dan tidak boleh melompati tahap: (1) baca semua fakta terukur yang tersedia; (2) untuk SETIAP parameter yang tersedia, tampilkan nilai, satuan, kelas/rentang/status dan konteksnya — pH, N, N-total, P, K, EC/ECe, kelembapan tanah, suhu tanah, bahan organik, CEC/KTK, bulk density, kedalaman, suhu udara, suhu terasa, titik embun, RH, tekanan, hujan, ET0, angin, gust, awan, UV, visibilitas, lux, Shortwave, PAR energi, PPFD, sunshine, VPD serta parameter lainnya; (3) setelah seluruh parameter diklasifikasikan, identifikasi hubungan antarparameter dan faktor pembatas/prioritas; (4) BARU berikan rekomendasi menyeluruh. Pisahkan FAKTA TERUKUR, HASIL MODEL SCREENING, dan ASUMSI/DATA YANG BELUM ADA. Jelaskan pH dengan kelas rentang lebih dulu; jangan menghitung kapur dari pH saja; gunakan pH-buffer/Al-dd/H-dd/CEC/OM atau kebutuhan laboratorium bila ada. Bedakan EC sensor dari ECe; jangan konversi otomatis. N gunakan asumsi 1-5% N tersedia terhadap N-total bila data N-total tidak ada dan nyatakan rentangnya. P/K tampilkan kelas 5 tingkat dan nyatakan basis/metode serta keterbatasan sensor. Bedakan stok tanah dari serapan tanaman. Untuk kebutuhan pupuk, sebut model sebagai screening bila koefisien lokal/QUEFTS/STCR tidak tersedia. Prediksi OPT harus menyebut nama hama/penyakit bila pustaka/riwayat mendukung, tetapi tetap risk screening, bukan diagnosis. Untuk mode organik patuhi persyaratan sistem organik yang berlaku. Berikan rekomendasi komprehensif untuk 0-24 jam dan 1-7 hari setelah klasifikasi. Jangan membuat dosis pestisida baru.");
-        p.put("input","DATA DAN ANALISIS AWAL:\n"+ctx+"\n\nHASIL PUSTAKA OPENALEX:\n"+lit+"\n\nBuat rekomendasi komprehensif, teknis tetapi mudah dipahami.");
-        HttpURLConnection c=(HttpURLConnection)new URL("https://api.openai.com/v1/responses").openConnection();c.setRequestMethod("POST");c.setConnectTimeout(12000);c.setReadTimeout(40000);c.setDoOutput(true);c.setRequestProperty("Authorization","Bearer "+key);c.setRequestProperty("Content-Type","application/json; charset=UTF-8");byte[] b=p.toString().getBytes(StandardCharsets.UTF_8);c.setFixedLengthStreamingMode(b.length);try(OutputStream o=c.getOutputStream()){o.write(b);}int code=c.getResponseCode();if(code<200||code>=300){String er=readAll(c.getErrorStream());throw new Exception("OpenAI HTTP "+code+(er.isEmpty()?"":" — "+er.substring(0,Math.min(400,er.length()))));}JSONObject r=new JSONObject(readAll(c.getInputStream()));String t=r.optString("output_text","").trim();if(!t.isEmpty())return t;JSONArray out=r.optJSONArray("output");if(out!=null){StringBuilder z=new StringBuilder();for(int i=0;i<out.length();i++){JSONObject it=out.optJSONObject(i);JSONArray cc=it==null?null:it.optJSONArray("content");if(cc==null)continue;for(int j=0;j<cc.length();j++){JSONObject part=cc.optJSONObject(j);if(part!=null&&"output_text".equals(part.optString("type")))z.append(part.optString("text","")).append("\n");}}if(z.length()>0)return z.toString().trim();}throw new Exception("Respons AI tidak berisi teks.");
+        JSONObject p=new JSONObject();
+        p.put("model",model);
+        p.put("store",false);
+        p.put("max_output_tokens",5000);
+        JSONArray tools=new JSONArray();
+        JSONObject webSearch=new JSONObject();
+        webSearch.put("type","web_search");
+        tools.put(webSearch);
+        p.put("tools",tools);
+        // OPT discovery is a mandatory web-search step for this agronomy advisor.
+        p.put("tool_choice","required");
+        p.put("instructions",
+                "Anda adalah agronom pendamping petani Indonesia. Tujuan utama Anda bukan sekadar menjelaskan data, tetapi mengubah data menjadi KEPUTUSAN DAN REKOMENDASI TINDAKAN. " +
+                "DATA ANALISIS AWAL sudah berisi klasifikasi parameter dari mesin agronomi; jangan mengulang seluruh parameter satu per satu. Fokus pada faktor pembatas dan tindakan. " +
+                "WAJIB keluarkan bagian: 1) RINGKASAN KONDISI, 2) FAKTOR PEMBATAS UTAMA, 3) REKOMENDASI 0-24 JAM, 4) REKOMENDASI 1-7 HARI, 5) REKOMENDASI PEMUPUKAN, 6) REKOMENDASI AIR, 7) PREDIKSI POTENSI OPT, 8) TINDAKAN PHT/OPT, 9) PRIORITAS TINDAKAN, 10) DATA YANG MASIH PERLU DIUKUR. " +
+                "Untuk OPT, JANGAN membatasi diri pada database lokal. Gunakan web search untuk mencari OPT yang relevan jika komoditas atau OPT tidak ada di aplikasi. Cari berdasarkan komoditas, fase tanaman, lokasi Indonesia/Jawa Tengah bila tersedia, gejala/riwayat lapangan, serta hubungan dengan suhu, RH, hujan, VPD dan kondisi lainnya. Prioritaskan sumber resmi pemerintah/universitas, extension service, jurnal ilmiah, atau organisasi pertanian terpercaya. " +
+                "Sebutkan nama umum dan nama ilmiah bila dapat diverifikasi, tingkat potensi, alasan, gejala yang harus diperiksa dan sumber. Hasil OPT adalah risk screening, bukan diagnosis. Jangan membuat dosis pestisida baru; untuk pengendalian kimia rujuk label terdaftar dan aturan setempat. " +
+                "Untuk pH, jangan menghitung dosis kapur/dolomit dari pH saja. Untuk EC sensor, bedakan dari ECe dan jangan konversi otomatis menjadi ECe. Bedakan stok hara dari serapan tanaman. Untuk kebutuhan pupuk, nyatakan sebagai skrining bila tidak ada kalibrasi lokal/PUTS/STCR. Untuk mode organik, batasi input pada yang diizinkan sistem organik yang berlaku. " +
+                "Gunakan bahasa Indonesia yang mudah dipahami petani tetapi tetap ilmiah. Jangan mengarang data yang tidak tersedia. Pisahkan fakta terukur, hasil model screening, dan rekomendasi. Jika data kurang, katakan apa yang perlu diukur. Selalu akhiri dengan PRIORITAS TINDAKAN yang konkret.");
+        p.put("input",
+                "DATA DAN ANALISIS AWAL:\n"+ctx+
+                "\n\nHASIL PUSTAKA OPENALEX:\n"+lit+
+                "\n\nGunakan web search khusus untuk memperluas pencarian OPT. Buat rekomendasi yang dapat ditindaklanjuti, bukan hanya deskripsi.");
+        HttpURLConnection c=(HttpURLConnection)new URL("https://api.openai.com/v1/responses").openConnection();
+        c.setRequestMethod("POST"); c.setConnectTimeout(12000); c.setReadTimeout(60000); c.setDoOutput(true);
+        c.setRequestProperty("Authorization","Bearer "+key); c.setRequestProperty("Content-Type","application/json; charset=UTF-8");
+        byte[] b=p.toString().getBytes(StandardCharsets.UTF_8); c.setFixedLengthStreamingMode(b.length);
+        try(OutputStream o=c.getOutputStream()){o.write(b);} int code=c.getResponseCode();
+        if(code<200||code>=300){String er=readAll(c.getErrorStream());throw new Exception("OpenAI HTTP "+code+(er.isEmpty()?"":" — "+er.substring(0,Math.min(500,er.length()))));}
+        JSONObject r=new JSONObject(readAll(c.getInputStream())); String t=r.optString("output_text","").trim();
+        if(!t.isEmpty()) return t;
+        JSONArray out=r.optJSONArray("output"); if(out!=null){StringBuilder z=new StringBuilder(); for(int i=0;i<out.length();i++){JSONObject it=out.optJSONObject(i); if(it==null)continue; JSONArray cc=it.optJSONArray("content"); if(cc==null)continue; for(int j=0;j<cc.length();j++){JSONObject part=cc.optJSONObject(j); if(part!=null&&"output_text".equals(part.optString("type"))){z.append(part.optString("text","")).append("\n");}}} if(z.length()>0)return z.toString().trim();}
+        throw new Exception("Respons AI tidak berisi teks.");
     }
     private String pref(String k,String d){return prefs.getString(k,d);}
     private double num(String s){try{return s==null||s.trim().isEmpty()?Double.NaN:Double.parseDouble(s.trim().replace(',','.'));}catch(Exception e){return Double.NaN;}}

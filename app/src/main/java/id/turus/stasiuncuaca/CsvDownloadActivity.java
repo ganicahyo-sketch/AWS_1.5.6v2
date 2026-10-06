@@ -14,6 +14,9 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -43,15 +46,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * CSV exporter for ThingSpeak.
+ * CSV exporter for ThingSpeak and Open-Meteo.
  *
- * Two modes:
- * 1) RENTANG WAKTU - user chooses start/end dates.
- * 2) SELURUH HISTORI - starts from a safe early date and keeps splitting
- *    any interval that reaches ThingSpeak's 8,000-result limit.
- *
- * The complete CSV is streamed to a temporary file, not held in a byte[]
- * in RAM, so long histories can be exported without requiring a huge heap.
+ * ThingSpeak retains the existing range/all-history modes. Open-Meteo adds
+ * historical CSV export for a user-selected date range at hourly or daily
+ * resolution. Both sources are streamed to a temporary file so the final CSV
+ * is not held fully in RAM.
  */
 public class CsvDownloadActivity extends Activity {
     private static final String PREFS = "thingspeak_config";
@@ -88,10 +88,17 @@ public class CsvDownloadActivity extends Activity {
     private TextView downloadButton;
     private TextView modeRange;
     private TextView modeAllHistory;
+    private TextView sourceThingSpeak;
+    private TextView sourceOpenMeteo;
+    private TextView omHourly;
+    private TextView omDaily;
     private LinearLayout rangePanel;
+    private LinearLayout openMeteoPanel;
     private TextView historyInfo;
 
     private boolean allHistoryMode = false;
+    private boolean openMeteoMode = false;
+    private boolean openMeteoHourly = true;
     private boolean downloading = false;
     private boolean readyToSave = false;
 
@@ -110,7 +117,12 @@ public class CsvDownloadActivity extends Activity {
         downloadButton = findViewById(R.id.downloadButton);
         modeRange = findViewById(R.id.modeRange);
         modeAllHistory = findViewById(R.id.modeAllHistory);
+        sourceThingSpeak = findViewById(R.id.sourceThingSpeak);
+        sourceOpenMeteo = findViewById(R.id.sourceOpenMeteo);
+        omHourly = findViewById(R.id.omHourly);
+        omDaily = findViewById(R.id.omDaily);
         rangePanel = findViewById(R.id.rangePanel);
+        openMeteoPanel = findViewById(R.id.openMeteoPanel);
         historyInfo = findViewById(R.id.historyInfo);
 
         LocalDate today = LocalDate.now(WIB);
@@ -118,8 +130,12 @@ public class CsvDownloadActivity extends Activity {
         endDate = today;
         refreshDateLabels();
 
+        sourceThingSpeak.setOnClickListener(v -> setSource(false));
+        sourceOpenMeteo.setOnClickListener(v -> setSource(true));
         modeRange.setOnClickListener(v -> setMode(false));
         modeAllHistory.setOnClickListener(v -> setMode(true));
+        omHourly.setOnClickListener(v -> setOpenMeteoResolution(true));
+        omDaily.setOnClickListener(v -> setOpenMeteoResolution(false));
         findViewById(R.id.startDate).setOnClickListener(v -> pickStartDate());
         findViewById(R.id.endDate).setOnClickListener(v -> pickEndDate());
         downloadButton.setOnClickListener(v -> {
@@ -131,11 +147,51 @@ public class CsvDownloadActivity extends Activity {
         });
         findViewById(R.id.back).setOnClickListener(v -> finish());
 
-        setMode(false);
+        setSource(false);
+    }
+
+    private void setSource(boolean openMeteo) {
+        if (downloading) return;
+        openMeteoMode = openMeteo;
+        sourceOpenMeteo.setBackgroundResource(openMeteo ? R.drawable.bg_button : R.drawable.bg_edit);
+        sourceThingSpeak.setBackgroundResource(openMeteo ? R.drawable.bg_edit : R.drawable.bg_button);
+        sourceOpenMeteo.setTextColor(openMeteo ? Color.rgb(7, 19, 31) : Color.WHITE);
+        sourceThingSpeak.setTextColor(openMeteo ? Color.WHITE : Color.rgb(7, 19, 31));
+
+        if (openMeteoMode) {
+            allHistoryMode = false;
+            modeAllHistory.setVisibility(android.view.View.GONE);
+            modeRange.setVisibility(android.view.View.GONE);
+            openMeteoPanel.setVisibility(android.view.View.VISIBLE);
+            rangePanel.setVisibility(android.view.View.VISIBLE);
+            historyInfo.setText(
+                    "OPEN-METEO HISTORIS: pilih tanggal dan resolusi. Data berasal dari Historical Weather API, bukan rekaman sensor AWS."
+            );
+            statusView.setText("Pilih tanggal dan resolusi, kemudian unduh CSV Open-Meteo.");
+            setOpenMeteoResolution(openMeteoHourly);
+        } else {
+            modeAllHistory.setVisibility(android.view.View.VISIBLE);
+            modeRange.setVisibility(android.view.View.VISIBLE);
+            openMeteoPanel.setVisibility(android.view.View.GONE);
+            setMode(allHistoryMode);
+        }
+    }
+
+    private void setOpenMeteoResolution(boolean hourly) {
+        openMeteoHourly = hourly;
+        omHourly.setBackgroundResource(hourly ? R.drawable.bg_button : R.drawable.bg_edit);
+        omDaily.setBackgroundResource(hourly ? R.drawable.bg_edit : R.drawable.bg_button);
+        omHourly.setTextColor(hourly ? Color.rgb(7, 19, 31) : Color.WHITE);
+        omDaily.setTextColor(hourly ? Color.WHITE : Color.rgb(7, 19, 31));
+        if (openMeteoMode && !downloading) {
+            statusView.setText(hourly
+                    ? "Resolusi per jam dipilih."
+                    : "Resolusi harian dipilih.");
+        }
     }
 
     private void setMode(boolean allHistory) {
-        if (downloading) return;
+        if (downloading || openMeteoMode) return;
 
         allHistoryMode = allHistory;
         if (allHistoryMode) {
@@ -217,6 +273,14 @@ public class CsvDownloadActivity extends Activity {
     }
 
     private void prepareCsv() {
+        if (openMeteoMode) {
+            prepareOpenMeteoCsv();
+        } else {
+            prepareThingSpeakCsv();
+        }
+    }
+
+    private void prepareThingSpeakCsv() {
         if (downloading) return;
 
         String channel = prefs.getString("channel", "").trim();
@@ -344,6 +408,210 @@ public class CsvDownloadActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void prepareOpenMeteoCsv() {
+        if (downloading) return;
+
+        double lat = prefs.getFloat("latitude", Float.NaN);
+        double lon = prefs.getFloat("longitude", Float.NaN);
+        if (!Double.isFinite(lat) || !Double.isFinite(lon)) {
+            statusView.setText("Koordinat GPS belum tersedia. Gunakan GPS HP atau isi latitude/longitude di Pengaturan.");
+            return;
+        }
+        LocalDate today = LocalDate.now(WIB);
+        if (startDate.isAfter(endDate)) {
+            statusView.setText("Rentang tanggal tidak valid.");
+            return;
+        }
+        if (endDate.isAfter(today)) {
+            statusView.setText("Tanggal akhir Open-Meteo tidak boleh melewati hari ini.");
+            return;
+        }
+
+        downloading = true;
+        readyToSave = false;
+        downloadButton.setText("MENGAMBIL OPEN-METEO...");
+        downloadButton.setEnabled(false);
+
+        final LocalDate exportStart = startDate;
+        final LocalDate exportEnd = endDate;
+        final boolean hourly = openMeteoHourly;
+        final String resolution = hourly ? "hourly" : "daily";
+        final String fileName = "STASIUN-CUACA-DESA-TURUS_OPEN-METEO_"
+                + startDate.format(FILE_FMT) + "_" + endDate.format(FILE_FMT) + "_" + resolution + ".csv";
+        statusView.setText("Mengambil Open-Meteo " + resolution + " " + startDate + " sampai " + endDate + "...");
+
+        net.execute(() -> {
+            File temp = null;
+            try {
+                temp = File.createTempFile("stasiun_cuaca_openmeteo_", ".csv", getCacheDir());
+                final File tempFile = temp;
+                OpenMeteoStats stats = new OpenMeteoStats();
+                try (Writer writer = Files.newBufferedWriter(temp.toPath(), StandardCharsets.UTF_8)) {
+                    writer.write('\uFEFF');
+                    fetchOpenMeteoHistorical(lat, lon, exportStart, exportEnd, hourly, writer, stats);
+                    writer.flush();
+                }
+                if (stats.rows <= 0) throw new Exception("Open-Meteo tidak mengembalikan data untuk rentang tersebut.");
+
+                pendingCsvFile = tempFile;
+                pendingFileName = fileName;
+                readyToSave = true;
+                final long rows = stats.rows;
+                runOnUiThread(() -> {
+                    downloading = false;
+                    downloadButton.setEnabled(true);
+                    downloadButton.setText("SIMPAN FILE CSV");
+                    statusView.setText("Open-Meteo siap disimpan: " + rows + " baris • " + resolution + " • GPS "
+                            + String.format(Locale.US, "%.5f, %.5f", lat, lon));
+                });
+            } catch (Exception ex) {
+                if (temp != null) try { temp.delete(); } catch (Exception ignored) {}
+                pendingCsvFile = null;
+                readyToSave = false;
+                final String message = safeMessage(ex);
+                runOnUiThread(() -> {
+                    downloading = false;
+                    downloadButton.setEnabled(true);
+                    downloadButton.setText("UNDUH DATA CSV");
+                    statusView.setText("Gagal Open-Meteo: " + message);
+                });
+            }
+        });
+    }
+
+    private void fetchOpenMeteoHistorical(double lat, double lon, LocalDate start, LocalDate end,
+                                          boolean hourly, Writer writer, OpenMeteoStats stats) throws Exception {
+        String url;
+        if (hourly) {
+            String vars = "temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation,rain,weather_code,surface_pressure,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility,uv_index,shortwave_radiation,vapour_pressure_deficit,et0_fao_evapotranspiration,sunshine_duration,soil_temperature_0_to_7cm,soil_temperature_7_to_28cm,soil_moisture_0_to_7cm,soil_moisture_7_to_28cm";
+            url = "https://archive-api.open-meteo.com/v1/archive?latitude=" + enc(String.format(Locale.US, "%.6f", lat))
+                    + "&longitude=" + enc(String.format(Locale.US, "%.6f", lon))
+                    + "&start_date=" + start + "&end_date=" + end
+                    + "&hourly=" + enc(vars)
+                    + "&timezone=Asia%2FJakarta&temperature_unit=celsius&wind_speed_unit=ms&precipitation_unit=mm&timeformat=iso8601&cell_selection=land";
+        } else {
+            String vars = "weather_code,temperature_2m_mean,temperature_2m_max,temperature_2m_min,apparent_temperature_mean,apparent_temperature_max,apparent_temperature_min,precipitation_sum,rain_sum,precipitation_hours,sunrise,sunset,daylight_duration,sunshine_duration,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,shortwave_radiation_sum,et0_fao_evapotranspiration";
+            url = "https://archive-api.open-meteo.com/v1/archive?latitude=" + enc(String.format(Locale.US, "%.6f", lat))
+                    + "&longitude=" + enc(String.format(Locale.US, "%.6f", lon))
+                    + "&start_date=" + start + "&end_date=" + end
+                    + "&daily=" + enc(vars)
+                    + "&timezone=Asia%2FJakarta&temperature_unit=celsius&wind_speed_unit=ms&precipitation_unit=mm&timeformat=iso8601&cell_selection=land";
+        }
+
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) new URL(url).openConnection();
+            c.setRequestMethod("GET");
+            c.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            c.setReadTimeout(READ_TIMEOUT_MS * 2);
+            c.setUseCaches(false);
+            c.setRequestProperty("Accept", "application/json");
+            int code = c.getResponseCode();
+            if (code != HttpURLConnection.HTTP_OK) {
+                String detail = readErrorBody(c);
+                throw new Exception("HTTP " + code + (detail.isEmpty() ? "" : " • " + detail));
+            }
+            JSONObject root = new JSONObject(readAll(c.getInputStream()));
+            double responseLat = root.optDouble("latitude", lat);
+            double responseLon = root.optDouble("longitude", lon);
+            double elevation = root.optDouble("elevation", Double.NaN);
+            if (hourly) {
+                JSONObject h = root.optJSONObject("hourly");
+                if (h == null) throw new Exception("Respons Open-Meteo tidak memiliki data hourly.");
+                JSONArray times = h.optJSONArray("time");
+                if (times == null) throw new Exception("Kolom waktu hourly Open-Meteo tidak tersedia.");
+                writer.write(csvLine("timestamp_wib","source","data_type","latitude","longitude","elevation_m",
+                        "temperature_2m_c","relative_humidity_pct","dew_point_c","apparent_temperature_c","precipitation_mm","rain_mm","weather_code","surface_pressure_hpa","cloud_cover_pct","wind_speed_ms","wind_direction_deg","wind_gust_ms","visibility_m","uv_index","shortwave_radiation_wm2","vpd_kpa","et0_mm","sunshine_hours","soil_temperature_0_7cm_c","soil_temperature_7_28cm_c","soil_moisture_0_7cm_pct","soil_moisture_7_28cm_pct"));
+                writer.write("\r\n");
+                for (int i = 0; i < times.length(); i++) {
+                    String timestamp = times.optString(i, "");
+                    double sw = arrNum(h, "shortwave_radiation", i);
+                    String sunshineHours = fmtCsv(arrNum(h, "sunshine_duration", i) / 3600.0, 3);
+                    writer.write(csvLine(timestamp,"OPEN-METEO","HISTORICAL_REANALYSIS",
+                            fmtCsv(responseLat,5),fmtCsv(responseLon,5),fmtCsv(elevation,1),
+                            fmtCsv(arrNum(h,"temperature_2m",i),2),fmtCsv(arrNum(h,"relative_humidity_2m",i),1),
+                            fmtCsv(arrNum(h,"dew_point_2m",i),2),fmtCsv(arrNum(h,"apparent_temperature",i),2),
+                            fmtCsv(arrNum(h,"precipitation",i),3),fmtCsv(arrNum(h,"rain",i),3),
+                            csvNum(h,"weather_code",i),fmtCsv(arrNum(h,"surface_pressure",i),1),fmtCsv(arrNum(h,"cloud_cover",i),1),
+                            fmtCsv(arrNum(h,"wind_speed_10m",i),2),fmtCsv(arrNum(h,"wind_direction_10m",i),1),fmtCsv(arrNum(h,"wind_gusts_10m",i),2),
+                            fmtCsv(arrNum(h,"visibility",i),1),fmtCsv(arrNum(h,"uv_index",i),2),fmtCsv(sw,2),fmtCsv(arrNum(h,"vapour_pressure_deficit",i),3),
+                            fmtCsv(arrNum(h,"et0_fao_evapotranspiration",i),3),sunshineHours,
+                            fmtCsv(arrNum(h,"soil_temperature_0_to_7cm",i),2),fmtCsv(arrNum(h,"soil_temperature_7_to_28cm",i),2),
+                            fmtCsv(arrNum(h,"soil_moisture_0_to_7cm",i) * 100.0,2),fmtCsv(arrNum(h,"soil_moisture_7_to_28cm",i) * 100.0,2)));
+                    writer.write("\r\n");
+                    stats.rows++;
+                    if (i % 48 == 0) postProgressOpenMeteo(stats, "Open-Meteo hourly: memproses...");
+                }
+            } else {
+                JSONObject d = root.optJSONObject("daily");
+                if (d == null) throw new Exception("Respons Open-Meteo tidak memiliki data daily.");
+                JSONArray times = d.optJSONArray("time");
+                if (times == null) throw new Exception("Kolom waktu daily Open-Meteo tidak tersedia.");
+                writer.write(csvLine("date","source","data_type","latitude","longitude","elevation_m",
+                        "weather_code","temperature_mean_c","temperature_max_c","temperature_min_c","apparent_temperature_mean_c","apparent_temperature_max_c","apparent_temperature_min_c",
+                        "precipitation_sum_mm","rain_sum_mm","precipitation_hours","sunrise","sunset","daylight_hours","sunshine_hours","wind_speed_max_ms","wind_gusts_max_ms","wind_direction_dominant_deg","shortwave_radiation_sum_MJ_m2","et0_mm"));
+                writer.write("\r\n");
+                for (int i=0;i<times.length();i++) {
+                    writer.write(csvLine(times.optString(i,""),"OPEN-METEO","HISTORICAL_REANALYSIS",
+                            fmtCsv(responseLat,5),fmtCsv(responseLon,5),fmtCsv(elevation,1),csvNum(d,"weather_code",i),
+                            fmtCsv(arrNum(d,"temperature_2m_mean",i),2),fmtCsv(arrNum(d,"temperature_2m_max",i),2),fmtCsv(arrNum(d,"temperature_2m_min",i),2),
+                            fmtCsv(arrNum(d,"apparent_temperature_mean",i),2),fmtCsv(arrNum(d,"apparent_temperature_max",i),2),fmtCsv(arrNum(d,"apparent_temperature_min",i),2),
+                            fmtCsv(arrNum(d,"precipitation_sum",i),3),fmtCsv(arrNum(d,"rain_sum",i),3),fmtCsv(arrNum(d,"precipitation_hours",i),2),
+                            arrString(d,"sunrise",i),arrString(d,"sunset",i),fmtCsv(arrNum(d,"daylight_duration",i)/3600.0,3),fmtCsv(arrNum(d,"sunshine_duration",i)/3600.0,3),
+                            fmtCsv(arrNum(d,"wind_speed_10m_max",i),2),fmtCsv(arrNum(d,"wind_gusts_10m_max",i),2),fmtCsv(arrNum(d,"wind_direction_10m_dominant",i),1),
+                            fmtCsv(arrNum(d,"shortwave_radiation_sum",i),3),fmtCsv(arrNum(d,"et0_fao_evapotranspiration",i),3)));
+                    writer.write("\r\n");
+                    stats.rows++;
+                    if (i % 7 == 0) postProgressOpenMeteo(stats, "Open-Meteo harian: memproses...");
+                }
+            }
+        } finally {
+            if (c != null) c.disconnect();
+        }
+    }
+
+    private void postProgressOpenMeteo(OpenMeteoStats stats, String message) {
+        final long rows = stats.rows;
+        main.post(() -> statusView.setText(message + " " + rows + " baris"));
+    }
+
+    private String enc(String s) throws Exception { return URLEncoder.encode(s, "UTF-8"); }
+
+    private double arrNum(JSONObject obj, String key, int index) {
+        JSONArray a = obj.optJSONArray(key);
+        if (a == null || index < 0 || index >= a.length() || a.isNull(index)) return Double.NaN;
+        return a.optDouble(index, Double.NaN);
+    }
+
+    private String arrString(JSONObject obj, String key, int index) {
+        JSONArray a = obj.optJSONArray(key);
+        return a == null || index < 0 || index >= a.length() || a.isNull(index) ? "" : a.optString(index, "");
+    }
+
+    private String csvNum(JSONObject obj, String key, int index) {
+        JSONArray a = obj.optJSONArray(key);
+        if (a == null || index < 0 || index >= a.length() || a.isNull(index)) return "";
+        return a.optString(index, "");
+    }
+
+    private String fmtCsv(double value, int decimals) {
+        return Double.isFinite(value) ? String.format(Locale.US, "%1$." + decimals + "f", value) : "";
+    }
+
+    private String csvLine(String... values) {
+        StringBuilder b = new StringBuilder();
+        for (int i=0;i<values.length;i++) {
+            if (i>0) b.append(',');
+            String v = values[i] == null ? "" : values[i];
+            if (v.indexOf(',') >= 0 || v.indexOf('"') >= 0 || v.indexOf('\n') >= 0 || v.indexOf('\r') >= 0) {
+                b.append('"').append(v.replace("\"", "\"\"")).append('"');
+            } else {
+                b.append(v);
+            }
+        }
+        return b.toString();
     }
 
     /**
@@ -759,6 +1027,10 @@ public class CsvDownloadActivity extends Activity {
             try { pendingCsvFile.delete(); } catch (Exception ignored) {}
             pendingCsvFile = null;
         }
+    }
+
+    private static class OpenMeteoStats {
+        long rows = 0;
     }
 
     private static class CsvBatch {

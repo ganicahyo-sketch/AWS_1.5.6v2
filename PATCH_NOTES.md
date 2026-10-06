@@ -55,3 +55,20 @@ Prediksi OPT bukan diagnosis. Verifikasi dengan gejala, populasi, luas serangan,
 - Bulk density presets: mineral 1.30 g/cm³, peat reference 0.30 g/cm³, custom input.
 - EC sensor is treated as a valid primary project measurement. The app only converts units (µS/cm ↔ dS/m) and does not require ECe.
 - Method/formula/scientific notes are moved to clickable NOTE dialogs; the main analysis remains focused on values, statuses and recommendations.
+
+
+### CSV Open-Meteo + AI recommendation pass
+- Added Open-Meteo Historical Weather CSV export by date range, hourly/daily.
+- Preserved existing ThingSpeak range/all-history export.
+- Hid metadata/formula explanations from the main agronomy report and moved them to the ⓘ information dialog.
+- AI output budget increased to 5000 tokens and prompt changed to recommendation-first.
+- AI can use the built-in web search tool for OPT discovery beyond the local crop database; `tool_choice=required` makes a tool call mandatory for the advisor request.
+- Removed embedded default OpenAI API key literals from AgronomyActivity and SettingsActivity.
+
+### Histori terpadu — tampilan layar vs laporan
+- Bagian histori terpadu dihapus dari hasil analisis agronomi yang tampil di layar.
+- Data histori tidak dihapus dari penyimpanan dan tetap digunakan untuk konteks AI serta laporan.
+- Saat Print/Save PDF, histori lapangan + pemupukan + OPT ditampilkan dalam format tabel kolom Tanggal, Jenis, Kegiatan/OPT, dan Detail.
+- Format JSON mentah dan tanda kutip ganda tidak ditampilkan pada tabel laporan.
+- Tabel otomatis membungkus teks dan mengulang header ketika berganti halaman.
+- Histori tetap dimasukkan pada laporan ringkas maupun lengkap karena Print/Save adalah tempat tampilnya histori.

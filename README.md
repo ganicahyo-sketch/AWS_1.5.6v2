@@ -33,3 +33,11 @@ Isi laporan mencakup cuaca Open-Meteo, ET0, VPD, arah angin berbasis mata angin,
 - Risk screening OPT menyebut nama organisme; bukan diagnosis.
 - Mode konvensional/PHT atau organik.
 - Laporan PDF menyertakan data, histori, analisis, rekomendasi, dan sumber.
+
+
+## Pembaruan CSV Open-Meteo & Analisis AI
+- Menu **UNDUH DATA CSV** sekarang memiliki sumber **ThingSpeak** dan **Open-Meteo**.
+- Open-Meteo mendukung ekspor historis berdasarkan rentang tanggal pada resolusi **per jam** atau **harian**, termasuk cuaca, hujan, tekanan, angin, radiasi, ET₀, VPD dan parameter tanah yang tersedia. Data diberi penanda `source=OPEN-METEO` dan `data_type=HISTORICAL_REANALYSIS`.
+- Tampilan analisis agronomi menyembunyikan uraian metodologi/rentang/rumus dari layar utama. Detail ilmiah dipindahkan ke ikon **ⓘ**.
+- AI menggunakan ruang output hingga **5000 token** dan diarahkan menghasilkan rekomendasi 0–24 jam, 1–7 hari, air, pemupukan, PHT, prioritas tindakan, serta pencarian web untuk OPT di luar database lokal.
+- API key OpenAI tidak lagi ditanam sebagai default di source code. Masukkan key melalui Pengaturan.
