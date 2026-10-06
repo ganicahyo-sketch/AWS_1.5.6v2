@@ -249,6 +249,36 @@
                     android:layout_width="match_parent"
                     android:layout_height="48dp"/>
 
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Sumber pengisian analisis otomatis"
+                    android:textColor="@color/cyan"
+                    android:textSize="15sp"/>
+                <Spinner
+                    android:id="@+id/fnDataSource"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"/>
+                <TextView
+                    android:id="@+id/fnDataSourceStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Prioritas ThingSpeak → Open-Meteo. Nilai tetap dapat diedit manual."
+                    android:textColor="@color/text_muted"
+                    android:textSize="13sp"/>
+                <TextView
+                    android:id="@+id/fnAutoFill"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:text="AMBIL DATA TERBARU &amp; ISI OTOMATIS"
+                    android:textColor="@color/navy_950"
+                    android:textStyle="bold"
+                    android:background="@drawable/bg_button"/>
+
                 <EditText
                     android:id="@+id/fnSoilPh"
                     android:layout_width="match_parent"
@@ -329,7 +359,18 @@
                     android:textColorHint="@color/text_muted"
                     android:singleLine="true"/>
 
-                <EditText android:id="@+id/fnSoilBulkDensity" android:layout_width="match_parent" android:layout_height="48dp" android:hint="Bulk density (g/cm³), untuk hitung stok hara; default 1,30" android:inputType="numberDecimal" android:textColor="@color/text_main" android:textColorHint="@color/text_muted" android:singleLine="true"/>
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Bulk density / berat isi"
+                    android:textColor="@color/cyan"
+                    android:textSize="15sp"/>
+                <Spinner
+                    android:id="@+id/fnBulkDensityPreset"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"/>
+                <EditText android:id="@+id/fnSoilBulkDensity" android:layout_width="match_parent" android:layout_height="48dp" android:hint="Bulk density (g/cm³); preset mineral 1,30 / gambut 0,30 / input sendiri" android:inputType="numberDecimal" android:textColor="@color/text_main" android:textColorHint="@color/text_muted" android:singleLine="true"/>
                 <EditText android:id="@+id/fnSoilFc" android:layout_width="match_parent" android:layout_height="48dp" android:hint="Field Capacity / FC (% volume), hasil lab" android:inputType="numberDecimal" android:textColor="@color/text_main" android:textColorHint="@color/text_muted" android:singleLine="true"/>
                 <EditText android:id="@+id/fnSoilPwp" android:layout_width="match_parent" android:layout_height="48dp" android:hint="Permanent Wilting Point / PWP (% volume), hasil lab" android:inputType="numberDecimal" android:textColor="@color/text_main" android:textColorHint="@color/text_muted" android:singleLine="true"/>
                 <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Ambang N tersedia (isi sesuai metode/lab, mg/kg)" android:textColor="@color/cyan" android:textSize="15sp"/>
@@ -566,6 +607,36 @@
                     android:background="@drawable/bg_button"/>
             </LinearLayout>
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+                <TextView
+                    android:id="@+id/fnManageHistory"
+                    android:layout_width="0dp"
+                    android:layout_height="46dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="KELOLA / HAPUS HISTORI"
+                    android:textColor="@color/navy_950"
+                    android:textStyle="bold"
+                    android:textSize="13sp"
+                    android:background="@drawable/bg_button"/>
+                <Space android:layout_width="8dp" android:layout_height="1dp"/>
+                <TextView
+                    android:id="@+id/fnNotes"
+                    android:layout_width="0dp"
+                    android:layout_height="46dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="NOTE / DASAR PERHITUNGAN"
+                    android:textColor="@color/navy_950"
+                    android:textStyle="bold"
+                    android:textSize="13sp"
+                    android:background="@drawable/bg_button"/>
+            </LinearLayout>
+
             <TextView
                 android:id="@+id/fnAnalyze"
                 android:layout_width="match_parent"
@@ -625,7 +696,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="7dp"
-                    android:text="N/P/K dan pH diberi kelas screening bila metode ekstraksi belum diketahui. EC sensor dibaca sebagai tren/risko dan tidak otomatis disamakan dengan ECe laboratorium. Dosis kapur harus memakai uji buffer/kemasaman; dosis pupuk final harus mengutamakan rekomendasi spesifik lokasi."
+                    android:text="Nilai EC sensor dianggap sebagai data input yang benar dan dianalisis langsung dalam rentang µS/cm/dS/m. ECe laboratorium hanya pembanding opsional, bukan syarat. Rincian rentang, rumus, sumber, dan batas interpretasi tersedia pada NOTE."
                     android:textColor="@color/text_main"
                     android:textSize="15sp"
                     android:lineSpacingExtra="2dp"/>

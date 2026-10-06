@@ -196,14 +196,14 @@ public class PdfReportActivity extends Activity {
         rc.kv("N-total prediksi",NitrogenInference.estimateTotalN(n));
         rc.kv("P tersedia",show(pp)+" mg/kg -> "+AgronomyEngine.classifyP(pp,method));
         rc.kv("K tersedia",show(k)+" mg/kg -> "+AgronomyEngine.classifyK(k,method));
-        rc.kv("EC sensor",show(ec)+" µS/cm -> "+AgronomyEngine.classifyEC(ec,cp)+" (screening)");
+        rc.kv("EC sensor",show(ec)+" µS/cm -> "+AgronomyEngine.classifyEC(ec,cp)+" (input utama; ECe lab opsional)");
         rc.kv("ECe laboratorium",Double.isFinite(ece)?show(ece)+" dS/m -> "+AgronomyEngine.classifyECe(ece):"belum ada");
         rc.kv("Kelembapan",show(moist)+" %");
         rc.kv("FC / PWP",show(fc)+" / "+show(pwp)+" % volume");
         rc.kv("Status air tanah",AgronomyEngine.soilWaterAssessment(moist,fc,pwp,depth,num(pref("om_et0","")),crop));
         rc.kv("Lapisan / bulk density",show(depth)+" cm / "+show(bd)+" g/cm³");
         rc.kv("Stok N / P / K",show(AgronomyEngine.soilStockKgHa(n,bd,depth))+" / "+show(AgronomyEngine.soilStockKgHa(pp,bd,depth))+" / "+show(AgronomyEngine.soilStockKgHa(k,bd,depth))+" kg/ha");
-        rc.text("Stok tanah adalah massa unsur pada lapisan yang dihitung; stok bukan sama dengan serapan/tersedia langsung tanaman. EC sensor lapang tidak dikonversi otomatis menjadi ECe.");
+        rc.text("Stok tanah adalah massa unsur pada lapisan yang dihitung; stok bukan sama dengan serapan/tersedia langsung tanaman. EC sensor lapang dipakai sebagai input utama; ECe laboratorium bersifat opsional.");
         rc.line();
     }
 
@@ -295,7 +295,7 @@ public class PdfReportActivity extends Activity {
         rc.text("- PHT/IPM dan ambang ekonomi: keputusan pengendalian mengikuti hasil monitoring, bukan cuaca saja.");
         rc.text("- Model OPT berbasis cuaca adalah peringatan dini; verifikasi organisme dan serangan di lapangan tetap wajib.");
         rc.text("- pH: kebutuhan kapur sebaiknya memakai uji buffer/kemasaman tertukar jika dosis koreksi diperlukan.");
-        rc.text("- EC sensor lapang adalah screening/tren; pembuktian salinitas formal menggunakan metode laboratorium yang sesuai.");
+        rc.text("- EC sensor lapang adalah parameter input utama untuk pemantauan/rentang; ECe laboratorium dapat dipakai sebagai pembanding bila tersedia.");
         rc.text("- FAO-56: Penman-Monteith, TAW/RAW/available soil water.\n- USDA-NRCS: kelas ECe salinitas.\n- UMN/soil testing guidance: pH-buffer diperlukan untuk kebutuhan kapur.\n- Mehlich-3: kelas P/K berbasis metode tidak disamakan dengan metode lain.\n- SNI 6729:2016: sistem pertanian organik Indonesia.\n- Disease forecasting: suhu + RH + hujan/leaf wetness; degree-day untuk serangga bila model Tbase tersedia.\n- Sumber pustaka rinci: SCIENTIFIC_SOURCES.md.");
     }
 

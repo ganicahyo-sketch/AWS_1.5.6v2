@@ -232,7 +232,7 @@ public final class AgronomyEngine {
         String range = classifyECSensor(usCm);
         String cropPart = p == null ? "" : String.format(Locale.US,
                 " • ambang profil %s %.1f dS/m", p.name, p.ecThresholdDsM);
-        return range + cropPart + " • EC sensor, bukan ECe lab";
+        return range + cropPart + " • EC sensor (input utama), ECe lab opsional";
     }
 
     public static String classifyMoisture(double pct, String crop) {

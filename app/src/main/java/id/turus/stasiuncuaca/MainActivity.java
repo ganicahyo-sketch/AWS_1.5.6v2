@@ -388,7 +388,6 @@ public class MainActivity extends Activity {
         tsLoading = true;
         String ch = prefs.getString("channel", "").trim();
         if (ch.isEmpty()) ch = DEFAULT_CHANNEL;
-
         String key = prefs.getString("read_key", "").trim();
         if (key.isEmpty()) key = DEFAULT_READ_KEY;
         if (ch.isEmpty()) {
@@ -396,7 +395,6 @@ public class MainActivity extends Activity {
             tsLoading = false;
             return;
         }
-            // FIX: variabel yang dipakai oleh lambda harus final/effectively final
         final String channel = ch;
         final String readKey = key;
         statusChip.setText(manual ? "MEMUAT THINGSPEAK..." : "THINGSPEAK TERHUBUNG");
@@ -416,10 +414,9 @@ public class MainActivity extends Activity {
                 final String created = feed.optString("created_at","");
                 runOnUiThread(() -> renderThingSpeak(metadata, vals, created, channel));
             } catch (Exception e) {
-                final String errorMessage = msg(e);
                 runOnUiThread(() -> {
                     statusChip.setText("THINGSPEAK GAGAL");
-                    finalStatus.setText("ThingSpeak: " + errorMessage);
+                    finalStatus.setText("ThingSpeak: " + msg(e));
                     tsLoading = false;
                 });
             }
@@ -437,7 +434,13 @@ public class MainActivity extends Activity {
             fieldLabels[i].setText(displayName);
             fieldValues[i].setText(vals[i].isEmpty() ? "--" : vals[i]);
             fieldUnits[i].setText(unit);
+            prefs.edit()
+                    .putString("ts_field_"+(i+1), vals[i])
+                    .putString("ts_field_name_"+(i+1), detectedNames[i])
+                    .putString("ts_field_unit_"+(i+1), unit)
+                    .apply();
         }
+        prefs.edit().putString("ts_channel", ch).putString("ts_created_at", created).apply();
         String titleFromChannel = metadata == null ? "" : metadata.optString("name","");
         channelView.setText("CHANNEL: " + ch + (titleFromChannel.isEmpty() ? "" : " • " + titleFromChannel));
         dataTime.setText("Data ThingSpeak: " + (created.isEmpty() ? "--" : created.replace("T"," ").replace("Z","")));

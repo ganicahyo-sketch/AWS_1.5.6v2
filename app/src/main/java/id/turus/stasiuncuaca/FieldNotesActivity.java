@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
 import android.widget.ArrayAdapter;
+import android.widget.AdapterView;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -25,6 +26,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Catatan Lapangan + mesin analisis agronomi v1.5.6.
@@ -43,10 +46,11 @@ public class FieldNotesActivity extends Activity {
 
     private EditText date, time, crop, plantDate, hst, area, observation, action, targetYield;
     private EditText soilPh, soilMoisture, soilTemp, soilEc, soilN, soilP, soilK, soilDepth, soilBulkDensity, soilFc, soilPwp, soilPhBuffer, soilAlDd, soilHDd, soilCec, soilOm, soilEce, soilLimeReq, soilNLow, soilNHigh;
-    private Spinner soilTestMethod, ageUnit;
+    private Spinner soilTestMethod, ageUnit, dataSource, bulkDensityPreset;
     private EditText airTemp, airRh, pressure, rain24, et0, lux, par, sunHours, windSpeed;
     private Spinner noteType, severity, soilSource, windDirection, cultivation;
-    private TextView autoPhase, analysisView, timelineView, soilSummaryView;
+    private TextView autoPhase, analysisView, timelineView, soilSummaryView, dataSourceStatus;
+    private final ExecutorService net = Executors.newSingleThreadExecutor();
 
     private static final String[] NOTE_TYPES = {
             "Pengamatan umum", "Tanah", "Pemupukan", "OPT", "Irigasi/air",
@@ -61,6 +65,18 @@ public class FieldNotesActivity extends Activity {
     private static final String[] CULTIVATION = {
             "Konvensional / PHT", "Organik"
     };
+    private static final String[] DATA_SOURCES = {
+            "Prioritas: ThingSpeak → Open-Meteo",
+            "ThingSpeak",
+            "Open-Meteo",
+            "Manual (tidak otomatis)"
+    };
+    private static final String[] BULK_DENSITY_PRESETS = {
+            "Tanah mineral — default 1,30 g/cm³",
+            "Tanah gambut — referensi 0,30 g/cm³",
+            "Input sendiri"
+    };
+
     private static final String[] WIND = {
             "Tenang", "Utara", "Utara-Timur Laut", "Timur Laut", "Timur-Timur Laut",
             "Timur", "Timur-Tenggara", "Tenggara", "Selatan-Tenggara", "Selatan",
@@ -105,6 +121,9 @@ public class FieldNotesActivity extends Activity {
         soilTestMethod = findViewById(R.id.fnSoilTestMethod);
         soilNLow = findViewById(R.id.fnSoilNLow); soilNHigh = findViewById(R.id.fnSoilNHigh);
         ageUnit = findViewById(R.id.fnAgeUnit);
+        dataSource = findViewById(R.id.fnDataSource);
+        bulkDensityPreset = findViewById(R.id.fnBulkDensityPreset);
+        dataSourceStatus = findViewById(R.id.fnDataSourceStatus);
 
         airTemp = findViewById(R.id.fnAirTemp);
         airRh = findViewById(R.id.fnAirRh);
@@ -133,6 +152,12 @@ public class FieldNotesActivity extends Activity {
         bindSpinner(soilTestMethod, new String[]{"Metode tidak diketahui", "HCl 25%", "Bray-1", "Olsen", "Mehlich-3", "Mehlich-3 ICP", "NH4OAc"});
         bindSpinner(windDirection, WIND);
         bindSpinner(cultivation, CULTIVATION);
+        bindSpinner(dataSource, DATA_SOURCES);
+        bindSpinner(bulkDensityPreset, BULK_DENSITY_PRESETS);
+        selectSpinner(dataSource, prefs.getString("agro_data_source", DATA_SOURCES[0]));
+        int bdPreset = prefs.getInt("soil_bd_preset", 0);
+        if (bdPreset < 0 || bdPreset >= BULK_DENSITY_PRESETS.length) bdPreset = 0;
+        bulkDensityPreset.setSelection(bdPreset);
         String savedSoilSource = prefs.getString("soil_source", "");
         if (!savedSoilSource.isEmpty()) selectSpinner(soilSource, savedSoilSource);
         String savedCultivation = prefs.getString("farm_cultivation_mode", "");
@@ -185,12 +210,31 @@ public class FieldNotesActivity extends Activity {
         findViewById(R.id.fnAddFertilizer).setOnClickListener(v -> showFertilizerDialog(prefs));
         findViewById(R.id.fnAddOpt).setOnClickListener(v -> showOptDialog(prefs));
         findViewById(R.id.fnAnalyze).setOnClickListener(v -> runAnalysis(prefs));
+        findViewById(R.id.fnAutoFill).setOnClickListener(v -> applyAutomaticData(prefs));
+        findViewById(R.id.fnManageHistory).setOnClickListener(v -> showHistoryManager(prefs));
+        findViewById(R.id.fnNotes).setOnClickListener(v -> showMethodNotes());
+        dataSource.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, android.view.View view, int position, long id) {
+                prefs.edit().putString("agro_data_source", DATA_SOURCES[position]).apply();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+        bulkDensityPreset.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, android.view.View view, int position, long id) {
+                prefs.edit().putInt("soil_bd_preset", position).apply();
+                applyBulkDensityPreset(position);
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
         plantDate.setOnFocusChangeListener((v, hasFocus) -> { if (!hasFocus) updateAutoPhase(); });
         hst.setOnFocusChangeListener((v, hasFocus) -> { if (!hasFocus) updateAutoPhase(); });
         crop.setOnFocusChangeListener((v, hasFocus) -> { if (!hasFocus) updateAutoPhase(); });
 
         updateAutoPhase();
+        applyBulkDensityPreset(bdPreset);
         refreshViews(prefs);
+        // Gunakan cache bila tersedia; tombol "AMBIL DATA TERBARU" melakukan refresh jaringan.
+        applyAutomaticDataFromCache(prefs);
     }
 
     private void vpdFromOpenMeteo() {
@@ -325,6 +369,7 @@ public class FieldNotesActivity extends Activity {
                     .putString("soil_ece_ds_m", soilEce.getText().toString().trim())
                     .putString("soil_lime_requirement_kg_ha", soilLimeReq.getText().toString().trim())
                     .putString("soil_test_method", soilTestMethod.getSelectedItem().toString())
+                    .putInt("soil_bd_preset", bulkDensityPreset.getSelectedItemPosition())
                     .apply();
 
             Toast.makeText(this, "Catatan lapangan tersimpan.", Toast.LENGTH_SHORT).show();
@@ -408,6 +453,348 @@ public class FieldNotesActivity extends Activity {
         d.show();
     }
 
+    private void applyBulkDensityPreset(int position) {
+        if (bulkDensityPreset == null || soilBulkDensity == null) return;
+        if (position == 0) soilBulkDensity.setText("1.30");
+        else if (position == 1) soilBulkDensity.setText("0.30");
+        // position 2 intentionally preserves manual input.
+    }
+
+    private void applyAutomaticDataFromCache(SharedPreferences prefs) {
+        String src = dataSource == null ? DATA_SOURCES[0] : String.valueOf(dataSource.getSelectedItem());
+        boolean hasCache = !prefs.getString("ts_field_1", "").trim().isEmpty()
+                || !prefs.getString("om_temp", "").trim().isEmpty();
+        if (!hasCache || src.toLowerCase(Locale.US).contains("tidak")) return;
+        applySourceValues(prefs, null, null, true);
+    }
+
+    private void applyAutomaticData(SharedPreferences prefs) {
+        final String src = String.valueOf(dataSource.getSelectedItem());
+        dataSourceStatus.setText("Mengambil data terbaru: " + src + "...");
+        net.execute(() -> {
+            JSONObject tsMeta = null, tsFeed = null, om = null;
+            String tsError = "", omError = "";
+            try {
+                if (src.startsWith("Prioritas") || src.equals("ThingSpeak")) {
+                    JSONObject[] x = fetchThingSpeakSnapshot(prefs);
+                    tsMeta = x[0]; tsFeed = x[1];
+                }
+            } catch (Exception e) { tsError = e.getMessage() == null ? "ThingSpeak gagal" : e.getMessage(); }
+            try {
+                if (src.startsWith("Prioritas") || src.equals("Open-Meteo")) {
+                    om = fetchOpenMeteoSnapshot(prefs);
+                }
+            } catch (Exception e) { omError = e.getMessage() == null ? "Open-Meteo gagal" : e.getMessage(); }
+            final JSONObject fTsMeta = tsMeta, fTsFeed = tsFeed, fOm = om;
+            final String fTsError = tsError, fOmError = omError;
+            runOnUiThread(() -> {
+                try {
+                    applySourceValues(prefs, fTsMeta, fTsFeed, false, fOm);
+                    String msg = "Data terisi.";
+                    if (!fTsError.isEmpty()) msg += " TS: " + fTsError + ".";
+                    if (!fOmError.isEmpty()) msg += " OM: " + fOmError + ".";
+                    dataSourceStatus.setText(msg);
+                    refreshViews(prefs);
+                } catch (Exception e) {
+                    dataSourceStatus.setText("Pengisian otomatis gagal: " + (e.getMessage() == null ? "data tidak terbaca" : e.getMessage()));
+                }
+            });
+        });
+    }
+
+    // Overload retained so cache application can use the stored prefs only.
+    private void applySourceValues(SharedPreferences prefs, JSONObject tsMeta, JSONObject tsFeed, boolean cacheOnly) {
+        applySourceValues(prefs, tsMeta, tsFeed, cacheOnly, null);
+    }
+
+    private void applySourceValues(SharedPreferences prefs, JSONObject tsMeta, JSONObject tsFeed, boolean cacheOnly, JSONObject om) {
+        String src = String.valueOf(dataSource.getSelectedItem());
+        boolean useTs = src.startsWith("Prioritas") || src.equals("ThingSpeak");
+        boolean useOm = src.startsWith("Prioritas") || src.equals("Open-Meteo");
+        JSONObject feed = tsFeed;
+        JSONObject meta = tsMeta;
+        if (cacheOnly && useTs) {
+            feed = new JSONObject(); meta = new JSONObject();
+            for (int i=1;i<=8;i++) {
+                feed.put("field"+i, prefs.getString("ts_field_"+i, ""));
+                meta.put("field"+i, prefs.getString("ts_field_name_"+i, prefs.getString("field_name_"+i, "")));
+            }
+        }
+        if (useTs && feed != null) {
+            applyThingSpeakFields(prefs, meta, feed);
+        }
+        if (useOm) {
+            JSONObject x = om;
+            if (x == null) x = openMeteoObjectFromPrefs(prefs);
+            if (x != null) applyOpenMeteoFields(x, useTs, meta, feed);
+        }
+        dataSourceStatus.setText("Sumber input: " + src + ". Nilai otomatis tetap dapat diedit manual.");
+    }
+
+    private JSONObject[] fetchThingSpeakSnapshot(SharedPreferences prefs) throws Exception {
+        String ch = prefs.getString("channel", "").trim();
+        String key = prefs.getString("read_key", "").trim();
+        if (ch.isEmpty()) ch = "2981880";
+        String base = "https://api.thingspeak.com/channels/" + java.net.URLEncoder.encode(ch,"UTF-8");
+        String auth = key.isEmpty() ? "" : "?api_key=" + java.net.URLEncoder.encode(key,"UTF-8");
+        JSONObject meta = null;
+        try { meta = httpJson(base + ".json" + auth); } catch (Exception ignored) {}
+        if (meta == null) meta = new JSONObject();
+        for (int i=1;i<=8;i++) {
+            if (meta.optString("field"+i,"").trim().isEmpty()) {
+                String cachedName = prefs.getString("ts_field_name_"+i, prefs.getString("field_name_"+i, ""));
+                if (!cachedName.trim().isEmpty()) meta.put("field"+i, cachedName);
+            }
+        }
+        String sep = key.isEmpty() ? "" : "&api_key=" + java.net.URLEncoder.encode(key,"UTF-8");
+        JSONObject feed = httpJson(base + "/feeds/last.json?timezone=Asia%2FJakarta&status=true" + sep);
+        return new JSONObject[]{meta, feed};
+    }
+
+    private JSONObject fetchOpenMeteoSnapshot(SharedPreferences prefs) throws Exception {
+        double lat = prefs.getFloat("latitude", Float.NaN), lon = prefs.getFloat("longitude", Float.NaN);
+        if (!Double.isFinite(lat) || !Double.isFinite(lon)) throw new Exception("koordinat GPS belum tersedia");
+        String cur = "temperature_2m,relative_humidity_2m,apparent_temperature,dew_point_2m,precipitation,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m,shortwave_radiation,vapour_pressure_deficit,soil_temperature_0_to_10cm,soil_moisture_0_to_10cm,uv_index,cloud_cover,visibility";
+        String daily = "precipitation_sum,sunshine_duration,et0_fao_evapotranspiration";
+        String u = "https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon
+                + "&current=" + java.net.URLEncoder.encode(cur,"UTF-8")
+                + "&daily=" + java.net.URLEncoder.encode(daily,"UTF-8")
+                + "&timezone=Asia%2FJakarta&forecast_days=1";
+        return httpJson(u);
+    }
+
+    private void applyThingSpeakFields(SharedPreferences prefs, JSONObject meta, JSONObject feed) {
+        for (int i=1;i<=8;i++) {
+            String v = feed.optString("field"+i, "").trim();
+            String n = meta.optString("field"+i, prefs.getString("field_name_"+i, "Field "+i));
+            String u = prefs.getString("field_unit_"+i, "");
+            prefs.edit().putString("ts_field_"+i,v).putString("ts_field_name_"+i,n).putString("ts_field_unit_"+i,u).apply();
+        }
+        mapTsValue("airTemp", matchTs(meta, feed, new String[]{"suhu udara","air temp","temperature"}, new String[]{"tanah","soil"}));
+        mapTsValue("airRh", matchTs(meta, feed, new String[]{"kelembapan udara","humidity","rh"}, new String[]{"tanah","soil"}));
+        mapTsValue("pressure", matchTs(meta, feed, new String[]{"tekanan","pressure","baro"}, new String[]{}));
+        mapTsValue("rain24", matchTs(meta, feed, new String[]{"hujan 24","rain","precip"}, new String[]{}));
+        mapTsValue("et0", matchTs(meta, feed, new String[]{"et0","evapotrans"}, new String[]{}));
+        mapTsValue("soilPh", matchTs(meta, feed, new String[]{"pH"," ph"}, new String[]{}));
+        mapTsValue("soilEc", matchTs(meta, feed, new String[]{"ec","conductivity","konduktiv"}, new String[]{}));
+        mapTsValue("soilN", matchTs(meta, feed, new String[]{"n tersedia","nitrogen","nitrat"," N"}, new String[]{"wind","angin","rain"}));
+        mapTsValue("soilP", matchTs(meta, feed, new String[]{"p tersedia","phosph","fosfor"," P"}, new String[]{}));
+        mapTsValue("soilK", matchTs(meta, feed, new String[]{"k tersedia","potassium","kalium"," K"}, new String[]{}));
+        mapTsValue("soilMoisture", matchTs(meta, feed, new String[]{"kelembapan tanah","soil moisture","soil_moisture","moisture"}, new String[]{"udara","air"}), true);
+        mapTsValue("soilTemp", matchTs(meta, feed, new String[]{"suhu tanah","soil temp","soil_temperature"}, new String[]{}));
+        mapTsValue("soilOm", matchTs(meta, feed, new String[]{"bahan organik","organic matter","organik"}, new String[]{}));
+        mapTsValue("soilCec", matchTs(meta, feed, new String[]{"cec","ktk","cat ion exchange"}, new String[]{}));
+        mapTsValue("soilEce", matchTs(meta, feed, new String[]{"ece","ec e","ec_e"}, new String[]{}));
+        mapTsValue("windSpeed", matchTs(meta, feed, new String[]{"kecepatan angin","wind speed","wind"}, new String[]{"arah","direction","gust"}));
+        String dir = matchTs(meta, feed, new String[]{"arah angin","wind direction","direction"}, new String[]{});
+        if (!dir.isEmpty()) {
+            double deg=num(dir);
+            selectSpinner(windDirection, Double.isFinite(deg) ? MainActivity.compass(deg) : dir);
+        }
+        mapTsValue("par", matchTs(meta, feed, new String[]{"ppfd","par"}, new String[]{"shortwave"}));
+        mapTsValue("sunHours", matchTs(meta, feed, new String[]{"sunshine","lama penyinaran","durasi sinar"}, new String[]{}));
+        mapTsValue("vpd", matchTs(meta, feed, new String[]{"vpd"}, new String[]{}));
+    }
+
+    private String matchTs(JSONObject meta, JSONObject feed, String[] aliases, String[] excludes) {
+        for (int i=1;i<=8;i++) {
+            String name = meta.optString("field"+i, "");
+            String custom = prefs.getString("field_name_"+i, "");
+            String both = normalize(name + " " + custom);
+            if (both.isEmpty()) continue;
+            boolean hit=false;
+            String padded=" "+both+" ";
+            for (String a:aliases) {
+                String aa=normalize(a);
+                if (aa.isEmpty()) continue;
+                if (aa.length()<=2) { if (padded.contains(" "+aa+" ")) { hit=true; break; } }
+                else if (padded.contains(" "+aa+" ") || both.contains(aa)) { hit=true; break; }
+            }
+            if (!hit) continue;
+            boolean excluded=false;
+            for (String x:excludes) if (!normalize(x).isEmpty() && both.contains(normalize(x))) { excluded=true; break; }
+            if (!excluded) return feed.optString("field"+i, "").trim();
+        }
+        return "";
+    }
+
+    private String normalize(String s) { return s == null ? "" : s.toLowerCase(Locale.US).replaceAll("[^a-z0-9]+"," ").trim(); }
+
+    private void mapTsValue(String field, String value) { mapTsValue(field,value,false); }
+    private void mapTsValue(String field, String value, boolean moisture) {
+        if (value == null || value.trim().isEmpty()) return;
+        EditText e=null;
+        if (field.equals("airTemp")) e=airTemp; else if(field.equals("airRh"))e=airRh; else if(field.equals("pressure"))e=pressure;
+        else if(field.equals("rain24"))e=rain24; else if(field.equals("et0"))e=et0; else if(field.equals("soilPh"))e=soilPh;
+        else if(field.equals("soilEc"))e=soilEc; else if(field.equals("soilN"))e=soilN; else if(field.equals("soilP"))e=soilP; else if(field.equals("soilK"))e=soilK;
+        else if(field.equals("soilMoisture"))e=soilMoisture; else if(field.equals("soilTemp"))e=soilTemp; else if(field.equals("soilOm"))e=soilOm;
+        else if(field.equals("soilCec"))e=soilCec; else if(field.equals("soilEce"))e=soilEce; else if(field.equals("windSpeed"))e=windSpeed; else if(field.equals("par"))e=par;
+        else if(field.equals("sunHours"))e=sunHours;
+        if(e!=null) {
+            String out=value.trim();
+            double x=num(out);
+            if(moisture && Double.isFinite(x)) {
+                if (x >= 0 && x <= 1.0) out=String.format(Locale.US,"%.2f",x*100.0);
+            }
+            e.setText(out);
+        }
+        if(field.equals("vpd")) {
+            // VPD is not an input widget in the field form; it is recomputed from T/RH by the engine.
+            prefsSafeEdit("ts_vpd_override", value.trim());
+        }
+    }
+
+    private void applyOpenMeteoFields(JSONObject root, boolean tsFirst, JSONObject tsMeta, JSONObject tsFeed) {
+        try {
+            JSONObject c=root.optJSONObject("current"), d=root.optJSONObject("daily");
+            if(c==null) return;
+            setOm(airTemp, c.optDouble("temperature_2m",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"suhu udara","air temp","temperature"},new String[]{"tanah","soil"}));
+            setOm(airRh, c.optDouble("relative_humidity_2m",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kelembapan udara","humidity","rh"},new String[]{"tanah","soil"}));
+            setOm(pressure, c.optDouble("surface_pressure",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"tekanan","pressure","baro"},new String[]{}));
+            setOm(rain24, d==null?Double.NaN:first(d,"precipitation_sum"), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"hujan 24","rain","precip"},new String[]{}));
+            setOm(et0, d==null?Double.NaN:first(d,"et0_fao_evapotranspiration"), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"et0","evapotrans"},new String[]{}));
+            setOm(soilTemp, c.optDouble("soil_temperature_0_to_10cm",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"suhu tanah","soil temp","soil_temperature"},new String[]{}));
+            setOm(soilMoisture, c.optDouble("soil_moisture_0_to_10cm",Double.NaN)*100.0, tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kelembapan tanah","soil moisture","soil_moisture","moisture"},new String[]{"udara","air"}));
+            setOm(windSpeed, c.optDouble("wind_speed_10m",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kecepatan angin","wind speed","wind"},new String[]{"arah","direction","gust"}));
+            setOm(par, LightConversion.parToPpfd(LightConversion.shortwaveToParWm2(c.optDouble("shortwave_radiation",Double.NaN))), false);
+            setOm(sunHours, d==null?Double.NaN:first(d,"sunshine_duration")/3600.0, tsFirst && hasTs(tsMeta,tsFeed,new String[]{"sunshine","lama penyinaran","durasi sinar"},new String[]{}));
+            String dir=MainActivity.compass(c.optDouble("wind_direction_10m",Double.NaN)); if(!dir.equals("--") && !(tsFirst && hasTs(tsMeta,tsFeed,new String[]{"arah angin","wind direction","direction"},new String[]{}))) selectSpinner(windDirection,dir);
+            prefs.edit().putString("om_temp", show(c.optDouble("temperature_2m",Double.NaN)))
+                    .putString("om_rh", show(c.optDouble("relative_humidity_2m",Double.NaN)))
+                    .putString("om_pressure", show(c.optDouble("surface_pressure",Double.NaN)))
+                    .putString("om_rain", show(d==null?Double.NaN:first(d,"precipitation_sum")))
+                    .putString("om_et0", show(d==null?Double.NaN:first(d,"et0_fao_evapotranspiration")))
+                    .putString("om_soil_temp", show(c.optDouble("soil_temperature_0_to_10cm",Double.NaN)))
+                    .putString("om_soil_moisture", show(c.optDouble("soil_moisture_0_to_10cm",Double.NaN)))
+                    .putString("om_wind_speed", show(c.optDouble("wind_speed_10m",Double.NaN)))
+                    .putString("om_wind_direction", dir)
+                    .putString("om_vpd", show(c.optDouble("vapour_pressure_deficit",Double.NaN))).apply();
+        } catch(Exception ignored) {}
+    }
+
+    private JSONObject openMeteoObjectFromPrefs(SharedPreferences prefs) {
+        // Cache is already applied by MainActivity; this method exists as a no-network fallback.
+        JSONObject root=new JSONObject(), c=new JSONObject(), d=new JSONObject();
+        try {
+            c.put("temperature_2m", num(prefs.getString("om_temp","")));
+            c.put("relative_humidity_2m", num(prefs.getString("om_rh","")));
+            c.put("surface_pressure", num(prefs.getString("om_pressure","")));
+            c.put("soil_temperature_0_to_10cm", num(prefs.getString("om_soil_temp","")));
+            c.put("soil_moisture_0_to_10cm", num(prefs.getString("om_soil_moisture","")));
+            c.put("wind_speed_10m", num(prefs.getString("om_wind_speed","")));
+            c.put("wind_direction_10m", windDegrees(prefs.getString("om_wind_direction","")));
+            c.put("vapour_pressure_deficit", num(prefs.getString("om_vpd","")));
+            JSONArray rain=new JSONArray(); rain.put(num(prefs.getString("om_rain",""))); d.put("precipitation_sum",rain);
+            JSONArray et=new JSONArray(); et.put(num(prefs.getString("om_et0",""))); d.put("et0_fao_evapotranspiration",et);
+            root.put("current",c).put("daily",d); return root;
+        } catch(Exception e){return null;}
+    }
+
+    private double windDegrees(String s){
+        String[] names={"utara","utara-timur laut","timur laut","timur-timur laut","timur","timur-tenggara","tenggara","selatan-tenggara","selatan","selatan-barat daya","barat daya","barat-barat daya","barat","barat-barat laut","barat laut","utara-barat laut"};
+        String x=normalize(s); for(int i=0;i<names.length;i++) if(x.equals(normalize(names[i]))) return i*22.5; return Double.NaN;
+    }
+
+    private double first(JSONObject o,String key){JSONArray a=o.optJSONArray(key);return a==null||a.length()==0?Double.NaN:a.optDouble(0,Double.NaN);}
+    private boolean hasTs(JSONObject meta, JSONObject feed, String[] aliases, String[] excludes) {
+        if(meta==null || feed==null) return false;
+        return !matchTs(meta,feed,aliases,excludes).isEmpty();
+    }
+    private void setOm(EditText e,double value,boolean blockedByTs){ if(!blockedByTs && Double.isFinite(value)) e.setText(show(value)); }
+    private void setIfFinite(EditText e,double v){setIfFinite(e,v,false);}
+    private void setIfFinite(EditText e,double v,boolean onlyEmpty){if(e!=null&&Double.isFinite(v)&&(!onlyEmpty||e.getText().toString().trim().isEmpty()))e.setText(show(v));}
+    private void prefsSafeEdit(String k,String v){getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().putString(k,v).apply();}
+    private JSONObject httpJson(String url)throws Exception{
+        java.net.HttpURLConnection c=(java.net.HttpURLConnection)new java.net.URL(url).openConnection();
+        c.setRequestMethod("GET"); c.setConnectTimeout(8000); c.setReadTimeout(12000); c.setUseCaches(false); c.setRequestProperty("Accept","application/json");
+        int code=c.getResponseCode(); InputStream in=(code>=200&&code<300)?c.getInputStream():c.getErrorStream(); String body=readAll(in); c.disconnect();
+        if(code<200||code>=300)throw new Exception("HTTP "+code); if(body.trim().isEmpty())throw new Exception("Respons kosong"); return new JSONObject(body);
+    }
+    private String compactAnalysis(String text){
+        String[] lines=text.split("\\n"); StringBuilder out=new StringBuilder();
+        boolean skipScientific=false;
+        for(String line:lines){
+            String t=line.trim();
+            if(t.startsWith("8. DASAR ILMIAH")){skipScientific=true; continue;}
+            if(skipScientific) continue;
+            if(t.startsWith("Catatan model:") || t.startsWith("Interpretasi: status") || t.startsWith("• FAO-") || t.startsWith("• Sumber bukti") || t.startsWith("• STCR-style") || t.startsWith("• Model penyakit") || t.startsWith("• GDD/") || t.startsWith("• pH/kapur") || t.startsWith("• EC:")) continue;
+            if(t.startsWith("PENTING: bukan QUEFTS")) continue;
+            if(t.startsWith("URUTAN ANALISIS:")) continue;
+            if(t.startsWith("Catatan: parameter")) continue;
+            if(t.startsWith("SELESAI ANALISIS AWAL")) continue;
+            out.append(line).append('\n');
+        }
+        return out.toString().trim();
+    }
+
+    private void showMethodNotes(){
+        LinearLayout root=dialogRoot();
+        TextView tv=new TextView(this);
+        tv.setTextColor(0xFFFFFFFF); tv.setTextSize(14); tv.setPadding(4,4,4,4);
+        tv.setText(""+
+                "CATATAN & DASAR PERHITUNGAN\\n\\n"+
+                "1) EC sensor\\n"+
+                "Nilai EC sensor dalam µS/cm dianggap sebagai data masukan yang benar untuk skrining dan pemantauan. Konversi satuan hanya µS/cm ÷ 1000 = dS/m. Kelas operasional aplikasi: <1; 1–2; >2–3; >3–4; >4 dS/m. ECe laboratorium hanya data pembanding bila tersedia dan bukan syarat analisis. Tidak ada faktor konversi universal dari setiap EC sensor lapang ke ECe karena hubungan dipengaruhi metode ekstraksi, tekstur, kadar air, suhu, bulk density dan kondisi tanah.\\n\\n"+
+                "2) Kelembapan Open-Meteo\\n"+
+                "Open-Meteo memberi soil moisture dalam m³/m³. Aplikasi mengubahnya menjadi % volume dengan ×100 sebelum ditampilkan.\\n\\n"+
+                "3) Bulk density\\n"+
+                "Default tanah mineral = 1,30 g/cm³; preset gambut = 0,30 g/cm³; pengguna tetap dapat memilih Input sendiri. Nilai preset adalah asumsi referensi, bukan hasil pengukuran.\\n\\n"+
+                "4) Stok hara\\n"+
+                "Stok lapisan dihitung dari konsentrasi (mg/kg) × bulk density (g/cm³) × kedalaman (cm) × 0,10 = kg/ha. Stok bukan otomatis sama dengan serapan tanaman.\\n\\n"+
+                "5) VPD & cuaca\\n"+
+                "VPD menggunakan data suhu dan RH. ET₀ berasal dari Open-Meteo/FAO-56 pada sumber yang tersedia. Hujan, ET₀, kelembapan tanah, angin dan VPD dibaca bersama; satu parameter tidak dipakai sendirian untuk keputusan irigasi/OPT.\\n\\n"+
+                "6) N/P/K dan pH\\n"+
+                "Nilai sensor/lab yang dimasukkan diperlakukan sebagai data nyata. Kelas/rentang adalah alat interpretasi; metode ekstraksi tetap dicatat karena dapat mengubah ambang. Kebutuhan kapur tidak dihitung dari pH saja bila data buffer/Al-dd/H-dd/CEC atau rekomendasi lab tersedia.\\n\\n"+
+                "7) OpenAlex\\n"+
+                "Analisis AI tetap dapat memakai OpenAlex untuk menemukan literatur ilmiah relevan. Hasil literatur dipakai sebagai dukungan bukti, bukan pengganti data lapang.\\n\\n"+
+                "Rujukan EC/ECe: ScienceDirect, Pedosphere 32(6), 2022, DOI 10.1016/j.pedsph.2022.06.023; Journal of the Saudi Society of Agricultural Sciences 23(4), 2024, DOI 10.1016/j.jssas.2023.12.005."
+        );
+        root.addView(tv,new LinearLayout.LayoutParams(-1,-2));
+        new AlertDialog.Builder(this).setTitle("NOTE — METODE & RUMUS").setView(wrap(root)).setPositiveButton("TUTUP",null).show();
+    }
+
+    private void showHistoryManager(SharedPreferences prefs){
+        String[] labels={"Catatan lapangan","Riwayat pemupukan","Riwayat OPT / pengendalian"};
+        new AlertDialog.Builder(this).setTitle("KELOLA / HAPUS HISTORI").setItems(labels,(d,which)->{
+            if(which==0) showDeleteHistoryDialog(prefs,KEY_NOTES,"Catatan lapangan",true);
+            else if(which==1) showDeleteHistoryDialog(prefs,KEY_FERT,"Riwayat pemupukan",false);
+            else showDeleteHistoryDialog(prefs,KEY_OPT,"Riwayat OPT / pengendalian",false);
+        }).setNegativeButton("TUTUP",null).show();
+    }
+
+    private void showDeleteHistoryDialog(SharedPreferences prefs,String key,String title,boolean notes){
+        try{
+            JSONArray a=new JSONArray(prefs.getString(key,"[]"));
+            if(a.length()==0){Toast.makeText(this,"Tidak ada histori untuk dihapus.",Toast.LENGTH_SHORT).show();return;}
+            String[] items=new String[a.length()];
+            for(int i=0;i<a.length();i++){
+                JSONObject o=a.optJSONObject(i); if(o==null){items[i]="#"+(i+1);continue;}
+                String date=o.optString("date","--"), body;
+                if(notes) body=o.optString("crop","Tanaman")+" • "+o.optString("type","catatan")+" • "+o.optString("observation","");
+                else if(key.equals(KEY_FERT)) body=o.optString("crop","Tanaman")+" • "+o.optString("product","pupuk")+" • "+o.optDouble("dose",0)+" "+o.optString("unit","");
+                else body=o.optString("crop","Tanaman")+" • "+o.optString("target","OPT")+" • "+o.optString("method","");
+                if(body.length()>90) body=body.substring(0,90)+"…";
+                items[i]=date+" — "+body;
+            }
+            boolean[] checked=new boolean[a.length()];
+            AlertDialog dlg=new AlertDialog.Builder(this).setTitle("Pilih yang akan dihapus\n"+title)
+                    .setMultiChoiceItems(items,checked,(dialog,which,isChecked)->checked[which]=isChecked)
+                    .setNegativeButton("BATAL",null)
+                    .setNeutralButton("HAPUS SEMUA",null)
+                    .setPositiveButton("HAPUS DIPILIH",null).create();
+            dlg.setOnShowListener(v->{
+                dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{
+                    try{JSONArray out=new JSONArray();int removed=0;for(int i=0;i<a.length();i++){if(checked[i]){removed++;continue;}out.put(a.get(i));}prefs.edit().putString(key,out.toString()).apply();Toast.makeText(this,removed+" item dihapus.",Toast.LENGTH_SHORT).show();refreshViews(prefs);runAnalysis(prefs);dlg.dismiss();}catch(Exception e){Toast.makeText(this,"Gagal menghapus item.",Toast.LENGTH_SHORT).show();}
+                });
+                dlg.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(x->{
+                    new AlertDialog.Builder(this).setTitle("Hapus semua histori?").setMessage(title+" akan dikosongkan.")
+                            .setNegativeButton("BATAL",null).setPositiveButton("HAPUS",(dd,ww)->{prefs.edit().remove(key).apply();Toast.makeText(this,"Semua histori dihapus.",Toast.LENGTH_SHORT).show();refreshViews(prefs);runAnalysis(prefs);dlg.dismiss();}).show();
+                });
+            });
+            dlg.show();
+        }catch(Exception e){Toast.makeText(this,"Histori tidak dapat dibaca.",Toast.LENGTH_SHORT).show();}
+    }
+
     private void runAnalysis(SharedPreferences prefs) {
         try {
             String c = crop.getText().toString().trim();
@@ -439,7 +826,7 @@ public class FieldNotesActivity extends Activity {
             s.append("pH-buffer: ").append(show(phBuffer)).append("; Al-dd: ").append(show(alDd)).append("; H-dd: ").append(show(hDd)).append("; CEC: ").append(show(cec)).append("; bahan organik: ").append(show(om)).append(" %\n");
             s.append("Tindakan pH: ").append(AgronomyEngine.limeAdvice(ph, p, cultivation.getSelectedItem().toString(), phBuffer, alDd, hDd, cec, om, limeLab)).append("\n");
             if (Double.isFinite(ece)) s.append("ECe laboratorium: ").append(show(ece)).append(" dS/m → ").append(AgronomyEngine.classifyECe(ece)).append("\n");
-            s.append("EC sensor: ").append(show(ec)).append(" µS/cm → ").append(AgronomyEngine.classifyEC(ec, p)).append(" (screening; tidak dikonversi otomatis menjadi ECe)\n");
+            s.append("EC sensor: ").append(show(ec)).append(" µS/cm → ").append(AgronomyEngine.classifyEC(ec, p)).append("\n");
             if (Double.isFinite(depth) && Double.isFinite(bd)) {
                 s.append("Stok lapisan ").append(show(depth)).append(" cm; bulk density ").append(show(bd)).append(" g/cm³: N=").append(show(AgronomyEngine.soilStockKgHa(n,bd,depth))).append(" kg/ha; P=").append(show(AgronomyEngine.soilStockKgHa(pp,bd,depth))).append(" kg/ha; K=").append(show(AgronomyEngine.soilStockKgHa(k,bd,depth))).append(" kg/ha\n");
             }
@@ -475,8 +862,12 @@ public class FieldNotesActivity extends Activity {
             s.append("Catatan model: dosis di atas adalah STCR-style screening, bukan dosis legal/spesifik kabupaten. Bila tersedia rekomendasi PUTS, peta status hara, petak omisi, atau persamaan STCR lokal, gunakan itu sebagai prioritas.\n");
 
             s.append("\n4. AIR, VPD & CUACA\n");
-            if (!Double.isNaN(vpd)) {s.append("VPD: ").append(show(vpd)).append(" kPa -> ").append(AgronomyEngine.classifyVpd(vpd)).append("\n"); s.append("VPD + tanah: ").append(AgronomyEngine.vpdCombinedStatus(vpd,moist,fc,pwp,depth,e0,c)).append("\n");
-        }else { s.append("VPD: data suhu + RH belum lengkap.\n");}
+            if (!Double.isNaN(vpd)) {
+                s.append("VPD: ").append(show(vpd)).append(" kPa -> ").append(AgronomyEngine.classifyVpd(vpd)).append("\n");
+                s.append("VPD + tanah: ").append(AgronomyEngine.vpdCombinedStatus(vpd,moist,fc,pwp,depth,e0,c)).append("\n");
+            } else {
+                s.append("VPD: data suhu + RH belum lengkap.\n");
+            }
             s.append(AgronomyEngine.weatherStatus(at, rh, rain, e0, vpd, c)).append("\n");
             if (!Double.isNaN(rain) && !Double.isNaN(e0)) s.append("Neraca sederhana hujan-ET0: ").append(show(rain - e0)).append(" mm; gunakan bersama kelembapan tanah, jangan memakai hujan saja untuk memutuskan irigasi.\n");
             if (!Double.isNaN(pressureHpa)) s.append("Tekanan udara: ").append(show(pressureHpa)).append(" hPa. Tekanan tunggal tidak menentukan hujan/OPT; gunakan bersama tren.\n");
@@ -508,10 +899,11 @@ public class FieldNotesActivity extends Activity {
             s.append("• Model penyakit: suhu, RH, hujan, dan periode basah/leaf wetness sebagai indikator risiko; model spesifik perlu parameter patogen setempat.\n");
             s.append("• GDD/thermal time untuk fase tanaman dan perkembangan serangga bila parameter Tbase tersedia.\n");
             s.append("• pH/kapur: kebutuhan dosis tidak ditentukan dari pH saja; gunakan pH-buffer/kemasaman tertukar/Al-dd atau uji kebutuhan kapur.\n");
-            s.append("• EC: interpretasi salinitas menggunakan ambang ECe sebagai rujukan; EC sensor lapang dipakai sebagai screening dan tren.\n");
+            s.append("• EC sensor: gunakan sebagai parameter input utama dengan rentang operasional; ECe lab hanya pembanding bila tersedia.\n");
 
-            analysisView.setText(s.toString());
-            prefs.edit().putString("last_field_analysis", s.toString()).apply();
+            String compact = compactAnalysis(s.toString());
+            analysisView.setText(compact);
+            prefs.edit().putString("last_field_analysis", compact).apply();
             soilSummaryView.setText(buildSoilSummary());
             timelineView.setText(buildTimeline(prefs, c));
         } catch (Exception ex) {

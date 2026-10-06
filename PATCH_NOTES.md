@@ -45,3 +45,13 @@ Prediksi OPT bukan diagnosis. Verifikasi dengan gejala, populasi, luas serangan,
 - Parameter tanah tambahan yang tersedia: suhu tanah, bahan organik, CEC/KTK, bulk density, dan kedalaman. Parameter metode-spesifik seperti pH-buffer/Al-dd/H-dd tetap dicantumkan tanpa membuat ambang universal palsu.
 - AI diwajibkan mengikuti urutan: FAKTA TERUKUR → KELAS/RENTANG SEMUA PARAMETER → HUBUNGAN/FAKTOR PEMBATAS → REKOMENDASI MENYELURUH 0–24 jam dan 1–7 hari.
 - Semua status parameter diberi label screening bila ambangnya bergantung komoditas, metode, tekstur, ketinggian, atau kondisi lokasi.
+
+
+## Agronomy auto-input / history / notes patch
+- Automatic source selector added to Field Notes: ThingSpeak, Open-Meteo, or priority ThingSpeak → Open-Meteo.
+- Manual editing remains available after automatic fill; automatic sources do not replace unsupported fields.
+- ThingSpeak field names/values are cached for name-aware agronomy mapping.
+- History manager supports deleting selected or all items for field notes, fertilizer and OPT history.
+- Bulk density presets: mineral 1.30 g/cm³, peat reference 0.30 g/cm³, custom input.
+- EC sensor is treated as a valid primary project measurement. The app only converts units (µS/cm ↔ dS/m) and does not require ECe.
+- Method/formula/scientific notes are moved to clickable NOTE dialogs; the main analysis remains focused on values, statuses and recommendations.

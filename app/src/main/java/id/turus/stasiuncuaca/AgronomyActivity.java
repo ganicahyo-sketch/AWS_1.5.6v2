@@ -1,11 +1,13 @@
 package id.turus.stasiuncuaca;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.LinearLayout;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.BufferedReader;
@@ -37,6 +39,7 @@ public class AgronomyActivity extends Activity {
         findViewById(R.id.agroFieldNotes).setOnClickListener(v->startActivity(new Intent(this,FieldNotesActivity.class)));
         findViewById(R.id.agroPdf).setOnClickListener(v->startActivity(new Intent(this,PdfReportActivity.class)));
         findViewById(R.id.agroAiButton).setOnClickListener(v->requestAi());
+        findViewById(R.id.agroNotes).setOnClickListener(v->showNotes());
         render();
     }
     @Override protected void onDestroy(){net.shutdownNow();super.onDestroy();}
@@ -107,7 +110,39 @@ public class AgronomyActivity extends Activity {
         addRecommendations(s,crop,mode,ph,ec,ece,moist,fc,pwp,vpd,temp,rh,rain,et0,hst,method);
         s.append("\n7. CATATAN ILMIAH\n").append(AgronomyEngine.evidenceBrief()).append("\n");
         s.append("\n8. HISTORI TERPADU (ringkas)\n").append(recent("field_notes_v153",8)).append("\nPemupukan:\n").append(recent("fert_history",8)).append("\nOPT:\n").append(recent("opt_history",8));
-        report.setText(s.toString()); prefs.edit().putString("last_agronomy_analysis",s.toString()).apply();
+        String compact = compactReport(s.toString());
+        report.setText(compact); prefs.edit().putString("last_agronomy_analysis",compact).apply();
+    }
+
+    private String compactReport(String text){
+        String[] lines=text.split("\\n"); StringBuilder out=new StringBuilder(); boolean skip=false;
+        for(String line:lines){String t=line.trim();
+            if(t.startsWith("7. CATATAN ILMIAH")){skip=true;continue;}
+            if(skip){
+                if(t.startsWith("8. HISTORI TERPADU")) skip=false;
+                else continue;
+            }
+            if(t.startsWith("PENTING:" ) || t.startsWith("Rumus skrining:" ) || t.startsWith("Stok = konsentrasi") || t.startsWith("URUTAN ANALISIS:")) continue;
+            if(t.contains("tidak dikonversi otomatis") && t.startsWith("ECe lab:")) continue;
+            out.append(line).append("\\n");
+        }
+        return out.toString().trim();
+    }
+
+    private void showNotes(){
+        LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); int pad=(int)(16*getResources().getDisplayMetrics().density); root.setPadding(pad,pad,pad,pad);
+        TextView tv=new TextView(this); tv.setTextColor(getResources().getColor(R.color.text_main)); tv.setTextSize(14);
+        tv.setText("NOTE — METODE, RUMUS & SUMBER\\n\\n"+
+                "• EC sensor adalah parameter utama untuk input lapangan. Konversi satuan: µS/cm ÷ 1000 = dS/m. Aplikasi tidak mewajibkan ECe.\\n\\n"+
+                "• Tidak ada satu faktor universal untuk mengubah semua EC sensor lapang menjadi ECe. Hubungan tergantung metode ekstraksi, tekstur, kadar air, suhu, bulk density dan kondisi tanah. Bila ECe lab tersedia, tampilkan sebagai pembanding.\\n\\n"+
+                "• Rentang EC operasional: <1; 1–2; >2–3; >3–4; >4 dS/m. Ini screening; batas spesifik komoditas tetap diprioritaskan.\\n\\n"+
+                "• Bulk density default: tanah mineral 1,30 g/cm³; gambut 0,30 g/cm³; Input sendiri dapat dipilih.\\n\\n"+
+                "• Stok hara: konsentrasi mg/kg × BD g/cm³ × kedalaman cm × 0,10 = kg/ha. Stok bukan sama dengan serapan tanaman.\\n\\n"+
+                "• Open-Meteo soil moisture: m³/m³ × 100 = % volume.\\n\\n"+
+                "• ET₀ menggunakan pendekatan FAO-56 pada data Open-Meteo yang tersedia. VPD dibaca bersama suhu/RH dan status air tanah.\\n\\n"+
+                "• OpenAlex tetap digunakan untuk mendukung analisis berbasis literatur ilmiah.\\n\\n"+
+                "Rujukan EC/ECe: Pedosphere 32(6), 2022, DOI 10.1016/j.pedsph.2022.06.023; Journal of the Saudi Society of Agricultural Sciences 23(4), 2024, DOI 10.1016/j.jssas.2023.12.005.");
+        root.addView(tv,new LinearLayout.LayoutParams(-1,-2)); new AlertDialog.Builder(this).setTitle("NOTE — METODE & SUMBER").setView(root).setPositiveButton("TUTUP",null).show();
     }
 
     private void addRecommendations(StringBuilder s,String crop,String mode,double ph,double ec,double ece,double moist,double fc,double pwp,double vpd,double t,double rh,double rain,double et0,int hst,String method){
