@@ -712,6 +712,22 @@ public class FieldNotesActivity extends Activity {
         int code=c.getResponseCode(); InputStream in=(code>=200&&code<300)?c.getInputStream():c.getErrorStream(); String body=readAll(in); c.disconnect();
         if(code<200||code>=300)throw new Exception("HTTP "+code); if(body.trim().isEmpty())throw new Exception("Respons kosong"); return new JSONObject(body);
     }
+
+    private String readAll(InputStream in) throws Exception {
+        if (in == null) return "";
+        StringBuilder sb = new StringBuilder();
+        byte[] buffer = new byte[4096];
+        int n;
+        try {
+            while ((n = in.read(buffer)) != -1) {
+                sb.append(new String(buffer, 0, n, java.nio.charset.StandardCharsets.UTF_8));
+            }
+        } finally {
+            try { in.close(); } catch (Exception ignored) {}
+        }
+        return sb.toString();
+    }
+
     private String compactAnalysis(String text){
         String[] lines=text.split("\\n"); StringBuilder out=new StringBuilder();
         boolean skipScientific=false;
