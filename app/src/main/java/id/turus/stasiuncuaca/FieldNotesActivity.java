@@ -23,6 +23,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Locale;
@@ -43,6 +44,7 @@ public class FieldNotesActivity extends Activity {
     private static final String KEY_OPT = "opt_history";
     private static final ZoneId WIB = ZoneId.of("Asia/Jakarta");
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US);
+    private SharedPreferences prefs;
 
     private EditText date, time, crop, plantDate, hst, area, observation, action, targetYield;
     private EditText soilPh, soilMoisture, soilTemp, soilEc, soilN, soilP, soilK, soilDepth, soilBulkDensity, soilFc, soilPwp, soilPhBuffer, soilAlDd, soilHDd, soilCec, soilOm, soilEce, soilLimeReq, soilNLow, soilNHigh;
@@ -88,7 +90,7 @@ public class FieldNotesActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_field_notes);
-        SharedPreferences prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
 
         date = findViewById(R.id.fnDate);
         time = findViewById(R.id.fnTime);
