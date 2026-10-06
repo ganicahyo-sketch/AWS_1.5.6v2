@@ -516,10 +516,15 @@ public class FieldNotesActivity extends Activity {
         JSONObject feed = tsFeed;
         JSONObject meta = tsMeta;
         if (cacheOnly && useTs) {
-            feed = new JSONObject(); meta = new JSONObject();
-            for (int i=1;i<=8;i++) {
-                feed.put("field"+i, prefs.getString("ts_field_"+i, ""));
-                meta.put("field"+i, prefs.getString("ts_field_name_"+i, prefs.getString("field_name_"+i, "")));
+            try {
+                feed = new JSONObject(); meta = new JSONObject();
+                for (int i=1;i<=8;i++) {
+                    feed.put("field"+i, prefs.getString("ts_field_"+i, ""));
+                    meta.put("field"+i, prefs.getString("ts_field_name_"+i, prefs.getString("field_name_"+i, "")));
+                }
+            } catch (org.json.JSONException ignored) {
+                feed = null;
+                meta = null;
             }
         }
         if (useTs && feed != null) {
