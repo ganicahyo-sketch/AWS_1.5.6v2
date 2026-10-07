@@ -1,7 +1,6 @@
 031244c3521fbbf70e882768bae3f4100ffa2bef6cf2f577c4c6f39116e7427c  ./.github/workflows/build-apk.yml
 fa92c775cfbce07b7cdbe813d7b8c12a62d7736e82323e1a609373c38d8a69bb  ./.gitignore
 12e936e4248214bb1a25d3dd344473cccfccf4b03110d2b3ba8d1870e961e903  ./AGRONOMY_NOTES.md
-f6184dca9edfa27a2f5371f3abd1eaa951534199ddb6de61f8c10911fbc6a53a  ./FILE_LIST.sha256
 41592833923a8748907c51626e7f89773e946784c2f97304f4be1cf71cc4e285  ./FILE_LIST.txt
 88c1507bb9270290c272bb67fd2e0bce7760312dabbf351ef90516b18b8095d8  ./LOCAL_BUILD.md
 74d51002cbc5bc96a737a07be89e2e5d0eab80b5d3ce1ece7ee035c407d9c103  ./PATCH_NOTES.md
@@ -12,7 +11,7 @@ afcfef9558187426e69a6cb249ad0ecda054417dcecf6713ec96f4f75ec27aa4  ./SCIENTIFIC_S
 747cad14f5454e2e20e1668ad849ba96d8fb0a7859cf97a1b828488969aeaac4  ./app/build.gradle
 8a16f3e2a8b5dce10e36a72e25f32a3d575e849884411fea2e7ec6339aa40b27  ./app/proguard-rules.pro
 c62d0c8e6e4e2136fc1005da93bec46f9ce28c69be88674e2a168fb6cc99bb9b  ./app/src/main/AndroidManifest.xml
-b17edee3934e76a994dd324b7a96145cfb29641730b07839b28db739bdcc6828  ./app/src/main/java/id/stasiuncuaca/AgronomyActivity.java
+92fd461042ba810b6368339d6457b2f08e296652c4e1eb9056d6a8e0c9e07d20  ./app/src/main/java/id/stasiuncuaca/AgronomyActivity.java
 3c21482f8ba6fad34bfafc13245eae5d25adb492bafd569a7c54375fe576746b  ./app/src/main/java/id/stasiuncuaca/AgronomyEngine.java
 025ab51781f300593ec00956971af314c23e2f81b88f1a72dca4f7a8bae0c233  ./app/src/main/java/id/stasiuncuaca/AgronomyEvidence.java
 829c2e568a5f56c289d208ae8de788ea26e5e719e1115fea87d1b48c6a812383  ./app/src/main/java/id/stasiuncuaca/AiProviderClient.java

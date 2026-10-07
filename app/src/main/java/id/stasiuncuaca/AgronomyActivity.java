@@ -107,7 +107,7 @@ public class AgronomyActivity extends BaseActivity {
         s.append("\n5. PREDIKSI POTENSI OPT — RISK SCREENING\n");
         s.append(AgronomyEngine.optRisk(crop,temp,rh,rain,num(pref("om_wind_speed","")),recent("opt_history",6),hst)).append("\n");
         s.append("\n6. REKOMENDASI TEKNIS\n");
-        addRecommendations(s,crop,mode,ph,ec,ece,moist,fc,pwp,vpd,temp,rh,rain,et0,hst,method);
+        addRecommendations(s,crop,mode,ph,n,p,k,ec,ece,moist,fc,pwp,vpd,temp,rh,rain,et0,hst,method);
         s.append("\n7. CATATAN ILMIAH\n").append(AgronomyEngine.evidenceBrief()).append("\n");
         // Histori terpadu disimpan untuk laporan cetak/PDF, tetapi tidak ditampilkan pada layar analisis utama.
         String compact = compactReport(s.toString());
@@ -175,11 +175,11 @@ public class AgronomyActivity extends BaseActivity {
         content.addView(tv,new LinearLayout.LayoutParams(-1,-2)); root.addView(content,new ScrollView.LayoutParams(-1,-2)); new AlertDialog.Builder(this).setTitle("ⓘ INFORMASI ILMIAH").setView(root).setPositiveButton("TUTUP",null).show();
     }
 
-    private void addRecommendations(StringBuilder s,String crop,String mode,double ph,double ec,double ece,double moist,double fc,double pwp,double vpd,double t,double rh,double rain,double et0,int hst,String method){
-        AgronomyEngine.CropProfile p=AgronomyEngine.profile(crop);
-        if(Double.isFinite(ph)&&ph<p.phMin) s.append("• pH rendah: lakukan uji pH-buffer/Al-dd/H-dd/CEC atau gunakan kebutuhan kapur laboratorium; jangan hitung dolomit dari pH saja.\n");
-        if(Double.isFinite(ph)&&ph>p.phMax) s.append("• pH tinggi: stop sementara kapur/dolomit; periksa alkalinitas air dan dasar kebutuhan pengasaman.\n");
-        if(Double.isFinite(ec)&&ec/1000.0>p.ecThresholdDsM) s.append("• EC sensor tinggi: kurangi pemupukan pekat, cek air/drainase, dan pantau tren. Konfirmasi dengan ECe bila salinitas dicurigai.\n");
+    private void addRecommendations(StringBuilder s,String crop,String mode,double ph,double n,double p,double k,double ec,double ece,double moist,double fc,double pwp,double vpd,double t,double rh,double rain,double et0,int hst,String method){
+        AgronomyEngine.CropProfile cp=AgronomyEngine.profile(crop);
+        if(Double.isFinite(ph)&&ph<cp.phMin) s.append("• pH rendah: lakukan uji pH-buffer/Al-dd/H-dd/CEC atau gunakan kebutuhan kapur laboratorium; jangan hitung dolomit dari pH saja.\n");
+        if(Double.isFinite(ph)&&ph>cp.phMax) s.append("• pH tinggi: stop sementara kapur/dolomit; periksa alkalinitas air dan dasar kebutuhan pengasaman.\n");
+        if(Double.isFinite(ec)&&ec/1000.0>cp.ecThresholdDsM) s.append("• EC sensor tinggi: kurangi pemupukan pekat, cek air/drainase, dan pantau tren. Konfirmasi dengan ECe bila salinitas dicurigai.\n");
         if(Double.isFinite(ece)&&ece>=4) s.append("• ECe menunjukkan salinitas sedikit sampai sangat tinggi menurut kelas USDA-NRCS; pilih tindakan berdasarkan toleransi komoditas dan pemeriksaan zona akar.\n");
         String water=AgronomyEngine.soilWaterAssessment(moist,fc,pwp,20,et0,crop);
         if(water.startsWith("KURANG")) s.append("• Air tanah kurang: cek zona akar dan kebutuhan irigasi sebelum menambah pupuk larut.\n");
@@ -187,7 +187,7 @@ public class AgronomyActivity extends BaseActivity {
         if(Double.isFinite(p)&&(pClass.startsWith("Tinggi")||pClass.startsWith("Sangat Tinggi"))) s.append("• P tersedia sudah tinggi: jangan menambah P rutin tanpa dasar uji tanah.\n");
         if(Double.isFinite(k)&&(kClass.startsWith("Tinggi")||kClass.startsWith("Sangat Tinggi"))) s.append("• K tersedia sudah tinggi: jangan menambah K rutin tanpa dasar uji tanah.\n");
         if(Double.isFinite(vpd)&&vpd>2) s.append("• VPD tinggi: pantau layu/kerontokan bunga atau gejala kehilangan air; kombinasi dengan tanah kering lebih serius.\n");
-        if(Double.isFinite(t)&& (t<p.tempMin||t>p.tempMax)) s.append("• Suhu di luar kisaran ekologis profil: kurangi pekerjaan stres pada tanaman dan pantau gejala.\n");
+        if(Double.isFinite(t)&& (t<cp.tempMin||t>cp.tempMax)) s.append("• Suhu di luar kisaran ekologis profil: kurangi pekerjaan stres pada tanaman dan pantau gejala.\n");
         if(Double.isFinite(rh)&&rh>90&&Double.isFinite(rain)&&rain>=5) s.append("• RH + hujan tinggi: tingkatkan scouting penyakit, sanitasi dan sirkulasi udara.\n");
         if(mode.toLowerCase(Locale.US).contains("organik")) s.append("• ORGANIK: gunakan input/proses yang diizinkan standar organik yang berlaku; prioritaskan bahan organik matang, sanitasi, varietas toleran, mekanis dan agen hayati. Verifikasi status input sebelum aplikasi.\n");
         else s.append("• KONVENSIONAL/PHT: gunakan pemupukan berimbang, monitoring ambang tindakan, rotasi bahan aktif dan patuhi label/interval pra-panen.\n");
