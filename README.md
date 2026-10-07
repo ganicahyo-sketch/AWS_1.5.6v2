@@ -41,3 +41,7 @@ Isi laporan mencakup cuaca Open-Meteo, ET0, VPD, arah angin berbasis mata angin,
 - Tampilan analisis agronomi menyembunyikan uraian metodologi/rentang/rumus dari layar utama. Detail ilmiah dipindahkan ke ikon **ⓘ**.
 - AI menggunakan ruang output hingga **5000 token** dan diarahkan menghasilkan rekomendasi 0–24 jam, 1–7 hari, air, pemupukan, PHT, prioritas tindakan, serta pencarian web untuk OPT di luar database lokal.
 - API key OpenAI tidak lagi ditanam sebagai default di source code. Masukkan key melalui Pengaturan.
+
+
+### AI Provider Options
+The agronomy AI can use the existing OpenAI provider, Google Gemini, or OpenRouter Free. OpenAI remains the default for backward compatibility. Gemini uses the official Gemini API and Google Search grounding when selected. OpenRouter Free uses the `openrouter/free` router by default. API keys are entered by the user in Settings and are not bundled in the source.

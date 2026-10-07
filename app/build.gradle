@@ -1,11 +1,11 @@
 plugins { id 'com.android.application' }
 
 android {
-    namespace 'id.turus.stasiuncuaca'
+    namespace 'id.stasiuncuaca'
     compileSdk 36
 
     defaultConfig {
-        applicationId 'id.turus.stasiuncuaca'
+        applicationId 'id.stasiuncuaca'
         minSdk 26
         targetSdk 36
         versionCode 156

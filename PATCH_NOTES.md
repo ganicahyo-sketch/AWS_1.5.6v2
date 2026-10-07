@@ -78,3 +78,16 @@ Prediksi OPT bukan diagnosis. Verifikasi dengan gejala, populasi, luas serangan,
 - Added optional Light / Dark / System appearance selection in Settings.
 - Added theme-qualified colors and a theme-aware Activity base class only; weather, ThingSpeak, agronomy, history, CSV and PDF logic remain intact.
 - OpenAI API key remains blank by default.
+
+
+## Multi-provider AI
+- OpenAI tetap dipertahankan sebagai provider default dan tidak diubah endpoint/logikanya.
+- Ditambahkan Google Gemini melalui Gemini API resmi dengan Google Search grounding.
+- Ditambahkan OpenRouter Free sebagai alternatif untuk model-model gratis.
+- API key OpenAI/Gemini/OpenRouter tidak ditanam ke source; semua dimasukkan pengguna dan disimpan pada pengaturan lokal.
+- Tidak ada field ThingSpeak, data cuaca, analisis agronomi, histori, CSV, PDF, GPS, atau OpenAlex yang dihapus.
+
+## CSV filename follows application title — 2026-10-07
+- Semua nama file CSV ekspor sekarang mengambil judul aplikasi dari `app_title` pada Pengaturan/Konfigurasi.
+- Berlaku untuk ekspor ThingSpeak berdasarkan rentang tanggal, seluruh histori ThingSpeak, dan histori Open-Meteo.
+- Judul hanya disanitasi pada nama file (karakter terlarang diganti dan spasi dirapikan); judul yang tampil di aplikasi tidak diubah.
