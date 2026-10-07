@@ -1,4 +1,4 @@
-name: Build APK - STASIUN CUACA • GANI CAHYO-UNS v1.5.6
+name: Build APK - STASIUN CUACA v1.5.6
 
 on:
   push:
@@ -51,6 +51,17 @@ jobs:
           gradle-version: '9.4.1'
           cache-provider: basic
 
+      - name: Normalize Java source tree
+        shell: bash
+        run: |
+          set -euxo pipefail
+          # Keep only the generic application package. Remove any stale sibling package trees.
+          if [ -d app/src/main/java/id ]; then
+            find app/src/main/java/id -mindepth 1 -maxdepth 1 -type d ! -name stasiuncuaca -exec rm -rf {} +
+          fi
+          test -d app/src/main/java/id/stasiuncuaca
+          test -n "$(find app/src/main/java/id/stasiuncuaca -type f -name "*.java" -print -quit)"
+
       - name: Verify build environment
         shell: bash
         run: |
@@ -88,10 +99,9 @@ jobs:
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: STASIUN-CUACA-DESA-TURUS-v1.5.6-APK
+          name: STASIUN-CUACA-v1.5.6-APK
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/release/app-release-unsigned.apk
           if-no-files-found: error
           retention-days: 30
-
