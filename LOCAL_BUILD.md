@@ -1,17 +1,11 @@
-# Build manual
+# Local validation — STASIUN CUACA v1.5.6
 
-Proyek ini dapat diunggah langsung ke root repository GitHub.
+Validasi yang dilakukan pada workspace ini:
+- 13 file Java generic dengan package `id.stasiuncuaca`.
+- Seluruh XML resource berhasil diparse.
+- Seluruh `R.id.*` yang dipakai Java ditemukan pada resource XML.
+- Tidak ada referensi nama proyek lama maupun package lama.
+- Core Java (`LightConversion`, `NitrogenInference`, `AgronomyEvidence`, `AgronomyEngine`) berhasil dikompilasi dengan `javac`.
+- Uji semantik P/K dan PPFD berhasil.
 
-GitHub Actions memakai:
-- Ubuntu 24.04
-- Temurin JDK 25
-- Android SDK API 36 / Build Tools 36.0.0
-- Gradle 9.4.1
-- Android Gradle Plugin 9.2.0
-
-Untuk komputer lokal:
-- Linux/macOS: `./gradlew :app:assembleDebug`
-- Windows: `gradlew.bat :app:assembleDebug`
-
-Release yang dihasilkan tanpa signing key adalah:
-`app/build/outputs/apk/release/app-release-unsigned.apk`
+Build Android penuh dengan Gradle 9.4.1 belum dapat dijalankan di lingkungan pemeriksaan ini karena Gradle wrapper project perlu mengambil distribusi dari `services.gradle.org`, sementara DNS/network eksternal lingkungan ini tidak tersedia. GitHub Actions tetap menjadi validasi build Android penuh.

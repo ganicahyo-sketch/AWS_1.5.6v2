@@ -91,6 +91,7 @@ public class CsvDownloadActivity extends BaseActivity {
     private TextView sourceOpenMeteo;
     private TextView omHourly;
     private TextView omDaily;
+    private LinearLayout thingSpeakModes;
     private LinearLayout rangePanel;
     private LinearLayout openMeteoPanel;
     private TextView historyInfo;
@@ -120,6 +121,7 @@ public class CsvDownloadActivity extends BaseActivity {
         sourceOpenMeteo = findViewById(R.id.sourceOpenMeteo);
         omHourly = findViewById(R.id.omHourly);
         omDaily = findViewById(R.id.omDaily);
+        thingSpeakModes = findViewById(R.id.thingSpeakModes);
         rangePanel = findViewById(R.id.rangePanel);
         openMeteoPanel = findViewById(R.id.openMeteoPanel);
         historyInfo = findViewById(R.id.historyInfo);
@@ -146,7 +148,7 @@ public class CsvDownloadActivity extends BaseActivity {
         });
         findViewById(R.id.back).setOnClickListener(v -> finish());
 
-        setSource(false);
+        setSource(true);
     }
 
     private void setSource(boolean openMeteo) {
@@ -161,6 +163,7 @@ public class CsvDownloadActivity extends BaseActivity {
             allHistoryMode = false;
             modeAllHistory.setVisibility(android.view.View.GONE);
             modeRange.setVisibility(android.view.View.GONE);
+            thingSpeakModes.setVisibility(android.view.View.GONE);
             openMeteoPanel.setVisibility(android.view.View.VISIBLE);
             rangePanel.setVisibility(android.view.View.VISIBLE);
             historyInfo.setText(
@@ -171,6 +174,7 @@ public class CsvDownloadActivity extends BaseActivity {
         } else {
             modeAllHistory.setVisibility(android.view.View.VISIBLE);
             modeRange.setVisibility(android.view.View.VISIBLE);
+            thingSpeakModes.setVisibility(android.view.View.VISIBLE);
             openMeteoPanel.setVisibility(android.view.View.GONE);
             setMode(allHistoryMode);
         }
@@ -509,19 +513,20 @@ public class CsvDownloadActivity extends BaseActivity {
     private void fetchOpenMeteoHistorical(double lat, double lon, LocalDate start, LocalDate end,
                                           boolean hourly, Writer writer, OpenMeteoStats stats) throws Exception {
         String url;
+        String hourlyVars = "temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation,rain,weather_code,surface_pressure,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility,uv_index,shortwave_radiation,vapour_pressure_deficit,et0_fao_evapotranspiration,sunshine_duration,soil_temperature_0_to_7cm,soil_temperature_7_to_28cm,soil_moisture_0_to_7cm,soil_moisture_7_to_28cm";
         if (hourly) {
-            String vars = "temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation,rain,weather_code,surface_pressure,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility,uv_index,shortwave_radiation,vapour_pressure_deficit,et0_fao_evapotranspiration,sunshine_duration,soil_temperature_0_to_7cm,soil_temperature_7_to_28cm,soil_moisture_0_to_7cm,soil_moisture_7_to_28cm";
             url = "https://archive-api.open-meteo.com/v1/archive?latitude=" + enc(String.format(Locale.US, "%.6f", lat))
                     + "&longitude=" + enc(String.format(Locale.US, "%.6f", lon))
                     + "&start_date=" + start + "&end_date=" + end
-                    + "&hourly=" + enc(vars)
+                    + "&hourly=" + enc(hourlyVars)
                     + "&timezone=Asia%2FJakarta&temperature_unit=celsius&wind_speed_unit=ms&precipitation_unit=mm&timeformat=iso8601&cell_selection=land";
         } else {
-            String vars = "weather_code,temperature_2m_mean,temperature_2m_max,temperature_2m_min,apparent_temperature_mean,apparent_temperature_max,apparent_temperature_min,precipitation_sum,rain_sum,precipitation_hours,sunrise,sunset,daylight_duration,sunshine_duration,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,shortwave_radiation_sum,et0_fao_evapotranspiration";
+            String dailyVars = "weather_code,temperature_2m_mean,temperature_2m_max,temperature_2m_min,apparent_temperature_mean,apparent_temperature_max,apparent_temperature_min,precipitation_sum,rain_sum,precipitation_hours,sunrise,sunset,daylight_duration,sunshine_duration,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,shortwave_radiation_sum,et0_fao_evapotranspiration";
             url = "https://archive-api.open-meteo.com/v1/archive?latitude=" + enc(String.format(Locale.US, "%.6f", lat))
                     + "&longitude=" + enc(String.format(Locale.US, "%.6f", lon))
                     + "&start_date=" + start + "&end_date=" + end
-                    + "&daily=" + enc(vars)
+                    + "&hourly=" + enc("shortwave_radiation,vapour_pressure_deficit")
+                    + "&daily=" + enc(dailyVars)
                     + "&timezone=Asia%2FJakarta&temperature_unit=celsius&wind_speed_unit=ms&precipitation_unit=mm&timeformat=iso8601&cell_selection=land";
         }
 
@@ -548,11 +553,13 @@ public class CsvDownloadActivity extends BaseActivity {
                 JSONArray times = h.optJSONArray("time");
                 if (times == null) throw new Exception("Kolom waktu hourly Open-Meteo tidak tersedia.");
                 writer.write(csvLine("timestamp_wib","source","data_type","latitude","longitude","elevation_m",
-                        "temperature_2m_c","relative_humidity_pct","dew_point_c","apparent_temperature_c","precipitation_mm","rain_mm","weather_code","surface_pressure_hpa","cloud_cover_pct","wind_speed_ms","wind_direction_deg","wind_gust_ms","visibility_m","uv_index","shortwave_radiation_wm2","vpd_kpa","et0_mm","sunshine_hours","soil_temperature_0_7cm_c","soil_temperature_7_28cm_c","soil_moisture_0_7cm_pct","soil_moisture_7_28cm_pct"));
+                        "temperature_2m_c","relative_humidity_pct","dew_point_c","apparent_temperature_c","precipitation_mm","rain_mm","weather_code","surface_pressure_hpa","cloud_cover_pct","wind_speed_ms","wind_direction","wind_gust_ms","visibility_m","uv_index","shortwave_radiation_wm2","par_energy_est_wm2_400_700nm","ppfd_est_umol_m2_s_400_700nm","vpd_kpa","et0_mm","sunshine_hours","soil_temperature_0_7cm_c","soil_temperature_7_28cm_c","soil_moisture_0_7cm_pct","soil_moisture_7_28cm_pct"));
                 writer.write("\r\n");
                 for (int i = 0; i < times.length(); i++) {
                     String timestamp = times.optString(i, "");
                     double sw = arrNum(h, "shortwave_radiation", i);
+                    double par = LightConversion.shortwaveToParWm2(sw);
+                    double ppfd = LightConversion.parToPpfd(par);
                     String sunshineHours = fmtCsv(arrNum(h, "sunshine_duration", i) / 3600.0, 3);
                     writer.write(csvLine(timestamp,"OPEN-METEO","HISTORICAL_REANALYSIS",
                             fmtCsv(responseLat,5),fmtCsv(responseLon,5),fmtCsv(elevation,1),
@@ -560,8 +567,8 @@ public class CsvDownloadActivity extends BaseActivity {
                             fmtCsv(arrNum(h,"dew_point_2m",i),2),fmtCsv(arrNum(h,"apparent_temperature",i),2),
                             fmtCsv(arrNum(h,"precipitation",i),3),fmtCsv(arrNum(h,"rain",i),3),
                             csvNum(h,"weather_code",i),fmtCsv(arrNum(h,"surface_pressure",i),1),fmtCsv(arrNum(h,"cloud_cover",i),1),
-                            fmtCsv(arrNum(h,"wind_speed_10m",i),2),fmtCsv(arrNum(h,"wind_direction_10m",i),1),fmtCsv(arrNum(h,"wind_gusts_10m",i),2),
-                            fmtCsv(arrNum(h,"visibility",i),1),fmtCsv(arrNum(h,"uv_index",i),2),fmtCsv(sw,2),fmtCsv(arrNum(h,"vapour_pressure_deficit",i),3),
+                            fmtCsv(arrNum(h,"wind_speed_10m",i),2),MainActivity.compass(arrNum(h,"wind_direction_10m",i)),fmtCsv(arrNum(h,"wind_gusts_10m",i),2),
+                            fmtCsv(arrNum(h,"visibility",i),1),fmtCsv(arrNum(h,"uv_index",i),2),fmtCsv(sw,2),fmtCsv(par,2),fmtCsv(ppfd,2),fmtCsv(arrNum(h,"vapour_pressure_deficit",i),3),
                             fmtCsv(arrNum(h,"et0_fao_evapotranspiration",i),3),sunshineHours,
                             fmtCsv(arrNum(h,"soil_temperature_0_to_7cm",i),2),fmtCsv(arrNum(h,"soil_temperature_7_to_28cm",i),2),
                             fmtCsv(arrNum(h,"soil_moisture_0_to_7cm",i) * 100.0,2),fmtCsv(arrNum(h,"soil_moisture_7_to_28cm",i) * 100.0,2)));
@@ -571,22 +578,60 @@ public class CsvDownloadActivity extends BaseActivity {
                 }
             } else {
                 JSONObject d = root.optJSONObject("daily");
+                JSONObject h = root.optJSONObject("hourly");
                 if (d == null) throw new Exception("Respons Open-Meteo tidak memiliki data daily.");
                 JSONArray times = d.optJSONArray("time");
                 if (times == null) throw new Exception("Kolom waktu daily Open-Meteo tidak tersedia.");
                 writer.write(csvLine("date","source","data_type","latitude","longitude","elevation_m",
                         "weather_code","temperature_mean_c","temperature_max_c","temperature_min_c","apparent_temperature_mean_c","apparent_temperature_max_c","apparent_temperature_min_c",
-                        "precipitation_sum_mm","rain_sum_mm","precipitation_hours","sunrise","sunset","daylight_hours","sunshine_hours","wind_speed_max_ms","wind_gusts_max_ms","wind_direction_dominant_deg","shortwave_radiation_sum_MJ_m2","et0_mm"));
+                        "precipitation_sum_mm_calendar_day","rain_sum_mm_calendar_day","precipitation_hours","sunrise","sunset","daylight_hours","sunshine_hours","wind_speed_max_ms","wind_gusts_max_ms","wind_direction_dominant",
+                        "shortwave_radiation_sum_MJ_m2","et0_mm","par_energy_mean_est_wm2_400_700nm","ppfd_mean_est_umol_m2_s_400_700nm","ppfd_max_est_umol_m2_s_400_700nm","vpd_mean_kpa","vpd_max_kpa"));
                 writer.write("\r\n");
+
+                java.util.HashMap<String, Double> vpdSum = new java.util.HashMap<>();
+                java.util.HashMap<String, Integer> vpdCount = new java.util.HashMap<>();
+                java.util.HashMap<String, Double> vpdMax = new java.util.HashMap<>();
+                java.util.HashMap<String, Double> ppfdSum = new java.util.HashMap<>();
+                java.util.HashMap<String, Double> ppfdMax = new java.util.HashMap<>();
+                java.util.HashMap<String, Integer> ppfdCount = new java.util.HashMap<>();
+                if (h != null) {
+                    JSONArray ht = h.optJSONArray("time");
+                    if (ht != null) {
+                        for (int i=0;i<ht.length();i++) {
+                            String ts=ht.optString(i,"");
+                            String day=ts.length()>=10?ts.substring(0,10):"";
+                            double v=arrNum(h,"vapour_pressure_deficit",i);
+                            double sw=arrNum(h,"shortwave_radiation",i);
+                            double pfd=LightConversion.shortwaveToPpfd(sw);
+                            if(!day.isEmpty() && Double.isFinite(v)){
+                                vpdSum.put(day,vpdSum.getOrDefault(day,0.0)+v);
+                                vpdCount.put(day,vpdCount.getOrDefault(day,0)+1);
+                                vpdMax.put(day,Math.max(vpdMax.getOrDefault(day,Double.NEGATIVE_INFINITY),v));
+                            }
+                            if(!day.isEmpty() && Double.isFinite(pfd)){
+                                ppfdSum.put(day,ppfdSum.getOrDefault(day,0.0)+pfd);
+                                ppfdCount.put(day,ppfdCount.getOrDefault(day,0)+1);
+                                ppfdMax.put(day,Math.max(ppfdMax.getOrDefault(day,Double.NEGATIVE_INFINITY),pfd));
+                            }
+                        }
+                    }
+                }
                 for (int i=0;i<times.length();i++) {
-                    writer.write(csvLine(times.optString(i,""),"OPEN-METEO","HISTORICAL_REANALYSIS",
+                    String day=times.optString(i,"");
+                    int vc=vpdCount.getOrDefault(day,0), pc=ppfdCount.getOrDefault(day,0);
+                    double vmean=vc>0?vpdSum.get(day)/vc:Double.NaN;
+                    double vmax=vc>0?vpdMax.get(day):Double.NaN;
+                    double pmean=pc>0?ppfdSum.get(day)/pc:Double.NaN;
+                    double pmax=pc>0?ppfdMax.get(day):Double.NaN;
+                    double parMean=Double.isFinite(pmean)?pmean/4.57:Double.NaN;
+                    writer.write(csvLine(day,"OPEN-METEO","HISTORICAL_REANALYSIS",
                             fmtCsv(responseLat,5),fmtCsv(responseLon,5),fmtCsv(elevation,1),csvNum(d,"weather_code",i),
                             fmtCsv(arrNum(d,"temperature_2m_mean",i),2),fmtCsv(arrNum(d,"temperature_2m_max",i),2),fmtCsv(arrNum(d,"temperature_2m_min",i),2),
                             fmtCsv(arrNum(d,"apparent_temperature_mean",i),2),fmtCsv(arrNum(d,"apparent_temperature_max",i),2),fmtCsv(arrNum(d,"apparent_temperature_min",i),2),
                             fmtCsv(arrNum(d,"precipitation_sum",i),3),fmtCsv(arrNum(d,"rain_sum",i),3),fmtCsv(arrNum(d,"precipitation_hours",i),2),
                             arrString(d,"sunrise",i),arrString(d,"sunset",i),fmtCsv(arrNum(d,"daylight_duration",i)/3600.0,3),fmtCsv(arrNum(d,"sunshine_duration",i)/3600.0,3),
-                            fmtCsv(arrNum(d,"wind_speed_10m_max",i),2),fmtCsv(arrNum(d,"wind_gusts_10m_max",i),2),fmtCsv(arrNum(d,"wind_direction_10m_dominant",i),1),
-                            fmtCsv(arrNum(d,"shortwave_radiation_sum",i),3),fmtCsv(arrNum(d,"et0_fao_evapotranspiration",i),3)));
+                            fmtCsv(arrNum(d,"wind_speed_10m_max",i),2),fmtCsv(arrNum(d,"wind_gusts_10m_max",i),2),MainActivity.compass(arrNum(d,"wind_direction_10m_dominant",i)),
+                            fmtCsv(arrNum(d,"shortwave_radiation_sum",i),3),fmtCsv(arrNum(d,"et0_fao_evapotranspiration",i),3),fmtCsv(parMean,2),fmtCsv(pmean,2),fmtCsv(pmax,2),fmtCsv(vmean,3),fmtCsv(vmax,3)));
                     writer.write("\r\n");
                     stats.rows++;
                     if (i % 7 == 0) postProgressOpenMeteo(stats, "Open-Meteo harian: memproses...");

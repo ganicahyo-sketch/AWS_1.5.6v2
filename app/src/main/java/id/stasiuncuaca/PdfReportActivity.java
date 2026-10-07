@@ -87,7 +87,7 @@ public class PdfReportActivity extends BaseActivity {
             lastPdf = buildPdf(reportMode.getSelectedItemPosition() == 0);
             PrintManager pm = (PrintManager) getSystemService(Context.PRINT_SERVICE);
             if (pm == null) throw new Exception("Layanan cetak Android tidak tersedia");
-            pm.print("STASIUN CUACA • GANI CAHYO-UNS", new PdfPrintAdapter(lastPdf), printAttributes());
+            pm.print(pref("app_title", "STASIUN CUACA"), new PdfPrintAdapter(lastPdf), printAttributes());
         } catch (Exception e) {
             Toast.makeText(this, "Gagal membuka cetak: " + safe(e), Toast.LENGTH_LONG).show();
         }
@@ -111,7 +111,7 @@ public class PdfReportActivity extends BaseActivity {
     private PrintAttributes printAttributes() {
         return new PrintAttributes.Builder()
                 .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
-                .setResolution(new PrintAttributes.Resolution("stasiuncuaca", "STASIUN CUACA", 300, 300))
+                .setResolution(new PrintAttributes.Resolution("stasiuncuaca", pref("app_title", "STASIUN CUACA"), 300, 300))
                 .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
                 .build();
     }
@@ -130,7 +130,7 @@ public class PdfReportActivity extends BaseActivity {
 
         PdfDocument doc = new PdfDocument();
         ReportCanvas rc = new ReportCanvas(doc);
-        rc.heading("STASIUN CUACA • GANI CAHYO-UNS");
+        rc.heading(pref("app_title", "STASIUN CUACA"));
         rc.subheading("Laporan " + (complete ? "Lengkap" : "Ringkas") + " - Open-Meteo + Agronomi");
         rc.meta("Dicetak: " + java.time.ZonedDateTime.now(WIB).format(PRINT_DATE) + " WIB");
         rc.meta("Komoditas: " + pref("crop", "Tanaman pertanian") + " | Budidaya: " + pref("farm_cultivation_mode", "Konvensional / PHT"));
@@ -210,8 +210,14 @@ public class PdfReportActivity extends BaseActivity {
 
     private void addAgronomyAnalysis(ReportCanvas rc, android.content.SharedPreferences p) {
         rc.section("3. ANALISIS AGRONOMI");
-        String saved = pref("last_field_analysis", "");
-        if (saved.trim().isEmpty()) saved = pref("last_agronomy_analysis", "");
+        String savedAgro = pref("last_agronomy_analysis", "");
+        String savedField = pref("last_field_analysis", "");
+        long agroEpoch = getSharedPreferences(PREFS, MODE_PRIVATE).getLong("last_agronomy_analysis_epoch", 0L);
+        long fieldEpoch = getSharedPreferences(PREFS, MODE_PRIVATE).getLong("last_field_analysis_epoch", 0L);
+        String saved;
+        if (!savedAgro.trim().isEmpty() && agroEpoch >= fieldEpoch) saved=savedAgro;
+        else if (!savedField.trim().isEmpty()) saved=savedField;
+        else saved=savedAgro;
         if (saved.trim().isEmpty()) {
             double n = num(pref("soil_n", "")), pp = num(pref("soil_p", "")), k = num(pref("soil_k", ""));
             double nLow = num(pref("soil_n_low", "")), nHigh = num(pref("soil_n_high", ""));

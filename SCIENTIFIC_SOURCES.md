@@ -26,6 +26,12 @@
   https://www.fao.org/4/Y4263E/y4263e0e.htm
 - EC from a field sensor is retained as a screening/trend signal and is not automatically converted to ECe.
 
+## PAR, PPFD dan curah hujan harian
+- PAR secara konvensional didefinisikan pada rentang 400–700 nm; PPFD adalah kerapatan fluks foton pada rentang tersebut dalam µmol m⁻² s⁻¹. Nilai PPFD yang diturunkan dari shortwave adalah estimasi dan harus dibedakan dari pengukuran quantum sensor.
+- Open-Meteo mendefinisikan `sunshine_duration` berdasarkan periode ketika direct normalized irradiance melampaui 120 W/m², mengikuti definisi WMO; ini berbeda dari seluruh durasi siang (`daylight_duration`). https://open-meteo.com/en/docs/historical-weather-api
+- `precipitation_sum` harian Open-Meteo adalah jumlah presipitasi satu hari kalender lokal. Di aplikasi istilah yang dipakai adalah **curah hujan harian (hari kalender lokal)**, bukan "rolling 24 jam", agar tidak memberi kesan bahwa nilainya merupakan total 24 jam bergerak. https://open-meteo.com/en/docs/historical-weather-api
+- Arah angin Open-Meteo diberikan sebagai derajat oleh API, tetapi aplikasi mengonversinya ke sektor mata angin untuk antarmuka dan CSV. Untuk kecepatan sangat rendah, arah diberi label **Tenang** karena arah pada angin lemah kurang bermakna secara operasional.
+
 ## VPD dan stres tanaman
 - Review physiology literature: VPD around 0.5–1.5 kPa is commonly suitable for many crops, while higher VPD can increase water stress, especially when soil water is limited.
   https://pmc.ncbi.nlm.nih.gov/articles/PMC10422931/

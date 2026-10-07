@@ -17,7 +17,7 @@ Patch ini memperluas v1.5.3 dengan mesin analisis agronomi terpadu.
 - Model degree-day untuk fase/serangga serta STCR-style nutrient balance untuk screening kebutuhan pupuk fase.
 - Catatan satu paragraf dengan kisi-kisi pengisian agar NLP/AI dapat membaca pola kejadian.
 - Konteks AI diperkuat dengan evidence brief dan histori Catatan Lapangan.
-- Arah angin ditampilkan sebagai 16 mata angin + Tenang/Variabel, tanpa derajat.
+- Arah angin ditampilkan sebagai 8 arah mata angin + Tenang/Variabel, tanpa derajat; format yang sama dipakai Field Notes, dashboard, dan CSV Open-Meteo.
 
 ## Batas penting
 Ambang N/P/K tersedia tidak universal karena metode ekstraksi, tanah, dan komoditas berbeda. Ambang di mesin adalah screening. Rekomendasi final mengutamakan PUTS, rekomendasi P/K spesifik lokasi, petak omisi, analisis laboratorium, atau persamaan STCR yang telah dikalibrasi.
@@ -91,3 +91,25 @@ Prediksi OPT bukan diagnosis. Verifikasi dengan gejala, populasi, luas serangan,
 - Semua nama file CSV ekspor sekarang mengambil judul aplikasi dari `app_title` pada Pengaturan/Konfigurasi.
 - Berlaku untuk ekspor ThingSpeak berdasarkan rentang tanggal, seluruh histori ThingSpeak, dan histori Open-Meteo.
 - Judul hanya disanitasi pada nama file (karakter terlarang diganti dan spasi dirapikan); judul yang tampil di aplikasi tidak diubah.
+
+
+## Sinkronisasi & CSV Open-Meteo — 2026-10-07
+- Memperbaiki compile blocker `fetchOpenAlex(...)` yang dipanggil oleh `AgronomyActivity` tetapi sebelumnya belum memiliki implementasi.
+- `AgronomyActivity` dirender ulang pada `onResume()` agar perubahan dari Field Notes/Settings langsung terlihat saat kembali.
+- Urutan sumber analisis pada PDF memprioritaskan `last_agronomy_analysis`, lalu fallback ke `last_field_analysis`.
+- Memperbaiki rekomendasi P/K agar kelas `Tinggi` dan `Sangat Tinggi` tidak terlewat ketika klasifikasi membawa keterangan basis/metode.
+- Cache Open-Meteo di Field Notes diperluas agar suhu terasa, titik embun, angin/gust, awan, visibilitas, UV, Shortwave, PAR, PPFD, sunshine, dan VPD sinkron dengan dashboard.
+- CSV Open-Meteo menjadi sumber utama pada halaman CSV, tetap mempertahankan ekspor ThingSpeak sebagai opsi.
+- CSV hourly menambahkan kolom PAR energi, PPFD dan VPD; arah angin diekspor sebagai nama mata angin, bukan derajat.
+- CSV daily menambahkan PPFD rata-rata/maksimum dan VPD rata-rata/maksimum yang dihitung dari data hourly Open-Meteo pada tanggal yang sama; arah angin dominan juga dikonversi ke mata angin.
+- Arah angin aplikasi diseragamkan menjadi 8 sektor: Utara, Timur Laut, Timur, Tenggara, Selatan, Barat Daya, Barat, Barat Laut. Label legacy 16 sektor tetap dapat dibaca saat migrasi data tersimpan.
+
+
+## Definisi ilmiah dan sinkronisasi akhir — 2026-10-07
+- `fetchOpenAlex()` dibuat robust: kegagalan OpenAlex tidak lagi menggagalkan analisis AI utama; OpenAlex diposisikan sebagai sumber evidence pendukung.
+- P/K tidak lagi diuji dengan `equals()` terhadap string kelas mentah; engine sekarang membaca prefiks kelas sehingga keterangan metode seperti `Tinggi (P Olsen screening)` tetap diproses benar.
+- `FieldNotesActivity` kini memperbarui cache cuaca global `om_*` saat catatan manual disimpan, termasuk suhu, RH, tekanan, curah hujan harian, ET₀, PPFD, VPD dan arah angin. Nilai Open-Meteo yang tidak diinput manual tidak dipertahankan sebagai data terkini sehingga laporan tidak mencampur timestamp sumber yang berbeda.
+- Analisis terakhir diberi timestamp terpisah (`last_agronomy_analysis_epoch` dan `last_field_analysis_epoch`). PDF memilih analisis yang benar-benar paling baru, kemudian memakai fallback bila salah satu belum tersedia.
+- Terminologi cahaya diperjelas: PAR energi 400–700 nm, PPFD 400–700 nm dalam µmol m⁻² s⁻¹. PPFD dari Open-Meteo diberi label estimasi broadband; PPFD manual tidak dibalik menjadi PAR energi.
+- Istilah `Hujan 24 jam` diganti menjadi `Curah hujan harian (00:00–24:00 waktu lokal)` karena `precipitation_sum` Open-Meteo adalah agregasi hari kalender, bukan rolling 24 jam.
+- CSV Open-Meteo tetap mempertahankan PPFD/VPD dan arah angin berbasis mata angin tanpa kolom derajat.

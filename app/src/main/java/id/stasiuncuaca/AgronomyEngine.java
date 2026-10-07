@@ -493,7 +493,7 @@ public final class AgronomyEngine {
         if (Double.isFinite(dewPointC)) s.append("Titik embun: ").append(fmt2(dewPointC)).append(" °C → ").append(classifyDewPointSpread(airTempC,dewPointC)).append("\n");
         if (Double.isFinite(rhPct)) s.append("RH: ").append(fmt2(rhPct)).append(" % → ").append(classifyAirHumidity(rhPct)).append("\n");
         if (Double.isFinite(pressureHpa)) s.append("Tekanan: ").append(fmt2(pressureHpa)).append(" hPa → ").append(classifyPressure(pressureHpa)).append("\n");
-        if (Double.isFinite(rainMm)) s.append("Hujan: ").append(fmt2(rainMm)).append(" mm/hari → ").append(classifyRain(rainMm)).append("\n");
+        if (Double.isFinite(rainMm)) s.append("Curah hujan harian (hari kalender lokal): ").append(fmt2(rainMm)).append(" mm/hari → ").append(classifyRain(rainMm)).append("\n");
         if (Double.isFinite(et0Mm)) s.append("ET₀: ").append(fmt2(et0Mm)).append(" mm/hari → ").append(classifyEt0(et0Mm)).append("\n");
         if (Double.isFinite(windMs)) s.append("Angin: ").append(fmt2(windMs)).append(" m/s → ").append(classifyWind(windMs)).append("\n");
         if (Double.isFinite(gustMs)) s.append("Gust: ").append(fmt2(gustMs)).append(" m/s → ").append(classifyWind(gustMs)).append("\n");
@@ -502,8 +502,8 @@ public final class AgronomyEngine {
         if (Double.isFinite(visibilityM)) s.append("Visibilitas: ").append(fmt2(visibilityM/1000.0)).append(" km → ").append(classifyVisibility(visibilityM)).append("\n");
         if (Double.isFinite(lux)) s.append("Cahaya: ").append(fmt2(lux)).append(" lux → ").append(classifyLux(lux)).append("\n");
         if (Double.isFinite(shortwaveWm2)) s.append("Shortwave: ").append(fmt2(shortwaveWm2)).append(" W/m² → ").append(classifyShortwave(shortwaveWm2)).append("\n");
-        if (Double.isFinite(parWm2)) s.append("PAR energi: ").append(fmt2(parWm2)).append(" W/m² → ").append(classifyParEnergy(parWm2)).append("\n");
-        if (Double.isFinite(ppfd)) s.append("PPFD: ").append(fmt2(ppfd)).append(" µmol/m²/s → ").append(classifyPpfd(ppfd)).append("\n");
+        if (Double.isFinite(parWm2)) s.append("PAR energi (400–700 nm): ").append(fmt2(parWm2)).append(" W/m² → ").append(classifyParEnergy(parWm2)).append("\n");
+        if (Double.isFinite(ppfd)) s.append("PPFD (fluks foton 400–700 nm): ").append(fmt2(ppfd)).append(" µmol/m²/s → ").append(classifyPpfd(ppfd)).append("\n");
         if (Double.isFinite(sunshineHours)) s.append("Lama penyinaran: ").append(fmt2(sunshineHours)).append(" jam/hari → ").append(classifySunshine(sunshineHours)).append("\n");
         if (Double.isFinite(vpd)) s.append("VPD: ").append(fmt2(vpd)).append(" kPa → ").append(classifyVpd(vpd)).append("\n");
         s.append("Catatan: parameter yang tidak memiliki ambang universal (mis. tekanan absolut, FC/PWP, buffer pH, Al-dd/H-dd) harus dibaca bersama konteks lokasi, metode dan tren; jangan dipaksa menjadi dosis otomatis.\n");
@@ -566,9 +566,10 @@ public final class AgronomyEngine {
         if (nutrient.equals("N")) cls = classifyN(soilValue);
         else if (nutrient.equals("P")) cls = classifyP(soilValue);
         else cls = classifyK(soilValue);
-        if ("Rendah".equals(cls)) return "BELUM CUKUP / berpotensi membatasi fase ini";
-        if ("Sedang".equals(cls)) return "CUKUP SEMENTARA, tetapi sesuaikan dengan target hasil dan fase";
-        return "CUKUP–TINGGI; jangan menambah rutin tanpa dasar kebutuhan";
+        if (startsWithClass(cls, "Rendah") || startsWithClass(cls, "Sangat Rendah")) return "BELUM CUKUP / berpotensi membatasi fase ini";
+        if (startsWithClass(cls, "Sedang")) return "CUKUP SEMENTARA, tetapi sesuaikan dengan target hasil dan fase";
+        if (startsWithClass(cls, "Tinggi") || startsWithClass(cls, "Sangat Tinggi")) return "CUKUP–TINGGI; jangan menambah rutin tanpa dasar kebutuhan";
+        return "Status belum dapat ditentukan dengan andal";
     }
 
     public static String classifyVpd(double vpd) {
@@ -618,14 +619,20 @@ public final class AgronomyEngine {
         double stageNeed=seasonal*stageFraction(hst,crop)*yieldScale;
         double support=0; String cls;
         if (nutrient.equals("N")) cls=classifyN(soilValue); else if (nutrient.equals("P")) cls=classifyP(soilValue,method); else cls=classifyK(soilValue,method);
-        if ("Rendah".equals(cls)) support=0.20;
-        else if ("Sedang".equals(cls)) support=0.50;
-        else if ("Tinggi".equals(cls)) support=0.80;
+        if (startsWithClass(cls, "Sangat Rendah")) support=0.10;
+        else if (startsWithClass(cls, "Rendah")) support=0.20;
+        else if (startsWithClass(cls, "Sedang")) support=0.50;
+        else if (startsWithClass(cls, "Tinggi") || startsWithClass(cls, "Sangat Tinggi")) support=0.80;
         double gross=stageNeed*(1.0-support);
         double recovery=nutrient.equals("N")?0.50:(nutrient.equals("P")?0.30:0.60);
         double need=Math.max(0,gross/Math.max(0.1,recovery)-Math.max(0,recentCreditKgHa));
         // The stock is reported separately; it is not treated as fully plant-available uptake.
         return need;
+    }
+
+    private static boolean startsWithClass(String classification, String label) {
+        if (classification == null) return false;
+        return classification.trim().toLowerCase(Locale.US).startsWith(label.toLowerCase(Locale.US));
     }
 
     public static String nutrientFormulaText() {

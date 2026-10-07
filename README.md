@@ -3,14 +3,14 @@
 Android project lengkap dengan Open-Meteo + Agronomi + Catatan Lapangan.
 
 ## Fitur
-- Open-Meteo tanpa API key/akun: cuaca saat ini, ET0 FAO, VPD, hujan, radiasi, mata angin.
-- ThingSpeak feed terakhir + ekspor seluruh histori CSV.
+- Open-Meteo tanpa API key/akun: cuaca saat ini, ET₀ referensi FAO-56, VPD, curah hujan harian, radiasi, tanah, dan arah angin berbasis mata angin.
+- ThingSpeak feed terakhir + ekspor histori CSV tetap dipertahankan sebagai opsi.
 - CWT-7in1: N, P, K tersedia; pH; EC uS/cm; kelembapan; suhu tanah.
 - Catatan Lapangan terpadu: pengamatan, pupuk, OPT, pengendalian, irigasi, pertumbuhan; umur tanaman dapat diinput sebagai HST/hari, minggu, bulan, atau tahun dan dikonversi ke HST.
 - Analisis awal seluruh parameter: pH, N/N-total, P, K, EC/ECe, kelembapan tanah, suhu tanah, OM, CEC/KTK, suhu udara, RH, tekanan, hujan, ET0, angin, UV, visibilitas, Shortwave, PAR energi, PPFD, sunshine, VPD, serta parameter lingkungan lain yang tersedia.
 - Analisis pH, N/P/K, EC, kelembapan, VPD, fase tanaman, kebutuhan hara screening, dan risiko OPT per komoditas yang didukung.
 - Mode Konvensional/PHT atau Organik.
-- Arah angin selalu ditampilkan sebagai mata angin; tidak menampilkan derajat.
+- Arah angin selalu ditampilkan sebagai mata angin; pada kecepatan sangat rendah ditulis **Tenang**. Derajat tidak ditampilkan kepada pengguna.
 
 ## Build lokal
 Workflow CI menggunakan Eclipse Temurin JDK 25; source compatibility Android tetap Java 17. Gradle 9.4.1 + Android Gradle Plugin 9.2.0.
@@ -36,8 +36,11 @@ Isi laporan mencakup cuaca Open-Meteo, ET0, VPD, arah angin berbasis mata angin,
 
 
 ## Pembaruan CSV Open-Meteo & Analisis AI
-- Menu **UNDUH DATA CSV** sekarang memiliki sumber **ThingSpeak** dan **Open-Meteo**.
-- Open-Meteo mendukung ekspor historis berdasarkan rentang tanggal pada resolusi **per jam** atau **harian**, termasuk cuaca, hujan, tekanan, angin, radiasi, ET₀, VPD dan parameter tanah yang tersedia. Data diberi penanda `source=OPEN-METEO` dan `data_type=HISTORICAL_REANALYSIS`.
+- Menu **UNDUH DATA CSV** sekarang memakai **Open-Meteo sebagai sumber CSV utama**; ekspor ThingSpeak tetap dipertahankan sebagai opsi terpisah.
+- Open-Meteo mendukung ekspor historis berdasarkan rentang tanggal pada resolusi **per jam** atau **harian**.
+- CSV per jam mencakup Shortwave, PAR energi, **PPFD**, **VPD**, ET₀, hujan, tanah, serta arah angin dalam **8 arah mata angin** tanpa kolom derajat.
+- CSV harian mencakup **PPFD rata-rata/maksimum** dan **VPD rata-rata/maksimum**, dengan arah angin dominan sebagai nama mata angin.
+- Data diberi penanda `source=OPEN-METEO` dan `data_type=HISTORICAL_REANALYSIS`.
 - Tampilan analisis agronomi menyembunyikan uraian metodologi/rentang/rumus dari layar utama. Detail ilmiah dipindahkan ke ikon **ⓘ**.
 - AI menggunakan ruang output hingga **5000 token** dan diarahkan menghasilkan rekomendasi 0–24 jam, 1–7 hari, air, pemupukan, PHT, prioritas tindakan, serta pencarian web untuk OPT di luar database lokal.
 - API key OpenAI tidak lagi ditanam sebagai default di source code. Masukkan key melalui Pengaturan.
@@ -45,3 +48,6 @@ Isi laporan mencakup cuaca Open-Meteo, ET0, VPD, arah angin berbasis mata angin,
 
 ### AI Provider Options
 The agronomy AI can use the existing OpenAI provider, Google Gemini, or OpenRouter Free. OpenAI remains the default for backward compatibility. Gemini uses the official Gemini API and Google Search grounding when selected. OpenRouter Free uses the `openrouter/free` router by default. API keys are entered by the user in Settings and are not bundled in the source.
+
+## Definisi data cahaya dan hujan
+PAR berarti radiasi 400–700 nm. PPFD berarti kerapatan fluks foton 400–700 nm dalam µmol m⁻² s⁻¹. Karena Open-Meteo menyediakan shortwave broadband, PPFD dari Open-Meteo adalah **estimasi**, bukan pengukuran quantum sensor. Curah hujan harian mengikuti agregasi `precipitation_sum` pada hari kalender lokal, sehingga tidak disebut rolling 24 jam.

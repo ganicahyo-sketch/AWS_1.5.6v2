@@ -97,7 +97,7 @@ public class AgronomyActivity extends BaseActivity {
         s.append("PENTING: bukan QUEFTS/STCR penuh. Gunakan persamaan STCR/PUTS lokal bila tersedia.\n");
         s.append("\n4. CUACA, VPD, AIR & EKOLOGI\n");
         s.append("Suhu ").append(show(temp)).append(" °C -> ").append(AgronomyEngine.temperatureStatus(temp,crop)).append("; kisaran profil ").append(show(cp.tempMin)).append("–").append(show(cp.tempMax)).append(" °C\n");
-        s.append("RH ").append(show(rh)).append(" %; hujan ").append(show(rain)).append(" mm/hari; ET0 ").append(show(et0)).append(" mm/hari\n");
+        s.append("RH ").append(show(rh)).append(" %; curah hujan harian (hari kalender lokal) ").append(show(rain)).append(" mm/hari; ET₀ ").append(show(et0)).append(" mm/hari\n");
         s.append("VPD ").append(show(vpd)).append(" kPa -> ").append(AgronomyEngine.classifyVpd(vpd)).append("\n");
         s.append(AgronomyEngine.vpdCombinedStatus(vpd,moist,fc,pwp,depth,et0,crop)).append("\n");
         s.append("Angin ").append(pref("om_wind_direction","--")).append(" • ").append(pref("om_wind_speed","--")).append(" m/s • gust ").append(pref("om_wind_gust","--")).append(" m/s\n");
@@ -111,7 +111,14 @@ public class AgronomyActivity extends BaseActivity {
         s.append("\n7. CATATAN ILMIAH\n").append(AgronomyEngine.evidenceBrief()).append("\n");
         // Histori terpadu disimpan untuk laporan cetak/PDF, tetapi tidak ditampilkan pada layar analisis utama.
         String compact = compactReport(s.toString());
-        report.setText(compact); prefs.edit().putString("last_agronomy_analysis",compact).apply();
+        report.setText(compact);
+        long analysisEpoch = System.currentTimeMillis();
+        prefs.edit().putString("last_agronomy_analysis",compact)
+                .putLong("last_agronomy_analysis_epoch",analysisEpoch)
+                .putString("last_analysis_text",compact)
+                .putLong("last_analysis_epoch",analysisEpoch)
+                .putString("last_analysis_source","AGRONOMY")
+                .apply();
     }
 
     private String compactReport(String text){
@@ -154,7 +161,7 @@ public class AgronomyActivity extends BaseActivity {
                 "VPD & ET₀\n"+
                 "VPD dibaca bersama suhu/RH dan kondisi air tanah. ET₀ Open-Meteo menggunakan referensi FAO-56 Penman-Monteith pada produk yang tersedia. ET₀ adalah kebutuhan referensi, bukan kebutuhan irigasi komoditas secara langsung.\n\n"+
                 "PAR / PPFD\n"+
-                "PAR estimasi = 0,45 × shortwave; PPFD estimasi = PAR × 4,57 µmol/J. Ini estimasi broadband, bukan pengukuran quantum sensor.\n\n"+
+                LightConversion.methodologyNote()+"\n\n"+
                 "OPT\n"+
                 "Daftar OPT di mesin lokal hanya screening. AI dapat mencari OPT tambahan berdasarkan komoditas, fase, lokasi, gejala, riwayat, dan cuaca; hasil tetap merupakan risk screening, bukan diagnosis pasti.\n\n"+
                 "MODE ORGANIK\n"+
@@ -176,6 +183,9 @@ public class AgronomyActivity extends BaseActivity {
         if(Double.isFinite(ece)&&ece>=4) s.append("• ECe menunjukkan salinitas sedikit sampai sangat tinggi menurut kelas USDA-NRCS; pilih tindakan berdasarkan toleransi komoditas dan pemeriksaan zona akar.\n");
         String water=AgronomyEngine.soilWaterAssessment(moist,fc,pwp,20,et0,crop);
         if(water.startsWith("KURANG")) s.append("• Air tanah kurang: cek zona akar dan kebutuhan irigasi sebelum menambah pupuk larut.\n");
+        String pClass=AgronomyEngine.classifyP(p,method), kClass=AgronomyEngine.classifyK(k,method);
+        if(Double.isFinite(p)&&(pClass.startsWith("Tinggi")||pClass.startsWith("Sangat Tinggi"))) s.append("• P tersedia sudah tinggi: jangan menambah P rutin tanpa dasar uji tanah.\n");
+        if(Double.isFinite(k)&&(kClass.startsWith("Tinggi")||kClass.startsWith("Sangat Tinggi"))) s.append("• K tersedia sudah tinggi: jangan menambah K rutin tanpa dasar uji tanah.\n");
         if(Double.isFinite(vpd)&&vpd>2) s.append("• VPD tinggi: pantau layu/kerontokan bunga atau gejala kehilangan air; kombinasi dengan tanah kering lebih serius.\n");
         if(Double.isFinite(t)&& (t<p.tempMin||t>p.tempMax)) s.append("• Suhu di luar kisaran ekologis profil: kurangi pekerjaan stres pada tanaman dan pantau gejala.\n");
         if(Double.isFinite(rh)&&rh>90&&Double.isFinite(rain)&&rain>=5) s.append("• RH + hujan tinggi: tingkatkan scouting penyakit, sanitasi dan sirkulasi udara.\n");
@@ -212,7 +222,24 @@ public class AgronomyActivity extends BaseActivity {
         final double aiLat=prefs.getFloat("latitude",Float.NaN);
         final double aiLon=prefs.getFloat("longitude",Float.NaN);
         final String context="LOKASI GPS: "+(Double.isFinite(aiLat)?String.format(Locale.US,"%.6f",aiLat):"--")+", "+(Double.isFinite(aiLon)?String.format(Locale.US,"%.6f",aiLon):"--")+"\n"+report.getText().toString();
-        net.execute(()->{try{String lit=fetchOpenAlex(prefs.getString("crop","Tanaman pertanian"), context);String ans=AiProviderClient.generate(chosenProvider,chosenKey,chosenModel,aiInstructions(),"DATA DAN ANALISIS AWAL:\n"+context+"\n\nHASIL PUSTAKA OPENALEX:\n"+lit+"\n\nGunakan web search/grounding bila provider mendukungnya untuk memperluas pencarian OPT. Buat rekomendasi yang dapat ditindaklanjuti, bukan hanya deskripsi.");prefs.edit().putString("last_ai_advice",ans).putLong("last_ai_advice_epoch",System.currentTimeMillis()).putString("last_ai_provider",chosenProvider).apply();runOnUiThread(()->{aiStatus.setText(ans);button.setEnabled(true);});}catch(Exception e){runOnUiThread(()->{aiStatus.setText("AI gagal: "+msg(e));button.setEnabled(true);});}});
+        net.execute(()->{
+            try {
+                String lit;
+                try {
+                    lit=fetchOpenAlex(prefs.getString("crop","Tanaman pertanian"), context);
+                } catch(Exception literatureError) {
+                    // Literature retrieval is supporting evidence; it must not block the primary AI analysis.
+                    lit="OpenAlex tidak tersedia saat ini: "+msg(literatureError);
+                }
+                String ans=AiProviderClient.generate(chosenProvider,chosenKey,chosenModel,aiInstructions(),
+                        "DATA DAN ANALISIS AWAL:\n"+context+"\n\nHASIL PUSTAKA OPENALEX:\n"+lit+
+                        "\n\nGunakan web search/grounding bila provider mendukungnya untuk memperluas pencarian OPT. Buat rekomendasi yang dapat ditindaklanjuti, bukan hanya deskripsi.");
+                prefs.edit().putString("last_ai_advice",ans).putLong("last_ai_advice_epoch",System.currentTimeMillis()).putString("last_ai_provider",chosenProvider).apply();
+                runOnUiThread(()->{aiStatus.setText(ans);button.setEnabled(true);});
+            } catch(Exception e) {
+                runOnUiThread(()->{aiStatus.setText("AI gagal: "+msg(e));button.setEnabled(true);});
+            }
+        });
     }
     private String aiInstructions(){
         return "Anda adalah agronom pendamping petani Indonesia. Tujuan utama Anda bukan sekadar menjelaskan data, tetapi mengubah data menjadi KEPUTUSAN DAN REKOMENDASI TINDAKAN. "+
@@ -224,6 +251,50 @@ public class AgronomyActivity extends BaseActivity {
                 "Gunakan bahasa Indonesia yang mudah dipahami petani tetapi tetap ilmiah. Jangan mengarang data yang tidak tersedia. Pisahkan fakta terukur, hasil model screening, dan rekomendasi. Jika data kurang, katakan apa yang perlu diukur. Selalu akhiri dengan PRIORITAS TINDAKAN yang konkret.";
     }
     private String pref(String k,String d){return prefs.getString(k,d);}
+    private String fetchOpenAlex(String crop, String analysisContext) throws Exception {
+        String cropName = crop == null || crop.trim().isEmpty() ? "agriculture" : crop.trim();
+        String query = cropName + " plant disease pest integrated pest management soil fertility irrigation";
+        String u = "https://api.openalex.org/works?search=" + URLEncoder.encode(query, "UTF-8")
+                + "&per-page=6&sort=relevance_score:desc&select=id,display_name,publication_year,doi,primary_location,cited_by_count";
+        HttpURLConnection c = (HttpURLConnection)new URL(u).openConnection();
+        try {
+            c.setRequestMethod("GET");
+            c.setConnectTimeout(8000);
+            c.setReadTimeout(15000);
+            c.setUseCaches(false);
+            c.setRequestProperty("Accept", "application/json");
+            c.setRequestProperty("User-Agent", "STASIUN-CUACA/1.5.6 (Android; agronomy evidence)");
+            int code=c.getResponseCode();
+            if(code!=HttpURLConnection.HTTP_OK) {
+                String detail="";
+                try { detail=readAll(c.getErrorStream()); } catch(Exception ignored) {}
+                throw new Exception("OpenAlex HTTP " + code + (detail.isEmpty() ? "" : " • "+detail));
+            }
+            String json=readAll(c.getInputStream());
+            JSONObject root=new JSONObject(json);
+            JSONArray results=root.optJSONArray("results");
+            if(results==null || results.length()==0) return "Tidak ditemukan literatur relevan di OpenAlex.";
+            StringBuilder out=new StringBuilder();
+            for(int i=0;i<results.length();i++){
+                JSONObject w=results.optJSONObject(i); if(w==null) continue;
+                String title=w.optString("display_name","Tanpa judul").trim();
+                String year=w.isNull("publication_year")?"-":String.valueOf(w.optInt("publication_year",0));
+                String doi=w.optString("doi","");
+                if(doi.startsWith("https://doi.org/")) doi=doi.substring("https://doi.org/".length());
+                JSONObject loc=w.optJSONObject("primary_location");
+                JSONObject source=loc==null?null:loc.optJSONObject("source");
+                String journal=source==null?"":source.optString("display_name","").trim();
+                int cited=w.optInt("cited_by_count",0);
+                out.append(i+1).append(". ").append(title).append(" (").append(year).append(")");
+                if(!journal.isEmpty()) out.append(" — ").append(journal);
+                if(cited>0) out.append(" • sitasi ").append(cited);
+                if(!doi.isEmpty()) out.append(" • DOI: ").append(doi);
+                out.append("\n");
+            }
+            return out.toString().trim();
+        } finally { c.disconnect(); }
+    }
+
     private double num(String s){try{return s==null||s.trim().isEmpty()?Double.NaN:Double.parseDouble(s.trim().replace(',','.'));}catch(Exception e){return Double.NaN;}}
     private String show(double v){return Double.isFinite(v)?String.format(Locale.US,"%.2f",v):"--";}
     private String readAll(InputStream in)throws Exception{if(in==null)return "";StringBuilder b=new StringBuilder();try(BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){String l;while((l=r.readLine())!=null)b.append(l);}return b.toString();}

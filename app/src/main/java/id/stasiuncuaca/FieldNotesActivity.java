@@ -79,10 +79,8 @@ public class FieldNotesActivity extends BaseActivity {
     };
 
     private static final String[] WIND = {
-            "Tenang", "Utara", "Utara-Timur Laut", "Timur Laut", "Timur-Timur Laut",
-            "Timur", "Timur-Tenggara", "Tenggara", "Selatan-Tenggara", "Selatan",
-            "Selatan-Barat Daya", "Barat Daya", "Barat-Barat Daya", "Barat",
-            "Barat-Barat Laut", "Barat Laut", "Utara-Barat Laut", "Variabel"
+            "Tenang", "Utara", "Timur Laut", "Timur", "Tenggara", "Selatan",
+            "Barat Daya", "Barat", "Barat Laut", "Variabel"
     };
 
     @Override
@@ -335,13 +333,20 @@ public class FieldNotesActivity extends BaseActivity {
             putTextNumber(o, "airTempC", airTemp);
             putTextNumber(o, "airRhPct", airRh);
             putTextNumber(o, "pressureHpa", pressure);
-            putTextNumber(o, "rain24mm", rain24);
+            putTextNumber(o, "rainDailyMm", rain24);
+            putTextNumber(o, "rain24mm", rain24); // compatibility key; semantically this is the local calendar-day total, not a rolling 24 h sum.
             putTextNumber(o, "et0Mm", et0);
             putTextNumber(o, "lux", lux);
-            putTextNumber(o, "parUmol", par);
+            putTextNumber(o, "ppfdUmolM2S", par);
+            putTextNumber(o, "parUmol", par); // compatibility key; this field is PPFD, not PAR energy.
             putTextNumber(o, "sunHours", sunHours);
             putTextNumber(o, "windSpeedMs", windSpeed);
             o.put("windDirection", windDirection.getSelectedItem().toString());
+            double noteVpd = AgronomyEngine.vpd(num(airTemp.getText().toString()), num(airRh.getText().toString()));
+            if (Double.isFinite(noteVpd)) o.put("vpdKpa", noteVpd);
+            o.put("rainPeriod", "HARIAN_LOKAL");
+            o.put("ppfdBasis", "Input Field Notes; sensor quantum atau estimasi Open-Meteo");
+            o.put("weatherSource", "FIELD-NOTES-MANUAL");
             o.put("created", System.currentTimeMillis());
 
             appendHistory(prefs, KEY_NOTES, o, 500);
@@ -372,6 +377,16 @@ public class FieldNotesActivity extends BaseActivity {
                     .putString("soil_test_method", soilTestMethod.getSelectedItem().toString())
                     .putInt("soil_bd_preset", bulkDensityPreset.getSelectedItemPosition())
                     .apply();
+
+            // Field Notes uses the same global weather cache as the dashboard and PDF.
+            // Manual edits therefore become the current global input until a newer Open-Meteo fetch replaces them.
+            updateGlobalWeatherFromFieldNote(prefs,
+                    num(airTemp.getText().toString()), num(airRh.getText().toString()),
+                    num(pressure.getText().toString()), num(rain24.getText().toString()),
+                    num(et0.getText().toString()), num(lux.getText().toString()),
+                    num(par.getText().toString()), num(sunHours.getText().toString()),
+                    num(windSpeed.getText().toString()),
+                    windDirection.getSelectedItem() == null ? "--" : windDirection.getSelectedItem().toString());
 
             Toast.makeText(this, "Catatan lapangan tersimpan.", Toast.LENGTH_SHORT).show();
             observation.setText(""); action.setText("");
@@ -654,28 +669,77 @@ public class FieldNotesActivity extends BaseActivity {
         try {
             JSONObject c=root.optJSONObject("current"), d=root.optJSONObject("daily");
             if(c==null) return;
-            setOm(airTemp, c.optDouble("temperature_2m",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"suhu udara","air temp","temperature"},new String[]{"tanah","soil"}));
-            setOm(airRh, c.optDouble("relative_humidity_2m",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kelembapan udara","humidity","rh"},new String[]{"tanah","soil"}));
-            setOm(pressure, c.optDouble("surface_pressure",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"tekanan","pressure","baro"},new String[]{}));
-            setOm(rain24, d==null?Double.NaN:first(d,"precipitation_sum"), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"hujan 24","rain","precip"},new String[]{}));
-            setOm(et0, d==null?Double.NaN:first(d,"et0_fao_evapotranspiration"), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"et0","evapotrans"},new String[]{}));
-            setOm(soilTemp, c.optDouble("soil_temperature_0_to_10cm",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"suhu tanah","soil temp","soil_temperature"},new String[]{}));
-            setOm(soilMoisture, c.optDouble("soil_moisture_0_to_10cm",Double.NaN)*100.0, tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kelembapan tanah","soil moisture","soil_moisture","moisture"},new String[]{"udara","air"}));
-            setOm(windSpeed, c.optDouble("wind_speed_10m",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kecepatan angin","wind speed","wind"},new String[]{"arah","direction","gust"}));
-            setOm(par, LightConversion.parToPpfd(LightConversion.shortwaveToParWm2(c.optDouble("shortwave_radiation",Double.NaN))), false);
-            setOm(sunHours, d==null?Double.NaN:first(d,"sunshine_duration")/3600.0, tsFirst && hasTs(tsMeta,tsFeed,new String[]{"sunshine","lama penyinaran","durasi sinar"},new String[]{}));
-            String dir=MainActivity.compass(c.optDouble("wind_direction_10m",Double.NaN)); if(!dir.equals("--") && !(tsFirst && hasTs(tsMeta,tsFeed,new String[]{"arah angin","wind direction","direction"},new String[]{}))) selectSpinner(windDirection,dir);
-            prefs.edit().putString("om_temp", show(c.optDouble("temperature_2m",Double.NaN)))
-                    .putString("om_rh", show(c.optDouble("relative_humidity_2m",Double.NaN)))
-                    .putString("om_pressure", show(c.optDouble("surface_pressure",Double.NaN)))
-                    .putString("om_rain", show(d==null?Double.NaN:first(d,"precipitation_sum")))
-                    .putString("om_et0", show(d==null?Double.NaN:first(d,"et0_fao_evapotranspiration")))
-                    .putString("om_soil_temp", show(c.optDouble("soil_temperature_0_to_10cm",Double.NaN)))
-                    .putString("om_soil_moisture", show(c.optDouble("soil_moisture_0_to_10cm",Double.NaN)))
-                    .putString("om_wind_speed", show(c.optDouble("wind_speed_10m",Double.NaN)))
-                    .putString("om_wind_direction", dir)
-                    .putString("om_vpd", show(c.optDouble("vapour_pressure_deficit",Double.NaN))).apply();
+            double temp=c.optDouble("temperature_2m",Double.NaN);
+            double rh=c.optDouble("relative_humidity_2m",Double.NaN);
+            double pressureV=c.optDouble("surface_pressure",Double.NaN);
+            double rainV=d==null?Double.NaN:first(d,"precipitation_sum");
+            double et0V=d==null?Double.NaN:first(d,"et0_fao_evapotranspiration");
+            double soilTempV=c.optDouble("soil_temperature_0_to_10cm",Double.NaN);
+            double soilMoistV=c.optDouble("soil_moisture_0_to_10cm",Double.NaN);
+            double windV=c.optDouble("wind_speed_10m",Double.NaN);
+            double gustV=c.optDouble("wind_gusts_10m",Double.NaN);
+            double cloudV=c.optDouble("cloud_cover",Double.NaN);
+            double visV=c.optDouble("visibility",Double.NaN);
+            double uvV=c.optDouble("uv_index",Double.NaN);
+            double swV=c.optDouble("shortwave_radiation",Double.NaN);
+            double parEstimate=LightConversion.shortwaveToParWm2(swV);
+            double ppfdEstimate=LightConversion.parToPpfd(parEstimate);
+            double vpdV=c.optDouble("vapour_pressure_deficit",Double.NaN);
+            double sunV=d==null?Double.NaN:first(d,"sunshine_duration")/3600.0;
+            String dir=MainActivity.compass(c.optDouble("wind_direction_10m",Double.NaN));
+
+            setOm(airTemp,temp,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"suhu udara","air temp","temperature"},new String[]{"tanah","soil"}));
+            setOm(airRh,rh,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kelembapan udara","humidity","rh"},new String[]{"tanah","soil"}));
+            setOm(pressure,pressureV,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"tekanan","pressure","baro"},new String[]{}));
+            setOm(rain24,rainV,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"curah hujan harian","hujan 24","rain","precip"},new String[]{}));
+            setOm(et0,et0V,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"et0","evapotrans"},new String[]{}));
+            setOm(soilTemp,soilTempV,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"suhu tanah","soil temp","soil_temperature"},new String[]{}));
+            setOm(soilMoisture,Double.isFinite(soilMoistV)?soilMoistV*100.0:Double.NaN,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kelembapan tanah","soil moisture","soil_moisture","moisture"},new String[]{"udara","air"}));
+            setOm(windSpeed,windV,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kecepatan angin","wind speed","wind"},new String[]{"arah","direction","gust"}));
+            setOm(par,ppfdEstimate,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"ppfd","par"},new String[]{"shortwave"}));
+            setOm(sunHours,sunV,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"sunshine","lama penyinaran","durasi sinar"},new String[]{}));
+            if(!dir.equals("--") && !(tsFirst && hasTs(tsMeta,tsFeed,new String[]{"arah angin","wind direction","direction"},new String[]{}))) selectSpinner(windDirection,windV<0.5?"Tenang":dir);
+
+            SharedPreferences.Editor e=prefs.edit();
+            putFinite(e,"om_temp",temp,2); putFinite(e,"om_rh",rh,2);
+            putFinite(e,"om_apparent_temp",c.optDouble("apparent_temperature",Double.NaN),2);
+            putFinite(e,"om_dewpoint",c.optDouble("dew_point_2m",Double.NaN),2);
+            putFinite(e,"om_pressure",pressureV,2); putFinite(e,"om_rain",rainV,2); putFinite(e,"om_et0",et0V,2);
+            putFinite(e,"om_soil_temp",soilTempV,2);
+            if(Double.isFinite(soilMoistV)) putFinite(e,"om_soil_moisture",soilMoistV,4);
+            putFinite(e,"om_wind_speed",windV,2); if(!dir.equals("--")) e.putString("om_wind_direction",windV<0.5?"Tenang":dir);
+            putFinite(e,"om_wind_gust",gustV,2); putFinite(e,"om_cloud_cover",cloudV,0); putFinite(e,"om_visibility",visV,0); putFinite(e,"om_uv",uvV,1);
+            putFinite(e,"om_radiation",swV,2); putFinite(e,"om_par",parEstimate,3); putFinite(e,"om_ppfd",ppfdEstimate,3);
+            putFinite(e,"om_sun_hours",sunV,2); putFinite(e,"om_vpd",vpdV,3);
+            e.putString("om_rain_period","HARIAN_LOKAL").putString("om_ppfd_basis",LightConversion.methodologyNote());
+            e.putLong("om_weather_epoch",System.currentTimeMillis()).putString("om_weather_source","OPEN-METEO").apply();
         } catch(Exception ignored) {}
+    }
+
+    private void putFinite(SharedPreferences.Editor e,String key,double value,int decimals) {
+        if(Double.isFinite(value)) e.putString(key,show(value,decimals));
+    }
+
+    private void updateGlobalWeatherFromFieldNote(SharedPreferences prefs,double temp,double rh,double pressureHpa,double rainDaily,double et0Mm,double luxVal,double ppfd,double sunshineHours,double windMs,String windDir){
+        SharedPreferences.Editor e=prefs.edit();
+        putFinite(e,"om_temp",temp,2); putFinite(e,"om_rh",rh,2); putFinite(e,"om_pressure",pressureHpa,2);
+        putFinite(e,"om_rain",rainDaily,2); putFinite(e,"om_et0",et0Mm,2); putFinite(e,"lux",luxVal,1);
+        putFinite(e,"om_ppfd",ppfd,3);
+        // Do not derive PAR energy backwards from PPFD: spectral composition is required for a defensible conversion.
+        e.remove("om_par").remove("om_radiation").remove("om_apparent_temp").remove("om_dewpoint")
+                .remove("om_cloud_cover").remove("om_visibility").remove("om_uv").remove("om_forecast_7d")
+                .remove("om_soil_temp").remove("om_soil_moisture");
+        putFinite(e,"om_sun_hours",sunshineHours,2); putFinite(e,"om_wind_speed",windMs,2);
+        String dir=windDir==null||windDir.trim().isEmpty()?"--":windDir.trim();
+        if(Double.isFinite(windMs) && windMs<0.5) dir="Tenang";
+        if(!"--".equals(dir)) e.putString("om_wind_direction",dir);
+        else e.remove("om_wind_direction");
+        double vpd=AgronomyEngine.vpd(temp,rh); putFinite(e,"om_vpd",vpd,3);
+        e.putString("om_rain_period","HARIAN_LOKAL")
+                .putString("om_ppfd_basis","Input Catatan Lapangan; dapat berasal dari sensor quantum atau estimasi Open-Meteo.")
+                .putLong("om_weather_epoch",System.currentTimeMillis())
+                .putString("om_weather_source","FIELD-NOTES-MANUAL")
+                .apply();
     }
 
     private JSONObject openMeteoObjectFromPrefs(SharedPreferences prefs) {
@@ -684,11 +748,18 @@ public class FieldNotesActivity extends BaseActivity {
         try {
             c.put("temperature_2m", num(prefs.getString("om_temp","")));
             c.put("relative_humidity_2m", num(prefs.getString("om_rh","")));
+            c.put("apparent_temperature", num(prefs.getString("om_apparent_temp","")));
+            c.put("dew_point_2m", num(prefs.getString("om_dewpoint","")));
             c.put("surface_pressure", num(prefs.getString("om_pressure","")));
             c.put("soil_temperature_0_to_10cm", num(prefs.getString("om_soil_temp","")));
             c.put("soil_moisture_0_to_10cm", num(prefs.getString("om_soil_moisture","")));
             c.put("wind_speed_10m", num(prefs.getString("om_wind_speed","")));
             c.put("wind_direction_10m", windDegrees(prefs.getString("om_wind_direction","")));
+            c.put("wind_gusts_10m", num(prefs.getString("om_wind_gust","")));
+            c.put("cloud_cover", num(prefs.getString("om_cloud_cover","")));
+            c.put("visibility", num(prefs.getString("om_visibility","")));
+            c.put("uv_index", num(prefs.getString("om_uv","")));
+            c.put("shortwave_radiation", num(prefs.getString("om_radiation","")));
             c.put("vapour_pressure_deficit", num(prefs.getString("om_vpd","")));
             JSONArray rain=new JSONArray(); rain.put(num(prefs.getString("om_rain",""))); d.put("precipitation_sum",rain);
             JSONArray et=new JSONArray(); et.put(num(prefs.getString("om_et0",""))); d.put("et0_fao_evapotranspiration",et);
@@ -697,8 +768,10 @@ public class FieldNotesActivity extends BaseActivity {
     }
 
     private double windDegrees(String s){
-        String[] names={"utara","utara-timur laut","timur laut","timur-timur laut","timur","timur-tenggara","tenggara","selatan-tenggara","selatan","selatan-barat daya","barat daya","barat-barat daya","barat","barat-barat laut","barat laut","utara-barat laut"};
-        String x=normalize(s); for(int i=0;i<names.length;i++) if(x.equals(normalize(names[i]))) return i*22.5; return Double.NaN;
+        String[] names={"utara","timur laut","timur","tenggara","selatan","barat daya","barat","barat laut",
+                "utara-timur laut","timur-timur laut","timur-tenggara","selatan-tenggara","selatan-barat daya","barat-barat daya","barat-barat laut","utara-barat laut"};
+        double[] deg={0,45,90,135,180,225,270,315,22.5,67.5,112.5,157.5,202.5,247.5,292.5,337.5};
+        String x=normalize(s); for(int i=0;i<names.length;i++) if(x.equals(normalize(names[i]))) return deg[i]; return Double.NaN;
     }
 
     private double first(JSONObject o,String key){JSONArray a=o.optJSONArray(key);return a==null||a.length()==0?Double.NaN:a.optDouble(0,Double.NaN);}
@@ -894,7 +967,7 @@ public class FieldNotesActivity extends BaseActivity {
             if (!Double.isNaN(rain) && !Double.isNaN(e0)) s.append("Neraca sederhana hujan-ET0: ").append(show(rain - e0)).append(" mm; gunakan bersama kelembapan tanah, jangan memakai hujan saja untuk memutuskan irigasi.\n");
             if (!Double.isNaN(pressureHpa)) s.append("Tekanan udara: ").append(show(pressureHpa)).append(" hPa. Tekanan tunggal tidak menentukan hujan/OPT; gunakan bersama tren.\n");
             if (!Double.isNaN(luxVal)) s.append("Cahaya: ").append(show(luxVal)).append(" lux. ");
-            if (!Double.isNaN(parVal)) s.append("PAR: ").append(show(parVal)).append(" µmol m⁻² s⁻¹. ");
+            if (!Double.isNaN(parVal)) s.append("PPFD: ").append(show(parVal)).append(" µmol m⁻² s⁻¹. ");
             if (!Double.isNaN(sunVal)) s.append("Lama penyinaran: ").append(show(sunVal)).append(" jam/hari.\n");
             s.append("Arah angin: ").append(windDirection.getSelectedItem()).append("; kecepatan: ").append(show(wind)).append(" m/s.\n");
             s.append("Kisaran suhu rujukan screening komoditas: ").append(show(p.tempMin)).append("–").append(show(p.tempMax)).append(" °C.\n");
@@ -925,7 +998,13 @@ public class FieldNotesActivity extends BaseActivity {
 
             String compact = compactAnalysis(s.toString());
             analysisView.setText(compact);
-            prefs.edit().putString("last_field_analysis", compact).apply();
+            long analysisEpoch=System.currentTimeMillis();
+            prefs.edit().putString("last_field_analysis", compact)
+                    .putLong("last_field_analysis_epoch",analysisEpoch)
+                    .putString("last_analysis_text",compact)
+                    .putLong("last_analysis_epoch",analysisEpoch)
+                    .putString("last_analysis_source","FIELD_NOTES")
+                    .apply();
             soilSummaryView.setText(buildSoilSummary());
             timelineView.setText(buildTimeline(prefs, c));
         } catch (Exception ex) {
@@ -942,8 +1021,10 @@ public class FieldNotesActivity extends BaseActivity {
         if (!Double.isNaN(moist) && moist < 20) s.append("• Tanah kering: prioritaskan pemenuhan air sebelum memberi pupuk larut, lalu cek ulang kelembapan.\n");
         if (!Double.isNaN(moist) && moist > 85) s.append("• Tanah terlalu lembap: cek drainase dan tunda pupuk yang mudah hilang sampai kondisi memungkinkan.\n");
         if (!Double.isNaN(n) && AgronomyEngine.classifyN(n,nLow,nHigh).equals("Rendah")) s.append("• N rendah: utamakan sumber N yang sesuai fase dan bagi aplikasi agar efisiensi lebih baik.\n");
-        if (!Double.isNaN(pp) && AgronomyEngine.classifyP(pp,methodName).equals("Tinggi")) s.append("• P tinggi: jangan menambah P secara rutin; fokuskan dosis pada unsur yang memang kurang.\n");
-        if (!Double.isNaN(k) && AgronomyEngine.classifyK(k,methodName).equals("Tinggi")) s.append("• K tinggi: jangan menambah K tanpa bukti kebutuhan; K dapat mengalami luxury consumption.\n");
+        String pClass = AgronomyEngine.classifyP(pp,methodName);
+        String kClass = AgronomyEngine.classifyK(k,methodName);
+        if (!Double.isNaN(pp) && (pClass.startsWith("Tinggi") || pClass.startsWith("Sangat Tinggi"))) s.append("• P tinggi: jangan menambah P secara rutin; fokuskan dosis pada unsur yang memang kurang.\n");
+        if (!Double.isNaN(k) && (kClass.startsWith("Tinggi") || kClass.startsWith("Sangat Tinggi"))) s.append("• K tinggi: jangan menambah K tanpa bukti kebutuhan; K dapat mengalami luxury consumption.\n");
         if (!Double.isNaN(vpd) && vpd > 2.0) s.append("• VPD tinggi: pantau layu; bila air tersedia, pertahankan kelembapan zona akar dan lakukan aplikasi pupuk pada waktu lebih sejuk.\n");
         if (!Double.isNaN(rain) && !Double.isNaN(e0) && rain < e0) s.append("• Air masuk < kebutuhan atmosfer: cek cadangan air tanah sebelum menetapkan irigasi.\n");
         if (!Double.isNaN(rh) && rh > 90 && !Double.isNaN(rain) && rain > 5) s.append("• RH + hujan tinggi: jadwalkan scouting penyakit lebih rapat; utamakan sanitasi, sirkulasi udara, dan PHT.\n");
@@ -1059,6 +1140,9 @@ public class FieldNotesActivity extends BaseActivity {
     private LocalDate parseDate(String s) { try { return LocalDate.parse(s.trim(), DATE_FMT); } catch (Exception ex) { return null; } }
     private boolean validDate(String s) { return parseDate(s) != null; }
     private boolean sameCrop(String a, String b) { return a != null && b != null && (a.trim().equalsIgnoreCase(b.trim()) || AgronomyEngine.normalizeCrop(a).equalsIgnoreCase(AgronomyEngine.normalizeCrop(b))); }
-    private String show(double v) { return Double.isNaN(v) || Double.isInfinite(v) ? "--" : String.format(Locale.US, "%.2f", v); }
+    private String show(double v) { return show(v,2); }
+    private String show(double v,int decimals) {
+        return Double.isNaN(v) || Double.isInfinite(v) ? "--" : String.format(Locale.US, "%1$." + Math.max(0,decimals) + "f", v);
+    }
     private int dp(int v) { return Math.max(1, Math.round(v * getResources().getDisplayMetrics().density)); }
 }

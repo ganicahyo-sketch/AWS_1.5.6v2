@@ -313,7 +313,7 @@ public class MainActivity extends BaseActivity {
         weatherVisibility.setText("Visibilitas " + fmt(w.visibility / 1000.0,1) + " km");
         weatherWind.setText("Angin " + fmt(w.windSpeed,1) + " m/s");
         weatherWindDir.setText("Arah " + compass(w.windDir));
-        weatherRain.setText("Hujan " + fmt(w.rainDay,1) + " mm/hari");
+        weatherRain.setText("Curah hujan harian " + fmt(w.rainDay,1) + " mm/hari");
         weatherEt0.setText("ET₀ " + fmt(w.et0,2) + " mm/hari");
         weatherCondition.setText("Kondisi: " + wmo(w.code));
         weatherSunrise.setText("Terbit " + shortTime(w.sunrise));
@@ -322,9 +322,9 @@ public class MainActivity extends BaseActivity {
         weatherForecast.setText("Prakiraan 7 hari: " + w.forecast);
         weatherUpdated.setText("Pembaruan: " + ZonedDateTime.now(WIB).format(DateTimeFormatter.ofPattern("dd/MM HH:mm:ss", Locale.US)));
         weatherSw.setText("Shortwave " + fmt(w.sw,0) + " W/m²");
-        weatherPar.setText("PAR estimasi " + fmt(w.par,0) + " W/m²");
-        weatherPpfd.setText("PPFD estimasi " + fmt(w.ppfd,0) + " µmol/m²/s");
-        weatherPpfdNote.setText("PAR = 0,45 × Shortwave; PPFD = PAR × 4,57 µmol/J (estimasi spektral broadband)");
+        weatherPar.setText("PAR energi estimasi (400–700 nm) " + fmt(w.par,0) + " W/m²");
+        weatherPpfd.setText("PPFD estimasi (400–700 nm) " + fmt(w.ppfd,0) + " µmol/m²/s");
+        weatherPpfdNote.setText("PAR = 400–700 nm; PPFD = µmol foton m⁻² s⁻¹ pada 400–700 nm. Dari shortwave broadband: PAR ≈ 0,45 × shortwave; PPFD ≈ PAR × 4,57. Estimasi, bukan quantum sensor.");
 
         String crop = prefs.getString("crop", "Tanaman pertanian");
         double n = num(prefs.getString("soil_n", ""));
@@ -347,7 +347,12 @@ public class MainActivity extends BaseActivity {
                 .putString("om_sun_hours",fmt(w.sunHours,2)).putString("om_radiation",fmt(w.sw,2))
                 .putString("om_par",fmt(w.par,3)).putString("om_ppfd",fmt(w.ppfd,3))
                 .putString("om_soil_temp",fmt(w.soilTemp,2)).putString("om_soil_moisture",fmt(w.soilMoisture,2))
-                .putString("om_weather",wmo(w.code)).putString("om_forecast_7d",w.forecast).apply();
+                .putString("om_weather",wmo(w.code)).putString("om_forecast_7d",w.forecast)
+                .putString("om_rain_period","HARIAN_LOKAL")
+                .putString("om_ppfd_basis",LightConversion.methodologyNote())
+                .putLong("om_weather_epoch",System.currentTimeMillis())
+                .putString("om_weather_source","OPEN-METEO")
+                .apply();
 
         soil.setText("pH " + fmt(ph,2) + " • N tersedia " + fmt(n,1) + " • P " + fmt(p,1) + " • K " + fmt(k,1) + " mg/kg\nEC " + fmt(ec,0) + " µS/cm • kelembapan " + fmt(moist,1) + " %");
         String nPred = NitrogenInference.estimateTotalN(n);
@@ -527,7 +532,7 @@ public class MainActivity extends BaseActivity {
     private String msg(Exception e){return e.getMessage()==null?"kesalahan tidak diketahui":e.getMessage();}
     private String readAll(InputStream in)throws Exception{if(in==null)return "";StringBuilder b=new StringBuilder();try(BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){String l;while((l=r.readLine())!=null)b.append(l);}return b.toString();}
     private String shortTime(String s){if(s==null||s.isEmpty())return "--";int p=s.indexOf('T');if(p>=0&&s.length()>=p+6)return s.substring(p+1,p+6);return s;}
-    public static String compass(double deg){if(!Double.isFinite(deg))return "--";String[] p={"Utara","Utara-Timur Laut","Timur Laut","Timur-Timur Laut","Timur","Timur-Tenggara","Tenggara","Selatan-Tenggara","Selatan","Selatan-Barat Daya","Barat Daya","Barat-Barat Daya","Barat","Barat-Barat Laut","Barat Laut","Utara-Barat Laut"};int i=(int)Math.floor((deg+11.25)/22.5)%16;return p[i];}
+    public static String compass(double deg){if(!Double.isFinite(deg))return "--";String[] p={"Utara","Timur Laut","Timur","Tenggara","Selatan","Barat Daya","Barat","Barat Laut"};int i=(int)Math.floor((deg+22.5)/45.0)%8;return p[i];}
     private String wmo(int c){switch(c){case 0:return "Cerah";case 1:case 2:return "Cerah berawan / sebagian berawan";case 3:return "Berawan";case 45:case 48:return "Kabut";case 51:case 53:case 55:return "Gerimis";case 61:case 63:case 65:return "Hujan";case 66:case 67:return "Hujan beku";case 71:case 73:case 75:return "Salju";case 80:case 81:case 82:return "Hujan deras lokal";case 95:return "Badai petir";default:return "Kode WMO "+c;}}
 
     private static final class Weather{
