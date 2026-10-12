@@ -1,4 +1,4 @@
-# Pustaka ilmiah dan sumber teknis — v1.5.6
+# Pustaka ilmiah dan sumber teknis — v1.5.7
 
 ## Evapotranspirasi, air tanah, dan cuaca
 - Allen, R.G. et al. (1998), FAO Irrigation and Drainage Paper 56 (FAO-56): Penman–Monteith reference ET0, crop coefficient Kc, crop ET, TAW/RAW/available soil water.
@@ -25,12 +25,6 @@
 - FAO Water Quality / crop salt tolerance: ECe is the standard root-zone salinity reference and crop tolerance differs by crop.
   https://www.fao.org/4/Y4263E/y4263e0e.htm
 - EC from a field sensor is retained as a screening/trend signal and is not automatically converted to ECe.
-
-## PAR, PPFD dan curah hujan harian
-- PAR secara konvensional didefinisikan pada rentang 400–700 nm; PPFD adalah kerapatan fluks foton pada rentang tersebut dalam µmol m⁻² s⁻¹. Nilai PPFD yang diturunkan dari shortwave adalah estimasi dan harus dibedakan dari pengukuran quantum sensor.
-- Open-Meteo mendefinisikan `sunshine_duration` berdasarkan periode ketika direct normalized irradiance melampaui 120 W/m², mengikuti definisi WMO; ini berbeda dari seluruh durasi siang (`daylight_duration`). https://open-meteo.com/en/docs/historical-weather-api
-- `precipitation_sum` harian Open-Meteo adalah jumlah presipitasi satu hari kalender lokal. Di aplikasi istilah yang dipakai adalah **curah hujan harian (hari kalender lokal)**, bukan "rolling 24 jam", agar tidak memberi kesan bahwa nilainya merupakan total 24 jam bergerak. https://open-meteo.com/en/docs/historical-weather-api
-- Arah angin Open-Meteo diberikan sebagai derajat oleh API, tetapi aplikasi mengonversinya ke sektor mata angin untuk antarmuka dan CSV. Untuk kecepatan sangat rendah, arah diberi label **Tenang** karena arah pada angin lemah kurang bermakna secara operasional.
 
 ## VPD dan stres tanaman
 - Review physiology literature: VPD around 0.5–1.5 kPa is commonly suitable for many crops, while higher VPD can increase water stress, especially when soil water is limited.
@@ -72,3 +66,8 @@
 - Klasifikasi PPFD di aplikasi adalah **screening operasional**, bukan ambang universal untuk semua komoditas. Untuk keputusan fisiologis yang lebih kuat, gunakan kebutuhan foton spesifik komoditas/fase dan, bila memungkinkan, DLI serta pengukuran PPFD lapang yang terkalibrasi.
 - Kelembapan tanah juga dianalisis lebih dulu. Nilai sensor dalam % diperlakukan sebagai screening; bila FC dan PWP tersedia, status air dihitung relatif terhadap batas tersebut. Nilai Open-Meteo `soil_moisture_0_to_10cm` dibaca sebagai fraksi volumetrik m³/m³ dan tidak dipaksakan ke kelas universal tanpa FC/PWP.
 - Klasifikasi cuaca seperti tekanan absolut, ET0, cahaya dan angin bersifat kontekstual; aplikasi menampilkan status screening dan tetap mengutamakan tren, ketinggian, fase tanaman, dan kondisi lapangan.
+
+## Kelapa sawit — rujukan rekomendasi pemupukan
+- Pusat Penelitian Kelapa Sawit (PPKS/IOPRI), layanan **Rekomendasi Pemupukan** untuk TBM dan TM. Deskripsi layanan menyatakan rekomendasi jenis/dosis/waktu aplikasi dilengkapi pengambilan dan analisis sampel tanah dan daun, evaluasi pertumbuhan, kultur teknis, serta saran perbaikan faktor pembatas: https://iopri.co.id/productGroup/detail/rekomendasi-pemupukan
+- Catatan implementasi aplikasi: pembacaan NPK dari sensor tanah USB 8-in-1/7-in-1 CWT diperlakukan sebagai skrining lapangan; bukan pengganti analisis laboratorium atau dasar tunggal untuk mengklaim dosis resmi PPKS. EC sensor (µS/cm) tidak otomatis dikonversi menjadi ECe.
+- Sensor tanah USB 8-in-1 yang dijual di pasaran dapat melaporkan N/P/K dalam mg/kg, pH, EC, suhu dan kelembapan; spesifikasi dan kalibrasi berbeda menurut model. Contoh dokumentasi teknis: https://www.niubol.com/id/sensor-pertanian/Portable-Type-C-USB-Soil-Multi-Parameter-Tester-15.html

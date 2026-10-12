@@ -1,11 +1,13 @@
 package id.stasiuncuaca;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationManager;
+import android.location.LocationListener;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -32,7 +34,7 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class MainActivity extends BaseActivity {
+public class MainActivity extends Activity {
     private static final String PREFS = "thingspeak_config";
     private static final String DEFAULT_CHANNEL = "2981880";
     private static final String DEFAULT_READ_KEY = "P4B56Z7HZM56Q7HJ";
@@ -49,7 +51,7 @@ public class MainActivity extends BaseActivity {
     private TextView title, subtitle, statusChip, lastAccess, deviceDate, deviceClock, dataTime, channelView;
     private TextView weatherStatus, weatherLocation, weatherTemp, weatherFeels, weatherDew, weatherHumidity,
             weatherPressure, weatherCloud, weatherUv, weatherVisibility, weatherWind, weatherWindDir,
-            weatherRain, weatherEt0, weatherCondition, weatherSunrise, weatherSunset, weatherAlerts,
+            weatherRain, weatherEt0, weatherCondition, weatherSunrise, weatherSunset, weatherSunHours, weatherAlerts,
             weatherForecast, weatherUpdated, weatherSw, weatherPar, weatherPpfd, weatherPpfdNote;
     private TextView soil, soilStatus, optRisk, overall, finalStatus;
     private GridLayout fieldGrid;
@@ -62,6 +64,13 @@ public class MainActivity extends BaseActivity {
     private long lastWeatherEpoch = 0L;
     private boolean tsLoading = false;
     private boolean weatherLoading = false;
+    private int weatherRequestId = 0;
+    private LocationManager locationManager;
+    private LocationListener gpsListener;
+    private Location bestFreshLocation;
+    private boolean gpsRequestActive = false;
+    private long gpsRequestStartedAtMs = 0L;
+    private final Runnable gpsTimeout = () -> finishGpsRequest();
 
     private final Runnable clockTick = new Runnable() {
         @Override public void run() {
@@ -97,7 +106,12 @@ public class MainActivity extends BaseActivity {
         updateClock();
         handler.post(clockTick);
         loadThingSpeak(true);
-        loadOpenMeteo(false);
+        boolean requestGpsOnLaunch = getIntent() != null && getIntent().getBooleanExtra("request_fresh_gps", false);
+        if (!requestGpsOnLaunch) loadOpenMeteo(false);
+        if (requestGpsOnLaunch) {
+            getIntent().removeExtra("request_fresh_gps");
+            requestLocation();
+        }
     }
 
     @Override protected void onResume() {
@@ -105,7 +119,7 @@ public class MainActivity extends BaseActivity {
         updateHeader();
         updateClock();
         loadThingSpeak(false);
-        loadOpenMeteo(false);
+        if (!gpsRequestActive) loadOpenMeteo(false);
         handler.removeCallbacks(refreshTick);
         handler.postDelayed(refreshTick, TS_REFRESH_MS);
     }
@@ -117,6 +131,7 @@ public class MainActivity extends BaseActivity {
 
     @Override protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
+        clearGpsRequest();
         net.shutdownNow();
         super.onDestroy();
     }
@@ -149,6 +164,7 @@ public class MainActivity extends BaseActivity {
         weatherCondition = findViewById(R.id.weatherCondition);
         weatherSunrise = findViewById(R.id.weatherSunrise);
         weatherSunset = findViewById(R.id.weatherSunset);
+        weatherSunHours = findViewById(R.id.weatherSunHours);
         weatherAlerts = findViewById(R.id.weatherAlerts);
         weatherForecast = findViewById(R.id.weatherForecast);
         weatherUpdated = findViewById(R.id.weatherUpdated);
@@ -215,7 +231,7 @@ public class MainActivity extends BaseActivity {
     private void updateHeader() {
         String t = prefs.getString("app_title", DEFAULT_TITLE).trim();
         title.setText(t.isEmpty() ? DEFAULT_TITLE : t);
-        subtitle.setText("GANI CAHYO-UNS • v1.5.6 • Open-Meteo + Agronomi");
+        subtitle.setText("GANI CAHYO-UNS • v1.5.7 • Open-Meteo + Agronomi");
         String ch = prefs.getString("channel", "").trim();
         if (ch.isEmpty()) ch = DEFAULT_CHANNEL;
         channelView.setText("CHANNEL: " + (ch.isEmpty() ? "--" : ch));
@@ -243,17 +259,20 @@ public class MainActivity extends BaseActivity {
         if (!manual && now - lastWeatherEpoch < WEATHER_REFRESH_MS) return;
         if (weatherLoading) return;
         weatherLoading = true;
+        final int requestId = ++weatherRequestId;
         lastWeatherEpoch = now;
         weatherStatus.setText("MEMUAT OPEN-METEO...");
         net.execute(() -> {
             try {
                 Weather w = fetchOpenMeteo(lat, lon);
-                runOnUiThread(() -> { renderWeather(w); weatherLoading = false; });
+                runOnUiThread(() -> { if (requestId == weatherRequestId) { renderWeather(w); weatherLoading = false; } });
             } catch (Exception e) {
                 runOnUiThread(() -> {
-                    weatherStatus.setText("OPEN-METEO GAGAL");
-                    weatherLocation.setText(msg(e));
-                    weatherLoading = false;
+                    if (requestId == weatherRequestId) {
+                        weatherStatus.setText("OPEN-METEO GAGAL");
+                        weatherLocation.setText(msg(e));
+                        weatherLoading = false;
+                    }
                 });
             }
         });
@@ -313,18 +332,19 @@ public class MainActivity extends BaseActivity {
         weatherVisibility.setText("Visibilitas " + fmt(w.visibility / 1000.0,1) + " km");
         weatherWind.setText("Angin " + fmt(w.windSpeed,1) + " m/s");
         weatherWindDir.setText("Arah " + compass(w.windDir));
-        weatherRain.setText("Curah hujan harian " + fmt(w.rainDay,1) + " mm/hari");
+        weatherRain.setText("Hujan " + fmt(w.rainDay,1) + " mm/hari");
         weatherEt0.setText("ET₀ " + fmt(w.et0,2) + " mm/hari");
         weatherCondition.setText("Kondisi: " + wmo(w.code));
         weatherSunrise.setText("Terbit " + shortTime(w.sunrise));
         weatherSunset.setText("Terbenam " + shortTime(w.sunset));
+        weatherSunHours.setText("Lama penyinaran matahari " + fmt(w.sunHours,2) + " jam/hari (Open-Meteo)");
         weatherAlerts.setText("VPD " + fmt(w.vpd,2) + " kPa • " + AgronomyEngine.classifyVpd(w.vpd) + " • Gust " + fmt(w.gust,1) + " m/s");
         weatherForecast.setText("Prakiraan 7 hari: " + w.forecast);
         weatherUpdated.setText("Pembaruan: " + ZonedDateTime.now(WIB).format(DateTimeFormatter.ofPattern("dd/MM HH:mm:ss", Locale.US)));
         weatherSw.setText("Shortwave " + fmt(w.sw,0) + " W/m²");
-        weatherPar.setText("PAR energi estimasi (400–700 nm) " + fmt(w.par,0) + " W/m²");
-        weatherPpfd.setText("PPFD estimasi (400–700 nm) " + fmt(w.ppfd,0) + " µmol/m²/s");
-        weatherPpfdNote.setText("PAR = 400–700 nm; PPFD = µmol foton m⁻² s⁻¹ pada 400–700 nm. Dari shortwave broadband: PAR ≈ 0,45 × shortwave; PPFD ≈ PAR × 4,57. Estimasi, bukan quantum sensor.");
+        weatherPar.setText("PAR estimasi " + fmt(w.par,0) + " W/m²");
+        weatherPpfd.setText("PPFD estimasi " + fmt(w.ppfd,0) + " µmol/m²/s");
+        weatherPpfdNote.setText("PAR = 0,45 × Shortwave; PPFD = PAR × 4,57 µmol/J (estimasi spektral broadband)");
 
         String crop = prefs.getString("crop", "Tanaman pertanian");
         double n = num(prefs.getString("soil_n", ""));
@@ -347,12 +367,7 @@ public class MainActivity extends BaseActivity {
                 .putString("om_sun_hours",fmt(w.sunHours,2)).putString("om_radiation",fmt(w.sw,2))
                 .putString("om_par",fmt(w.par,3)).putString("om_ppfd",fmt(w.ppfd,3))
                 .putString("om_soil_temp",fmt(w.soilTemp,2)).putString("om_soil_moisture",fmt(w.soilMoisture,2))
-                .putString("om_weather",wmo(w.code)).putString("om_forecast_7d",w.forecast)
-                .putString("om_rain_period","HARIAN_LOKAL")
-                .putString("om_ppfd_basis",LightConversion.methodologyNote())
-                .putLong("om_weather_epoch",System.currentTimeMillis())
-                .putString("om_weather_source","OPEN-METEO")
-                .apply();
+                .putString("om_weather",wmo(w.code)).putString("om_forecast_7d",w.forecast).apply();
 
         soil.setText("pH " + fmt(ph,2) + " • N tersedia " + fmt(n,1) + " • P " + fmt(p,1) + " • K " + fmt(k,1) + " mg/kg\nEC " + fmt(ec,0) + " µS/cm • kelembapan " + fmt(moist,1) + " %");
         String nPred = NitrogenInference.estimateTotalN(n);
@@ -497,29 +512,126 @@ public class MainActivity extends BaseActivity {
     }
 
     private void requestLocation() {
+        if (gpsRequestActive) {
+            Toast.makeText(this, "Sedang mencari koordinat GPS terbaru...", Toast.LENGTH_SHORT).show();
+            return;
+        }
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED
                 && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)!=PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},LOCATION_REQ);
             return;
         }
         try {
-            LocationManager lm=(LocationManager)getSystemService(LOCATION_SERVICE);
-            Location best=null;
-            for(String p:new String[]{LocationManager.GPS_PROVIDER,LocationManager.NETWORK_PROVIDER}){
-                if(!lm.isProviderEnabled(p))continue;
-                Location x=lm.getLastKnownLocation(p);
-                if(x!=null&&(best==null||x.getTime()>best.getTime()))best=x;
+            locationManager = (LocationManager)getSystemService(LOCATION_SERVICE);
+            if (locationManager == null) throw new IllegalStateException("Layanan lokasi tidak tersedia");
+            bestFreshLocation = null;
+            gpsRequestStartedAtMs = System.currentTimeMillis();
+            gpsRequestActive = true;
+            weatherStatus.setText("MENCARI GPS HP TERBARU...");
+            weatherLocation.setText("Menunggu pembacaan lokasi baru dari perangkat (maksimal 20 detik)...");
+            Toast.makeText(this, "Meminta koordinat GPS terbaru dari perangkat...", Toast.LENGTH_SHORT).show();
+            gpsListener = new LocationListener() {
+                @Override public void onLocationChanged(Location location) {
+                    if (location == null || !gpsRequestActive) return;
+                    // Ignore cached/stale fixes delivered immediately after registering the listener.
+                    long now = System.currentTimeMillis();
+                    long fixTime = location.getTime();
+                    if (fixTime <= 0L || fixTime < gpsRequestStartedAtMs - 5_000L || now - fixTime > 30_000L) return;
+                    if (bestFreshLocation == null || isBetterLocation(location, bestFreshLocation)) {
+                        bestFreshLocation = new Location(location);
+                    }
+                    boolean gpsFix = LocationManager.GPS_PROVIDER.equals(location.getProvider());
+                    boolean accurateFix = location.hasAccuracy() && location.getAccuracy() <= 25f;
+                    boolean usableGpsFix = gpsFix && location.hasAccuracy() && location.getAccuracy() <= 50f;
+                    // Prefer a fresh, reasonably accurate GPS fix; otherwise allow an accurate network fix.
+                    if (usableGpsFix || accurateFix) finishGpsRequest();
+                }
+                @Override public void onProviderEnabled(String provider) {}
+                @Override public void onProviderDisabled(String provider) {}
+                @SuppressWarnings("deprecation")
+                @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
+            };
+            boolean requested = false;
+            for (String provider : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
+                try {
+                    if (locationManager.isProviderEnabled(provider)) {
+                        locationManager.requestLocationUpdates(provider, 0L, 0f, gpsListener, android.os.Looper.getMainLooper());
+                        requested = true;
+                    }
+                } catch (SecurityException ignored) {}
+                  catch (IllegalArgumentException ignored) {}
             }
-            if(best==null){Toast.makeText(this,"Lokasi terakhir HP belum tersedia.",Toast.LENGTH_SHORT).show();return;}
-            prefs.edit().putFloat("latitude",(float)best.getLatitude()).putFloat("longitude",(float)best.getLongitude()).apply();
-            Toast.makeText(this,"Koordinat GPS HP disimpan.",Toast.LENGTH_SHORT).show();
-            loadOpenMeteo(true);
-        } catch(Exception e){Toast.makeText(this,"Gagal membaca GPS HP.",Toast.LENGTH_SHORT).show();}
+            if (!requested) {
+                clearGpsRequest();
+                weatherStatus.setText("GPS HP TIDAK AKTIF");
+                weatherLocation.setText("Aktifkan layanan Lokasi/GPS perangkat, lalu tekan GUNAKAN GPS HP lagi.");
+                Toast.makeText(this, "Aktifkan lokasi/GPS HP terlebih dahulu.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            handler.postDelayed(gpsTimeout, 20_000L);
+        } catch(Exception e) {
+            clearGpsRequest();
+            weatherStatus.setText("GPS HP GAGAL");
+            weatherLocation.setText("Tidak dapat meminta lokasi: " + msg(e));
+            Toast.makeText(this, "Gagal meminta lokasi GPS HP.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private boolean isBetterLocation(Location candidate, Location current) {
+        if (candidate.hasAccuracy() && current.hasAccuracy()) {
+            if (candidate.getAccuracy() + 5f < current.getAccuracy()) return true;
+            if (current.getAccuracy() + 5f < candidate.getAccuracy()) return false;
+        } else if (candidate.hasAccuracy() != current.hasAccuracy()) {
+            return candidate.hasAccuracy();
+        }
+        return candidate.getTime() >= current.getTime();
+    }
+
+    private void finishGpsRequest() {
+        if (!gpsRequestActive) return;
+        Location result = bestFreshLocation == null ? null : new Location(bestFreshLocation);
+        clearGpsRequest();
+        if (result == null) {
+            weatherStatus.setText("GPS HP BELUM MENDAPATKAN FIX BARU");
+            weatherLocation.setText("Tidak ada koordinat baru diterima. Pastikan Lokasi aktif dan coba di area terbuka.");
+            Toast.makeText(this, "Belum mendapat koordinat GPS baru. Coba lagi di area terbuka.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        float lat = (float) result.getLatitude();
+        float lon = (float) result.getLongitude();
+        prefs.edit().putFloat("latitude", lat).putFloat("longitude", lon).apply();
+        weatherLocation.setText("GPS terbaru " + fmt(lat,6) + ", " + fmt(lon,6)
+                + (result.hasAccuracy() ? " • akurasi ±" + fmt(result.getAccuracy(),0) + " m" : "")
+                + " • memperbarui Open-Meteo...");
+        weatherStatus.setText("KOORDINAT GPS DIPERBARUI");
+        Toast.makeText(this, "Koordinat GPS terbaru diperbarui: " + fmt(lat,5) + ", " + fmt(lon,5), Toast.LENGTH_LONG).show();
+        lastWeatherEpoch = 0L;
+        weatherRequestId++; // abaikan respons cuaca lama yang mungkin memakai koordinat sebelumnya
+        weatherLoading = false;
+        loadOpenMeteo(true);
+    }
+
+    private void clearGpsRequest() {
+        handler.removeCallbacks(gpsTimeout);
+        gpsRequestActive = false;
+        if (locationManager != null && gpsListener != null) {
+            try { locationManager.removeUpdates(gpsListener); } catch (SecurityException ignored) {}
+        }
+        gpsListener = null;
+        locationManager = null;
     }
 
     @Override public void onRequestPermissionsResult(int req,String[] perms,int[] grants){
         super.onRequestPermissionsResult(req,perms,grants);
-        if(req==LOCATION_REQ){for(int g:grants)if(g==PackageManager.PERMISSION_GRANTED){requestLocation();return;}}
+        if(req==LOCATION_REQ){
+            boolean granted = false;
+            for (int i=0; i<perms.length && i<grants.length; i++) {
+                if ((Manifest.permission.ACCESS_FINE_LOCATION.equals(perms[i]) || Manifest.permission.ACCESS_COARSE_LOCATION.equals(perms[i]))
+                        && grants[i] == PackageManager.PERMISSION_GRANTED) granted = true;
+            }
+            if (granted) requestLocation();
+            else Toast.makeText(this, "Izin lokasi diperlukan untuk memperbarui koordinat GPS.", Toast.LENGTH_LONG).show();
+        }
     }
 
     private String recentOpt(){
@@ -532,7 +644,7 @@ public class MainActivity extends BaseActivity {
     private String msg(Exception e){return e.getMessage()==null?"kesalahan tidak diketahui":e.getMessage();}
     private String readAll(InputStream in)throws Exception{if(in==null)return "";StringBuilder b=new StringBuilder();try(BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){String l;while((l=r.readLine())!=null)b.append(l);}return b.toString();}
     private String shortTime(String s){if(s==null||s.isEmpty())return "--";int p=s.indexOf('T');if(p>=0&&s.length()>=p+6)return s.substring(p+1,p+6);return s;}
-    public static String compass(double deg){if(!Double.isFinite(deg))return "--";String[] p={"Utara","Timur Laut","Timur","Tenggara","Selatan","Barat Daya","Barat","Barat Laut"};int i=(int)Math.floor((deg+22.5)/45.0)%8;return p[i];}
+    public static String compass(double deg){if(!Double.isFinite(deg))return "--";String[] p={"Utara","Utara-Timur Laut","Timur Laut","Timur-Timur Laut","Timur","Timur-Tenggara","Tenggara","Selatan-Tenggara","Selatan","Selatan-Barat Daya","Barat Daya","Barat-Barat Daya","Barat","Barat-Barat Laut","Barat Laut","Utara-Barat Laut"};int i=(int)Math.floor((deg+11.25)/22.5)%16;return p[i];}
     private String wmo(int c){switch(c){case 0:return "Cerah";case 1:case 2:return "Cerah berawan / sebagian berawan";case 3:return "Berawan";case 45:case 48:return "Kabut";case 51:case 53:case 55:return "Gerimis";case 61:case 63:case 65:return "Hujan";case 66:case 67:return "Hujan beku";case 71:case 73:case 75:return "Salju";case 80:case 81:case 82:return "Hujan deras lokal";case 95:return "Badai petir";default:return "Kode WMO "+c;}}
 
     private static final class Weather{

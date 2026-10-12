@@ -1,9 +1,20 @@
 package id.stasiuncuaca;
 
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.text.Spannable;
+import android.text.SpannableString;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
+import android.text.style.StyleSpan;
+import android.graphics.Typeface;
 import android.text.InputType;
 import android.view.Gravity;
 import android.widget.ArrayAdapter;
@@ -30,13 +41,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Catatan Lapangan + mesin analisis agronomi v1.5.6.
+ * Catatan Lapangan + mesin analisis agronomi v1.5.7.
  *
  * Semua nilai CWT-7in1 (RS485/USB) dianggap benar sebagai input proyek.
  * Interpretasi tetap diberi label screening bila standar sangat tergantung
  * metode ekstraksi/laboratorium.
  */
-public class FieldNotesActivity extends BaseActivity {
+public class FieldNotesActivity extends Activity {
     private static final String PREFS = "thingspeak_config";
     private static final String KEY_NOTES = "field_notes_v153";
     private static final String KEY_FERT = "fert_history";
@@ -50,8 +61,13 @@ public class FieldNotesActivity extends BaseActivity {
     private Spinner soilTestMethod, ageUnit, dataSource, bulkDensityPreset;
     private EditText airTemp, airRh, pressure, rain24, et0, lux, par, sunHours, windSpeed;
     private Spinner noteType, severity, soilSource, windDirection, cultivation;
-    private TextView autoPhase, analysisView, timelineView, soilSummaryView, dataSourceStatus;
+    private TextView autoPhase, analysisView, timelineView, soilSummaryView, dataSourceStatus, usbSoilStatus;
+    private UsbSoilMeter usbSoilMeter;
     private final ExecutorService net = Executors.newSingleThreadExecutor();
+    private final Handler recalculationHandler = new Handler(Looper.getMainLooper());
+    private final Runnable pendingRecalculation = () -> {
+        if (prefs != null && !isFinishing()) runAnalysis(prefs);
+    };
 
     private static final String[] NOTE_TYPES = {
             "Pengamatan umum", "Tanah", "Pemupukan", "OPT", "Irigasi/air",
@@ -79,8 +95,10 @@ public class FieldNotesActivity extends BaseActivity {
     };
 
     private static final String[] WIND = {
-            "Tenang", "Utara", "Timur Laut", "Timur", "Tenggara", "Selatan",
-            "Barat Daya", "Barat", "Barat Laut", "Variabel"
+            "Tenang", "Utara", "Utara-Timur Laut", "Timur Laut", "Timur-Timur Laut",
+            "Timur", "Timur-Tenggara", "Tenggara", "Selatan-Tenggara", "Selatan",
+            "Selatan-Barat Daya", "Barat Daya", "Barat-Barat Daya", "Barat",
+            "Barat-Barat Laut", "Barat Laut", "Utara-Barat Laut", "Variabel"
     };
 
     @Override
@@ -123,6 +141,7 @@ public class FieldNotesActivity extends BaseActivity {
         dataSource = findViewById(R.id.fnDataSource);
         bulkDensityPreset = findViewById(R.id.fnBulkDensityPreset);
         dataSourceStatus = findViewById(R.id.fnDataSourceStatus);
+        usbSoilStatus = findViewById(R.id.fnUsbSoilStatus);
 
         airTemp = findViewById(R.id.fnAirTemp);
         airRh = findViewById(R.id.fnAirRh);
@@ -142,6 +161,10 @@ public class FieldNotesActivity extends BaseActivity {
 
         autoPhase = findViewById(R.id.fnAutoPhase);
         analysisView = findViewById(R.id.fnAnalysis);
+        // More breathing room and clearer visual hierarchy for non-technical readers.
+        analysisView.setTextSize(15);
+        analysisView.setLineSpacing(dp(6), 1.08f);
+        analysisView.setPadding(0, dp(6), 0, dp(8));
         timelineView = findViewById(R.id.fnTimeline);
         soilSummaryView = findViewById(R.id.fnSoilSummary);
 
@@ -210,6 +233,10 @@ public class FieldNotesActivity extends BaseActivity {
         findViewById(R.id.fnAddOpt).setOnClickListener(v -> showOptDialog(prefs));
         findViewById(R.id.fnAnalyze).setOnClickListener(v -> runAnalysis(prefs));
         findViewById(R.id.fnAutoFill).setOnClickListener(v -> applyAutomaticData(prefs));
+        findViewById(R.id.fnUsbSoilScan).setOnClickListener(v -> {
+            if (usbSoilMeter != null) usbSoilMeter.scanNow();
+            else usbSoilStatus.setText("Pemindai USB sedang disiapkan…");
+        });
         findViewById(R.id.fnManageHistory).setOnClickListener(v -> showHistoryManager(prefs));
         findViewById(R.id.fnNotes).setOnClickListener(v -> showMethodNotes());
         dataSource.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -234,6 +261,55 @@ public class FieldNotesActivity extends BaseActivity {
         refreshViews(prefs);
         // Gunakan cache bila tersedia; tombol "AMBIL DATA TERBARU" melakukan refresh jaringan.
         applyAutomaticDataFromCache(prefs);
+        attachAutomaticRecalculation();
+        runAnalysis(prefs);
+        usbSoilMeter = new UsbSoilMeter(this, new UsbSoilMeter.Listener() {
+            @Override public void onStatus(String status) {
+                if (usbSoilStatus != null) usbSoilStatus.setText(status);
+            }
+            @Override public void onValues(UsbSoilMeter.Values v) {
+                soilMoisture.setText(String.format(Locale.US, "%.1f", v.moisturePct));
+                soilTemp.setText(String.format(Locale.US, "%.1f", v.temperatureC));
+                soilEc.setText(String.format(Locale.US, "%.0f", v.ecUsCm));
+                soilPh.setText(String.format(Locale.US, "%.1f", v.ph));
+                soilN.setText(String.format(Locale.US, "%.0f", v.nitrogen));
+                soilP.setText(String.format(Locale.US, "%.0f", v.phosphorus));
+                soilK.setText(String.format(Locale.US, "%.0f", v.potassium));
+                selectSpinner(soilSource, SOIL_SOURCE[3]);
+                prefs.edit()
+                    .putString("soil_moisture_pct", soilMoisture.getText().toString())
+                    .putString("soil_temp_c", soilTemp.getText().toString())
+                    .putString("soil_ec_us_cm", soilEc.getText().toString())
+                    .putString("soil_ph", soilPh.getText().toString())
+                    .putString("soil_n", soilN.getText().toString())
+                    .putString("soil_p", soilP.getText().toString())
+                    .putString("soil_k", soilK.getText().toString())
+                    .putString("soil_source", SOIL_SOURCE[3]).apply();
+                soilSummaryView.setText(buildSoilSummary());
+                scheduleAnalysisRecalculation();
+                if (usbSoilStatus != null) usbSoilStatus.setText("USB 8-in-1 aktif • M=" + String.format(Locale.US, "%.1f", v.moisturePct)
+                    + "% • T=" + String.format(Locale.US, "%.1f", v.temperatureC) + "°C • EC="
+                    + String.format(Locale.US, "%.0f", v.ecUsCm) + " µS/cm • fertility="
+                    + String.format(Locale.US, "%.0f", v.fertility) + ". Pemetaan register generik; verifikasi satuan dengan manual alat.");
+            }
+        });
+    }
+
+
+    @Override protected void onStart() {
+        super.onStart();
+        if (usbSoilMeter != null) usbSoilMeter.start();
+    }
+
+    @Override protected void onStop() {
+        if (usbSoilMeter != null) usbSoilMeter.stop();
+        super.onStop();
+    }
+
+    @Override protected void onDestroy() {
+        recalculationHandler.removeCallbacks(pendingRecalculation);
+        if (usbSoilMeter != null) usbSoilMeter.dispose();
+        super.onDestroy();
     }
 
     private void vpdFromOpenMeteo() {
@@ -333,20 +409,13 @@ public class FieldNotesActivity extends BaseActivity {
             putTextNumber(o, "airTempC", airTemp);
             putTextNumber(o, "airRhPct", airRh);
             putTextNumber(o, "pressureHpa", pressure);
-            putTextNumber(o, "rainDailyMm", rain24);
-            putTextNumber(o, "rain24mm", rain24); // compatibility key; semantically this is the local calendar-day total, not a rolling 24 h sum.
+            putTextNumber(o, "rain24mm", rain24);
             putTextNumber(o, "et0Mm", et0);
             putTextNumber(o, "lux", lux);
-            putTextNumber(o, "ppfdUmolM2S", par);
-            putTextNumber(o, "parUmol", par); // compatibility key; this field is PPFD, not PAR energy.
+            putTextNumber(o, "parUmol", par);
             putTextNumber(o, "sunHours", sunHours);
             putTextNumber(o, "windSpeedMs", windSpeed);
             o.put("windDirection", windDirection.getSelectedItem().toString());
-            double noteVpd = AgronomyEngine.vpd(num(airTemp.getText().toString()), num(airRh.getText().toString()));
-            if (Double.isFinite(noteVpd)) o.put("vpdKpa", noteVpd);
-            o.put("rainPeriod", "HARIAN_LOKAL");
-            o.put("ppfdBasis", "Input Field Notes; sensor quantum atau estimasi Open-Meteo");
-            o.put("weatherSource", "FIELD-NOTES-MANUAL");
             o.put("created", System.currentTimeMillis());
 
             appendHistory(prefs, KEY_NOTES, o, 500);
@@ -377,16 +446,6 @@ public class FieldNotesActivity extends BaseActivity {
                     .putString("soil_test_method", soilTestMethod.getSelectedItem().toString())
                     .putInt("soil_bd_preset", bulkDensityPreset.getSelectedItemPosition())
                     .apply();
-
-            // Field Notes uses the same global weather cache as the dashboard and PDF.
-            // Manual edits therefore become the current global input until a newer Open-Meteo fetch replaces them.
-            updateGlobalWeatherFromFieldNote(prefs,
-                    num(airTemp.getText().toString()), num(airRh.getText().toString()),
-                    num(pressure.getText().toString()), num(rain24.getText().toString()),
-                    num(et0.getText().toString()), num(lux.getText().toString()),
-                    num(par.getText().toString()), num(sunHours.getText().toString()),
-                    num(windSpeed.getText().toString()),
-                    windDirection.getSelectedItem() == null ? "--" : windDirection.getSelectedItem().toString());
 
             Toast.makeText(this, "Catatan lapangan tersimpan.", Toast.LENGTH_SHORT).show();
             observation.setText(""); action.setText("");
@@ -511,6 +570,7 @@ public class FieldNotesActivity extends BaseActivity {
                     if (!fOmError.isEmpty()) msg += " OM: " + fOmError + ".";
                     dataSourceStatus.setText(msg);
                     refreshViews(prefs);
+                    runAnalysis(prefs);
                 } catch (Exception e) {
                     dataSourceStatus.setText("Pengisian otomatis gagal: " + (e.getMessage() == null ? "data tidak terbaca" : e.getMessage()));
                 }
@@ -669,77 +729,28 @@ public class FieldNotesActivity extends BaseActivity {
         try {
             JSONObject c=root.optJSONObject("current"), d=root.optJSONObject("daily");
             if(c==null) return;
-            double temp=c.optDouble("temperature_2m",Double.NaN);
-            double rh=c.optDouble("relative_humidity_2m",Double.NaN);
-            double pressureV=c.optDouble("surface_pressure",Double.NaN);
-            double rainV=d==null?Double.NaN:first(d,"precipitation_sum");
-            double et0V=d==null?Double.NaN:first(d,"et0_fao_evapotranspiration");
-            double soilTempV=c.optDouble("soil_temperature_0_to_10cm",Double.NaN);
-            double soilMoistV=c.optDouble("soil_moisture_0_to_10cm",Double.NaN);
-            double windV=c.optDouble("wind_speed_10m",Double.NaN);
-            double gustV=c.optDouble("wind_gusts_10m",Double.NaN);
-            double cloudV=c.optDouble("cloud_cover",Double.NaN);
-            double visV=c.optDouble("visibility",Double.NaN);
-            double uvV=c.optDouble("uv_index",Double.NaN);
-            double swV=c.optDouble("shortwave_radiation",Double.NaN);
-            double parEstimate=LightConversion.shortwaveToParWm2(swV);
-            double ppfdEstimate=LightConversion.parToPpfd(parEstimate);
-            double vpdV=c.optDouble("vapour_pressure_deficit",Double.NaN);
-            double sunV=d==null?Double.NaN:first(d,"sunshine_duration")/3600.0;
-            String dir=MainActivity.compass(c.optDouble("wind_direction_10m",Double.NaN));
-
-            setOm(airTemp,temp,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"suhu udara","air temp","temperature"},new String[]{"tanah","soil"}));
-            setOm(airRh,rh,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kelembapan udara","humidity","rh"},new String[]{"tanah","soil"}));
-            setOm(pressure,pressureV,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"tekanan","pressure","baro"},new String[]{}));
-            setOm(rain24,rainV,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"curah hujan harian","hujan 24","rain","precip"},new String[]{}));
-            setOm(et0,et0V,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"et0","evapotrans"},new String[]{}));
-            setOm(soilTemp,soilTempV,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"suhu tanah","soil temp","soil_temperature"},new String[]{}));
-            setOm(soilMoisture,Double.isFinite(soilMoistV)?soilMoistV*100.0:Double.NaN,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kelembapan tanah","soil moisture","soil_moisture","moisture"},new String[]{"udara","air"}));
-            setOm(windSpeed,windV,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kecepatan angin","wind speed","wind"},new String[]{"arah","direction","gust"}));
-            setOm(par,ppfdEstimate,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"ppfd","par"},new String[]{"shortwave"}));
-            setOm(sunHours,sunV,tsFirst && hasTs(tsMeta,tsFeed,new String[]{"sunshine","lama penyinaran","durasi sinar"},new String[]{}));
-            if(!dir.equals("--") && !(tsFirst && hasTs(tsMeta,tsFeed,new String[]{"arah angin","wind direction","direction"},new String[]{}))) selectSpinner(windDirection,windV<0.5?"Tenang":dir);
-
-            SharedPreferences.Editor e=prefs.edit();
-            putFinite(e,"om_temp",temp,2); putFinite(e,"om_rh",rh,2);
-            putFinite(e,"om_apparent_temp",c.optDouble("apparent_temperature",Double.NaN),2);
-            putFinite(e,"om_dewpoint",c.optDouble("dew_point_2m",Double.NaN),2);
-            putFinite(e,"om_pressure",pressureV,2); putFinite(e,"om_rain",rainV,2); putFinite(e,"om_et0",et0V,2);
-            putFinite(e,"om_soil_temp",soilTempV,2);
-            if(Double.isFinite(soilMoistV)) putFinite(e,"om_soil_moisture",soilMoistV,4);
-            putFinite(e,"om_wind_speed",windV,2); if(!dir.equals("--")) e.putString("om_wind_direction",windV<0.5?"Tenang":dir);
-            putFinite(e,"om_wind_gust",gustV,2); putFinite(e,"om_cloud_cover",cloudV,0); putFinite(e,"om_visibility",visV,0); putFinite(e,"om_uv",uvV,1);
-            putFinite(e,"om_radiation",swV,2); putFinite(e,"om_par",parEstimate,3); putFinite(e,"om_ppfd",ppfdEstimate,3);
-            putFinite(e,"om_sun_hours",sunV,2); putFinite(e,"om_vpd",vpdV,3);
-            e.putString("om_rain_period","HARIAN_LOKAL").putString("om_ppfd_basis",LightConversion.methodologyNote());
-            e.putLong("om_weather_epoch",System.currentTimeMillis()).putString("om_weather_source","OPEN-METEO").apply();
+            setOm(airTemp, c.optDouble("temperature_2m",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"suhu udara","air temp","temperature"},new String[]{"tanah","soil"}));
+            setOm(airRh, c.optDouble("relative_humidity_2m",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kelembapan udara","humidity","rh"},new String[]{"tanah","soil"}));
+            setOm(pressure, c.optDouble("surface_pressure",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"tekanan","pressure","baro"},new String[]{}));
+            setOm(rain24, d==null?Double.NaN:first(d,"precipitation_sum"), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"hujan 24","rain","precip"},new String[]{}));
+            setOm(et0, d==null?Double.NaN:first(d,"et0_fao_evapotranspiration"), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"et0","evapotrans"},new String[]{}));
+            setOm(soilTemp, c.optDouble("soil_temperature_0_to_10cm",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"suhu tanah","soil temp","soil_temperature"},new String[]{}));
+            setOm(soilMoisture, c.optDouble("soil_moisture_0_to_10cm",Double.NaN)*100.0, tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kelembapan tanah","soil moisture","soil_moisture","moisture"},new String[]{"udara","air"}));
+            setOm(windSpeed, c.optDouble("wind_speed_10m",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kecepatan angin","wind speed","wind"},new String[]{"arah","direction","gust"}));
+            setOm(par, LightConversion.parToPpfd(LightConversion.shortwaveToParWm2(c.optDouble("shortwave_radiation",Double.NaN))), false);
+            setOm(sunHours, d==null?Double.NaN:first(d,"sunshine_duration")/3600.0, tsFirst && hasTs(tsMeta,tsFeed,new String[]{"sunshine","lama penyinaran","durasi sinar"},new String[]{}));
+            String dir=MainActivity.compass(c.optDouble("wind_direction_10m",Double.NaN)); if(!dir.equals("--") && !(tsFirst && hasTs(tsMeta,tsFeed,new String[]{"arah angin","wind direction","direction"},new String[]{}))) selectSpinner(windDirection,dir);
+            prefs.edit().putString("om_temp", show(c.optDouble("temperature_2m",Double.NaN)))
+                    .putString("om_rh", show(c.optDouble("relative_humidity_2m",Double.NaN)))
+                    .putString("om_pressure", show(c.optDouble("surface_pressure",Double.NaN)))
+                    .putString("om_rain", show(d==null?Double.NaN:first(d,"precipitation_sum")))
+                    .putString("om_et0", show(d==null?Double.NaN:first(d,"et0_fao_evapotranspiration")))
+                    .putString("om_soil_temp", show(c.optDouble("soil_temperature_0_to_10cm",Double.NaN)))
+                    .putString("om_soil_moisture", show(c.optDouble("soil_moisture_0_to_10cm",Double.NaN)))
+                    .putString("om_wind_speed", show(c.optDouble("wind_speed_10m",Double.NaN)))
+                    .putString("om_wind_direction", dir)
+                    .putString("om_vpd", show(c.optDouble("vapour_pressure_deficit",Double.NaN))).apply();
         } catch(Exception ignored) {}
-    }
-
-    private void putFinite(SharedPreferences.Editor e,String key,double value,int decimals) {
-        if(Double.isFinite(value)) e.putString(key,show(value,decimals));
-    }
-
-    private void updateGlobalWeatherFromFieldNote(SharedPreferences prefs,double temp,double rh,double pressureHpa,double rainDaily,double et0Mm,double luxVal,double ppfd,double sunshineHours,double windMs,String windDir){
-        SharedPreferences.Editor e=prefs.edit();
-        putFinite(e,"om_temp",temp,2); putFinite(e,"om_rh",rh,2); putFinite(e,"om_pressure",pressureHpa,2);
-        putFinite(e,"om_rain",rainDaily,2); putFinite(e,"om_et0",et0Mm,2); putFinite(e,"lux",luxVal,1);
-        putFinite(e,"om_ppfd",ppfd,3);
-        // Do not derive PAR energy backwards from PPFD: spectral composition is required for a defensible conversion.
-        e.remove("om_par").remove("om_radiation").remove("om_apparent_temp").remove("om_dewpoint")
-                .remove("om_cloud_cover").remove("om_visibility").remove("om_uv").remove("om_forecast_7d")
-                .remove("om_soil_temp").remove("om_soil_moisture");
-        putFinite(e,"om_sun_hours",sunshineHours,2); putFinite(e,"om_wind_speed",windMs,2);
-        String dir=windDir==null||windDir.trim().isEmpty()?"--":windDir.trim();
-        if(Double.isFinite(windMs) && windMs<0.5) dir="Tenang";
-        if(!"--".equals(dir)) e.putString("om_wind_direction",dir);
-        else e.remove("om_wind_direction");
-        double vpd=AgronomyEngine.vpd(temp,rh); putFinite(e,"om_vpd",vpd,3);
-        e.putString("om_rain_period","HARIAN_LOKAL")
-                .putString("om_ppfd_basis","Input Catatan Lapangan; dapat berasal dari sensor quantum atau estimasi Open-Meteo.")
-                .putLong("om_weather_epoch",System.currentTimeMillis())
-                .putString("om_weather_source","FIELD-NOTES-MANUAL")
-                .apply();
     }
 
     private JSONObject openMeteoObjectFromPrefs(SharedPreferences prefs) {
@@ -748,18 +759,11 @@ public class FieldNotesActivity extends BaseActivity {
         try {
             c.put("temperature_2m", num(prefs.getString("om_temp","")));
             c.put("relative_humidity_2m", num(prefs.getString("om_rh","")));
-            c.put("apparent_temperature", num(prefs.getString("om_apparent_temp","")));
-            c.put("dew_point_2m", num(prefs.getString("om_dewpoint","")));
             c.put("surface_pressure", num(prefs.getString("om_pressure","")));
             c.put("soil_temperature_0_to_10cm", num(prefs.getString("om_soil_temp","")));
             c.put("soil_moisture_0_to_10cm", num(prefs.getString("om_soil_moisture","")));
             c.put("wind_speed_10m", num(prefs.getString("om_wind_speed","")));
             c.put("wind_direction_10m", windDegrees(prefs.getString("om_wind_direction","")));
-            c.put("wind_gusts_10m", num(prefs.getString("om_wind_gust","")));
-            c.put("cloud_cover", num(prefs.getString("om_cloud_cover","")));
-            c.put("visibility", num(prefs.getString("om_visibility","")));
-            c.put("uv_index", num(prefs.getString("om_uv","")));
-            c.put("shortwave_radiation", num(prefs.getString("om_radiation","")));
             c.put("vapour_pressure_deficit", num(prefs.getString("om_vpd","")));
             JSONArray rain=new JSONArray(); rain.put(num(prefs.getString("om_rain",""))); d.put("precipitation_sum",rain);
             JSONArray et=new JSONArray(); et.put(num(prefs.getString("om_et0",""))); d.put("et0_fao_evapotranspiration",et);
@@ -768,10 +772,8 @@ public class FieldNotesActivity extends BaseActivity {
     }
 
     private double windDegrees(String s){
-        String[] names={"utara","timur laut","timur","tenggara","selatan","barat daya","barat","barat laut",
-                "utara-timur laut","timur-timur laut","timur-tenggara","selatan-tenggara","selatan-barat daya","barat-barat daya","barat-barat laut","utara-barat laut"};
-        double[] deg={0,45,90,135,180,225,270,315,22.5,67.5,112.5,157.5,202.5,247.5,292.5,337.5};
-        String x=normalize(s); for(int i=0;i<names.length;i++) if(x.equals(normalize(names[i]))) return deg[i]; return Double.NaN;
+        String[] names={"utara","utara-timur laut","timur laut","timur-timur laut","timur","timur-tenggara","tenggara","selatan-tenggara","selatan","selatan-barat daya","barat daya","barat-barat daya","barat","barat-barat laut","barat laut","utara-barat laut"};
+        String x=normalize(s); for(int i=0;i<names.length;i++) if(x.equals(normalize(names[i]))) return i*22.5; return Double.NaN;
     }
 
     private double first(JSONObject o,String key){JSONArray a=o.optJSONArray(key);return a==null||a.length()==0?Double.NaN:a.optDouble(0,Double.NaN);}
@@ -820,6 +822,218 @@ public class FieldNotesActivity extends BaseActivity {
             out.append(line).append('\n');
         }
         return out.toString().trim();
+    }
+
+    /** Reorders the same calculated results into short, clearly separated sections for farmers. */
+    private String formatFarmerFriendlyAnalysis(String raw) {
+        if (raw == null || raw.trim().isEmpty()) return "Analisis belum tersedia. Lengkapi data kebun lalu tekan ANALISIS AGRONOMI SEKARANG.";
+        String[] head = raw.split("\\n", 4);
+        String sourceTitle = head.length > 0 ? head[0].trim() : "";
+        String cropLabel = sourceTitle.contains("•") ? sourceTitle.substring(sourceTitle.indexOf('•') + 1).trim() : sourceTitle;
+        String cultivationLine = head.length > 1 ? friendlyLine(head[1].replace("Budidaya:", "Cara budidaya:")) : "";
+        String phaseLine = head.length > 2 ? friendlyLine(head[2].replace("Fase:", "Tahap tanaman:")) : "";
+
+        String data = blockBetween(raw, "DASAR DATA & KETIDAKPASTIAN", "1. STATUS TANAH");
+        String soil = blockBetween(raw, "1. STATUS TANAH", "2. ANALISIS RENTANG SEMUA PARAMETER");
+        String range = blockBetween(raw, "2. ANALISIS RENTANG SEMUA PARAMETER", "3. KECUKUPAN NPK & PERKIRAAN DOSIS FASE");
+        String fertilizer = blockBetween(raw, "3. KECUKUPAN NPK & PERKIRAAN DOSIS FASE", "4. AIR, VPD & CUACA");
+        String weather = blockBetween(raw, "4. AIR, VPD & CUACA", "5. PREDIKSI POTENSI OPT");
+        String opt = blockBetween(raw, "5. PREDIKSI POTENSI OPT (BERDASARKAN CUACA + RIWAYAT)", "6. CATATAN LAPANGAN TERARAH");
+        String notes = blockBetween(raw, "6. CATATAN LAPANGAN TERARAH", "7. REKOMENDASI MENYELURUH UNTUK PETANI");
+        String recommendations = blockAfter(raw, "7. REKOMENDASI MENYELURUH UNTUK PETANI");
+
+        StringBuilder out = new StringBuilder();
+        out.append("HASIL ANALISIS KEBUN");
+        if (!cropLabel.isEmpty()) out.append(" • ").append(cropLabel);
+        out.append("\n");
+        if (!cultivationLine.isEmpty()) out.append(cultivationLine).append("\n");
+        if (!phaseLine.isEmpty()) out.append(phaseLine).append("\n\n");
+        out.append("Catatan: hasil ini membantu menentukan langkah awal. Jika data tanah belum lengkap, kebutuhan pupuk masih berupa perkiraan.\n\n");
+
+        appendReadableSection(out, "1. SARAN YANG BISA DILAKUKAN", recommendations, true);
+        appendReadableSection(out, "2. DATA DAN KEPASTIAN HASIL", friendlyProvenance(data), false, false);
+        appendReadableSection(out, "3. KONDISI TANAH", soil, false);
+        appendReadableSection(out, "4. PERKIRAAN KEBUTUHAN PUPUK", friendlyFertilizer(fertilizer), false);
+        appendReadableSection(out, "5. AIR DAN CUACA", weather, false);
+        appendReadableSection(out, "6. PERINGATAN DINI HAMA / PENYAKIT", opt, false);
+        appendReadableSection(out, "7. CATATAN KEBUN", notes, false);
+        appendReadableSection(out, "8. RINCIAN TAMBAHAN", range, false);
+        out.append("\nARTI ISTILAH SEDERHANA\n");
+        out.append("• pH = ukuran tanah masam atau basa.\n");
+        out.append("• N, P, K = nitrogen, fosfor, dan kalium; tiga unsur hara penting bagi tanaman.\n");
+        out.append("• mg/kg = miligram hara per kilogram tanah.\n");
+        out.append("• µS/cm = ukuran daya hantar listrik tanah; dipakai sebagai petunjuk awal kadar garam, bukan pengganti uji laboratorium.\n");
+        out.append("• kg/ha = kilogram per hektare. Angka kebutuhan hara tidak selalu sama dengan berat pupuk jadi yang harus diberikan; sesuaikan dengan kadar hara pada kemasan pupuk.\n");
+        out.append("\nArti status: ‘rendah’, ‘sedang’, atau ‘tinggi’ adalah petunjuk awal. Jika tersedia, utamakan hasil laboratorium tanah dan anjuran petugas pertanian setempat.\n");
+        return out.toString().replace("--", "belum ada data").trim();
+    }
+
+    private String friendlyFertilizer(String body) {
+        if (body == null || body.trim().isEmpty()) return body;
+        return "Angka di bawah adalah perkiraan kebutuhan unsur hara untuk tahap tanaman ini, bukan selalu jumlah pupuk jadi yang harus ditimbang.\n"
+                + "Satuan kg/ha berarti kilogram per hektare. Jumlah pupuk jadi bergantung pada jenis dan kadar hara pupuk yang digunakan.\n"
+                + body;
+    }
+
+    private String friendlyCommaList(String values) {
+        if (values == null || values.trim().isEmpty()) return "belum ada";
+        StringBuilder out = new StringBuilder();
+        for (String item : values.split(",\\s*")) {
+            if (out.length() > 0) out.append(" • ");
+            out.append(friendlyLine(item.trim()));
+        }
+        return out.toString();
+    }
+
+    private String blockBetween(String source, String startHeader, String endHeader) {
+        int start = source.indexOf(startHeader);
+        if (start < 0) return "";
+        start = source.indexOf('\n', start);
+        if (start < 0) return "";
+        start++;
+        int end = source.indexOf(endHeader, start);
+        if (end < 0) end = source.length();
+        return source.substring(start, end).trim();
+    }
+
+    private String blockAfter(String source, String startHeader) {
+        int start = source.indexOf(startHeader);
+        if (start < 0) return "";
+        start = source.indexOf('\n', start);
+        if (start < 0) return "";
+        return source.substring(start + 1).trim();
+    }
+
+    private void appendReadableSection(StringBuilder out, String heading, String body, boolean recommendationList) {
+        appendReadableSection(out, heading, body, recommendationList, true);
+    }
+
+    private void appendReadableSection(StringBuilder out, String heading, String body, boolean recommendationList, boolean applyFriendlyLanguage) {
+        if (heading == null || heading.trim().isEmpty()) return;
+        out.append("\n").append(heading).append("\n\n");
+        if (body == null || body.trim().isEmpty()) {
+            out.append("Belum ada informasi yang cukup untuk bagian ini.\n\n");
+            return;
+        }
+        String[] lines = body.split("\\n");
+        boolean hasContent = false;
+        for (String original : lines) {
+            String line = original.trim();
+            if (line.isEmpty()) continue;
+            if (line.startsWith("ANALISIS AWAL — SEMUA PARAMETER")) line = "Pemeriksaan ringkas seluruh data yang tersedia:";
+            if (applyFriendlyLanguage) line = friendlyLine(line);
+            if (line.isEmpty()) continue;
+            if (recommendationList && !line.startsWith("•") && !line.startsWith("-")) line = "• " + line;
+            out.append(line).append("\n\n");
+            hasContent = true;
+        }
+        if (!hasContent) out.append("Belum ada informasi yang cukup untuk bagian ini.\n\n");
+    }
+
+    /** Converts model/soil terms into common Indonesian while preserving measured numbers and outcomes. */
+    private String friendlyLine(String line) {
+        if (line == null) return "";
+        String x = line.trim();
+        String[][] replacements = {
+            {"Kebutuhan screening fase ini", "Perkiraan kebutuhan tanaman pada tahap ini"},
+            {"Kredit pupuk tercatat 90 hari", "Perkiraan hara dari pupuk yang tercatat dalam 90 hari terakhir"},
+            {"STCR-style screening", "perkiraan kebutuhan hara"},
+            {"Tingkat ketidakpastian rekomendasi", "Ketidakpastian hasil perkiraan"},
+            {"Data asli tersedia (input pengguna/sensor/API/riwayat; periksa metode dan satuannya):", "Data asli yang sudah ada:"},
+            {"Data belum tersedia:", "Data yang belum diisi atau belum ditemukan:"},
+            {"Estimasi/default yang dipakai hanya di dalam perhitungan:", "Perkiraan atau nilai bawaan yang dipakai dalam hitungan:"},
+            {"PENTING: nilai asli dari input, sensor USB/RS485, ThingSpeak/Open-Meteo, riwayat atau laboratorium tidak ditimpa oleh estimasi. Saat nilai asli baru/terbaru masuk, analisis dihitung ulang dengan nilai asli tersebut.", "Nilai asli dari pengguna, sensor, cuaca, riwayat, atau laboratorium tidak diganti oleh perkiraan. Jika data asli terbaru masuk, hasil akan dihitung ulang."},
+            {"PENTING:", "Penting:"}, {"pH-buffer", "uji penyangga pH"}, {"Al-dd", "aluminium tanah (Al-dd)"},
+            {"H-dd", "keasaman cadangan (H-dd)"}, {"CEC/KTK", "kemampuan tanah menahan hara (KTK)"}, {"CEC", "KTK"},
+            {"bulk density", "berat isi tanah"}, {"Stok lapisan", "Perkiraan jumlah hara dalam lapisan tanah"},
+            {"N-total diprediksi dari N tersedia", "Perkiraan N total dari N tersedia (bukan hasil laboratorium)"},
+            {"Kelas N-total yang mungkin", "Perkiraan kelompok N total"},
+            {"N tersedia", "Nitrogen (N) tersedia"}, {"P tersedia", "Fosfor (P) tersedia"}, {"K tersedia", "Kalium (K) tersedia"},
+            {"ECe laboratorium", "ECe hasil laboratorium"}, {"ECe lab", "ECe hasil laboratorium"},
+            {"EC sensor", "EC dari sensor tanah"}, {"EC:", "EC tanah:"},
+            {"Kelembapan tanah sensor", "Kadar air tanah dari sensor"}, {"Kelembapan tanah", "Kadar air tanah"},
+            {"Air tanah:", "Kondisi air di tanah:"}, {"FC/PWP", "batas air tanah (kapasitas lapang/titik layu)"},
+            {"P2O5", "fosfor (P₂O₅)"}, {"K2O", "kalium (K₂O)"},
+            {"screening", "perkiraan awal"}, {"VPD", "tekanan udara kering bagi tanaman (VPD)"},
+            {"ET0", "perkiraan kebutuhan air dari cuaca (ET0)"}, {"ET₀", "perkiraan kebutuhan air dari cuaca (ET0)"},
+            {"RH", "kelembapan udara"}, {"PAR", "cahaya untuk fotosintesis (PAR)"}, {"OPT", "hama/penyakit (OPT)"}, {"PHT", "pengendalian hama terpadu (PHT)"},
+            {"HST", "hari setelah tanam"}, {"mg/kg", "mg/kg"}, {"kg/ha", "kg/ha"},
+            {"→", " — "}, {"; ", ";\n• "}
+        };
+        for (String[] pair : replacements) x = x.replace(pair[0], pair[1]);
+        x = x.replace("LEBIH RENDAH (tetap perkiraan awal; validasi lokal tetap diperlukan)", "Lebih rendah, tetapi tetap perlu pemeriksaan setempat.")
+             .replace("LEBIH RENDAH (tetap screening; validasi lokal tetap diperlukan)", "Lebih rendah, tetapi tetap perlu pemeriksaan setempat.")
+             .replace("SEDANG–TINGGI", "Sedang hingga tinggi — hasil masih perlu diperiksa.")
+             .replace("SEDANG-TINGGI", "Sedang hingga tinggi — hasil masih perlu diperiksa.")
+             .replace("TINGGI.", "Tinggi — hasil masih berupa gambaran awal.")
+             .replace("kg/ha.", "kg/ha (kilogram per hektare).")
+             .replace("jangan memakai hujan saja untuk memutuskan irigasi", "jangan menentukan penyiraman hanya dari jumlah hujan");
+        return x;
+    }
+
+    private String friendlyProvenance(String data) {
+        if (data == null || data.trim().isEmpty()) return "Belum ada ringkasan sumber data.";
+        StringBuilder out = new StringBuilder();
+        for (String original : data.split("\\n")) {
+            String line = original.trim();
+            if (line.isEmpty()) continue;
+            if (line.startsWith("Data asli tersedia") || line.startsWith("Data asli yang sudah ada")) {
+                int colon = line.indexOf(':');
+                String values = colon >= 0 ? line.substring(colon + 1).trim() : "belum ada";
+                values = values.replaceAll("\\.$", "");
+                out.append("Data asli yang sudah tersedia:\n• ").append(friendlyCommaList(values)).append("\n\n");
+            } else if (line.startsWith("Data belum tersedia") || line.startsWith("Data yang belum diisi")) {
+                int colon = line.indexOf(':');
+                String values = colon >= 0 ? line.substring(colon + 1).trim() : "belum diketahui";
+                out.append("Data yang masih perlu dilengkapi:\n• ").append(friendlyCommaList(values)).append("\n\n");
+            } else if (line.startsWith("Estimasi/default") || line.startsWith("Perkiraan atau nilai bawaan")) {
+                int colon = line.indexOf(':');
+                String values = colon >= 0 ? line.substring(colon + 1).trim() : line;
+                out.append("Bagian yang masih memakai perkiraan:\n");
+                for (String value : values.split(";\\s*")) {
+                    String item = friendlyLine(value.trim());
+                    if (!item.isEmpty()) out.append("• ").append(item).append("\n");
+                }
+                out.append("\n");
+            } else if (line.startsWith("Tingkat ketidakpastian rekomendasi") || line.startsWith("Ketidakpastian hasil perkiraan")) {
+                String lower = line.toLowerCase(Locale.US);
+                if (lower.contains("lebih rendah")) {
+                    out.append("Ketidakpastian: lebih rendah karena lebih banyak data tersedia. Hasil tetap berupa perkiraan dan perlu disesuaikan dengan kondisi kebun.\n\n");
+                } else if (lower.contains("sedang")) {
+                    out.append("Ketidakpastian: sedang sampai tinggi. Gunakan hasil ini sebagai panduan awal dan lengkapi data tanah jika memungkinkan.\n\n");
+                } else if (lower.contains("tinggi")) {
+                    out.append("Ketidakpastian: tinggi. Hasil ini hanya gambaran awal; lengkapi data tanah bila memungkinkan.\n\n");
+                } else {
+                    out.append("Ketidakpastian belum dapat ditentukan dengan jelas. Periksa data yang digunakan sebelum mengikuti rekomendasi.\n\n");
+                }
+            } else if (line.startsWith("PENTING:") || line.startsWith("Nilai asli")) {
+                out.append(friendlyLine(line)).append("\n\n");
+            } else {
+                out.append(friendlyLine(line)).append("\n\n");
+            }
+        }
+        return out.toString().trim();
+    }
+
+    private CharSequence styleFarmerFriendlyAnalysis(String text) {
+        SpannableString styled = new SpannableString(text == null ? "" : text);
+        if (styled.length() == 0) return styled;
+        String value = styled.toString();
+        int lineStart = 0;
+        int lineNumber = 0;
+        while (lineStart < value.length()) {
+            int lineEnd = value.indexOf('\n', lineStart);
+            if (lineEnd < 0) lineEnd = value.length();
+            String line = value.substring(lineStart, lineEnd).trim();
+            if (!line.isEmpty() && (lineNumber == 0 || line.equals("ARTI ISTILAH SEDERHANA") || line.matches("^[0-9]+\\. .*"))) {
+                styled.setSpan(new StyleSpan(Typeface.BOLD), lineStart, lineEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                styled.setSpan(new ForegroundColorSpan(0xFF29C6C7), lineStart, lineEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                styled.setSpan(new RelativeSizeSpan(lineNumber == 0 ? 1.20f : 1.08f), lineStart, lineEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            lineStart = lineEnd + 1;
+            lineNumber++;
+        }
+        return styled;
     }
 
     private void showMethodNotes(){
@@ -909,6 +1123,8 @@ public class FieldNotesActivity extends BaseActivity {
             s.append("ANALISIS AGRONOMI TERPADU • ").append(p.name).append("\n");
             s.append("Budidaya: ").append(cultivation.getSelectedItem()).append("\n");
             s.append("Fase: ").append(AgronomyEngine.phase(days, c)).append(" (HST ").append(days >= 0 ? days : "-").append(")\n\n");
+            appendDataQualityAndProvenance(s, c, days, ph, ec, moist, n, pp, k, targetYieldValue,
+                    depth, bd, at, rh, rain, e0, prefs);
 
             s.append("1. STATUS TANAH\n");
             s.append("pH: ").append(show(ph)).append(" → ").append(AgronomyEngine.classifyPH(ph, p)).append("\n");
@@ -967,7 +1183,7 @@ public class FieldNotesActivity extends BaseActivity {
             if (!Double.isNaN(rain) && !Double.isNaN(e0)) s.append("Neraca sederhana hujan-ET0: ").append(show(rain - e0)).append(" mm; gunakan bersama kelembapan tanah, jangan memakai hujan saja untuk memutuskan irigasi.\n");
             if (!Double.isNaN(pressureHpa)) s.append("Tekanan udara: ").append(show(pressureHpa)).append(" hPa. Tekanan tunggal tidak menentukan hujan/OPT; gunakan bersama tren.\n");
             if (!Double.isNaN(luxVal)) s.append("Cahaya: ").append(show(luxVal)).append(" lux. ");
-            if (!Double.isNaN(parVal)) s.append("PPFD: ").append(show(parVal)).append(" µmol m⁻² s⁻¹. ");
+            if (!Double.isNaN(parVal)) s.append("PAR: ").append(show(parVal)).append(" µmol m⁻² s⁻¹. ");
             if (!Double.isNaN(sunVal)) s.append("Lama penyinaran: ").append(show(sunVal)).append(" jam/hari.\n");
             s.append("Arah angin: ").append(windDirection.getSelectedItem()).append("; kecepatan: ").append(show(wind)).append(" m/s.\n");
             s.append("Kisaran suhu rujukan screening komoditas: ").append(show(p.tempMin)).append("–").append(show(p.tempMax)).append(" °C.\n");
@@ -997,20 +1213,104 @@ public class FieldNotesActivity extends BaseActivity {
             s.append("• EC sensor: gunakan sebagai parameter input utama dengan rentang operasional; ECe lab hanya pembanding bila tersedia.\n");
 
             String compact = compactAnalysis(s.toString());
-            analysisView.setText(compact);
-            long analysisEpoch=System.currentTimeMillis();
-            prefs.edit().putString("last_field_analysis", compact)
-                    .putLong("last_field_analysis_epoch",analysisEpoch)
-                    .putString("last_analysis_text",compact)
-                    .putLong("last_analysis_epoch",analysisEpoch)
-                    .putString("last_analysis_source","FIELD_NOTES")
-                    .apply();
+            String readable = formatFarmerFriendlyAnalysis(compact);
+            analysisView.setText(styleFarmerFriendlyAnalysis(readable));
+            // Keep the technical source text too; the readable version is used by the PDF/report.
+            prefs.edit().putString("last_field_analysis_raw", compact)
+                    .putString("last_field_analysis", readable).apply();
             soilSummaryView.setText(buildSoilSummary());
             timelineView.setText(buildTimeline(prefs, c));
         } catch (Exception ex) {
             analysisView.setText("Analisis gagal dihitung: " + (ex.getMessage() == null ? "data belum lengkap" : ex.getMessage()));
         }
     }
+
+    /** Recompute recommendations from the current form without replacing user/sensor values with estimates. */
+    private void attachAutomaticRecalculation() {
+        EditText[] watched = {crop, plantDate, hst, area, targetYield, soilPh, soilMoisture, soilTemp,
+                soilEc, soilN, soilP, soilK, soilDepth, soilBulkDensity, soilFc, soilPwp,
+                soilPhBuffer, soilAlDd, soilHDd, soilCec, soilOm, soilEce, soilLimeReq,
+                soilNLow, soilNHigh, airTemp, airRh, pressure, rain24, et0, lux, par, sunHours, windSpeed};
+        TextWatcher watcher = new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void afterTextChanged(Editable e) {
+                updateAutoPhase();
+                scheduleAnalysisRecalculation();
+            }
+        };
+        for (EditText field : watched) if (field != null) field.addTextChangedListener(watcher);
+        AdapterView.OnItemSelectedListener recalcOnSelection = new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, android.view.View view, int position, long id) {
+                scheduleAnalysisRecalculation();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        };
+        soilTestMethod.setOnItemSelectedListener(recalcOnSelection);
+        cultivation.setOnItemSelectedListener(recalcOnSelection);
+        ageUnit.setOnItemSelectedListener(recalcOnSelection);
+    }
+
+    private void scheduleAnalysisRecalculation() {
+        recalculationHandler.removeCallbacks(pendingRecalculation);
+        recalculationHandler.postDelayed(pendingRecalculation, 450L);
+    }
+
+    /** Makes data provenance and uncertainty visible; estimates stay inside the model and never overwrite source fields. */
+    private void appendDataQualityAndProvenance(StringBuilder s, String cropName, int hstDays,
+            double ph, double ec, double moisture, double n, double p, double k, double targetYieldValue,
+            double depth, double bulkDensity, double airTempValue, double rh, double rain, double et0Value,
+            SharedPreferences prefs) {
+        int observed = 0;
+        StringBuilder actual = new StringBuilder(), missing = new StringBuilder(), assumptions = new StringBuilder();
+        boolean cropOk = cropName != null && !cropName.trim().isEmpty();
+        if (cropOk) { observed++; append(actual, "komoditas"); } else appendMissing(missing, "komoditas");
+        appendPresent(actual, "umur/HST", hstDays >= 0); if (hstDays < 0) appendMissing(missing, "umur/HST"); else observed++;
+        boolean phOk=Double.isFinite(ph), ecOk=Double.isFinite(ec), mOk=Double.isFinite(moisture), nOk=Double.isFinite(n), pOk=Double.isFinite(p), kOk=Double.isFinite(k);
+        if (phOk) { observed++; append(actual,"pH"); } else appendMissing(missing,"pH");
+        if (ecOk) { observed++; append(actual,"EC"); } else appendMissing(missing,"EC");
+        if (mOk) { observed++; append(actual,"kelembapan tanah"); } else appendMissing(missing,"kelembapan tanah");
+        if (nOk) { observed++; append(actual,"N tersedia"); } else appendMissing(missing,"N tersedia");
+        if (pOk) { observed++; append(actual,"P tersedia"); } else appendMissing(missing,"P tersedia");
+        if (kOk) { observed++; append(actual,"K tersedia"); } else appendMissing(missing,"K tersedia");
+        if (Double.isFinite(targetYieldValue) && targetYieldValue > 0) { observed++; append(actual,"target hasil"); }
+        else { appendMissing(missing,"target hasil"); assumptions.append("target hasil kosong → skala hasil 1,0 (baseline model); "); }
+        if (area != null && Double.isFinite(num(area.getText().toString())) && num(area.getText().toString()) > 0) { observed++; append(actual,"luas lahan"); }
+        else appendMissing(missing,"luas lahan");
+        if (prefs.contains("fert_history") && !prefs.getString("fert_history", "[]").equals("[]")) { observed++; append(actual,"riwayat pemupukan"); }
+        else { appendMissing(missing,"riwayat pemupukan"); assumptions.append("kredit pupuk = 0 bila riwayat tidak tersedia; "); }
+        boolean defaultBd = bulkDensityPreset != null && bulkDensityPreset.getSelectedItemPosition() < 2;
+        if (defaultBd) assumptions.append("bulk density ").append(show(bulkDensity)).append(" g/cm³ = preset/asumsi jenis tanah, bukan pengukuran; ");
+        if (!Double.isFinite(depth) || depth <= 0) assumptions.append("kedalaman efektif belum ada; perhitungan stok tanah tidak dipakai; ");
+        else if (!prefs.contains("soil_depth_cm")) assumptions.append("kedalaman 20 cm = default model sampai pengguna memasukkan nilai; ");
+        if (!nOk || !pOk || !kOk) assumptions.append("N/P/K tanah yang kosong tidak diisi angka palsu; kebutuhan pupuk memakai baseline komoditas + fase dan asumsi konservatif kontribusi tanah nol untuk unsur tanpa hasil uji; ");
+        if (!Double.isFinite(ph)) assumptions.append("pH tidak diestimasi numerik; rekomendasi koreksi pH dibatasi pada tindakan aman; ");
+        if (!Double.isFinite(ec)) assumptions.append("EC tidak diestimasi numerik; evaluasi salinitas ditunda sampai ada hasil; ");
+        if (!Double.isFinite(airTempValue) || !Double.isFinite(rh)) assumptions.append("VPD/komponen cuaca yang memerlukan suhu dan RH dihitung hanya jika keduanya tersedia; ");
+        AgronomyEngine.CropProfile cp = AgronomyEngine.profile(cropName);
+        assumptions.append("baseline kebutuhan musim ").append(cp.name).append(" (N/P/K ")
+                .append(show(cp.seasonalN)).append("/").append(show(cp.seasonalP)).append("/").append(show(cp.seasonalK))
+                .append(" kg/ha) dan fraksi fase = asumsi model agronomi; bukan hasil laboratorium.");
+        String uncertainty = observed >= 10 && phOk && ecOk && nOk && pOk && kOk && Double.isFinite(targetYieldValue)
+                ? "LEBIH RENDAH (tetap screening; validasi lokal tetap diperlukan)"
+                : observed >= 6 ? "SEDANG–TINGGI" : "TINGGI";
+        s.append("DASAR DATA & KETIDAKPASTIAN\n");
+        s.append("Data asli tersedia (input pengguna/sensor/API/riwayat; periksa metode dan satuannya): ")
+                .append(actual.length()==0 ? "belum ada" : actual.toString()).append(".\n");
+        s.append("Data belum tersedia: ").append(missing.length()==0 ? "parameter inti yang dinilai sudah terisi" : missing.toString()).append(".\n");
+        s.append("Estimasi/default yang dipakai hanya di dalam perhitungan: ").append(assumptions).append("\n");
+        s.append("Tingkat ketidakpastian rekomendasi: ").append(uncertainty).append(".\n");
+        s.append("PENTING: nilai asli dari input, sensor USB/RS485, ThingSpeak/Open-Meteo, riwayat atau laboratorium tidak ditimpa oleh estimasi. Saat nilai asli baru/terbaru masuk, analisis dihitung ulang dengan nilai asli tersebut.\n\n");
+    }
+
+    private void appendPresent(StringBuilder target, String label, boolean present) {
+        if (present) append(target, label);
+    }
+    private void append(StringBuilder target, String label) {
+        if (target.length() > 0) target.append(", ");
+        target.append(label);
+    }
+    private void appendMissing(StringBuilder target, String label) { append(target, label); }
 
     private void appendRecommendations(StringBuilder s, String c, AgronomyEngine.CropProfile p,
                                        double ph, double ec, double moist, double n, double pp, double k,
@@ -1021,10 +1321,8 @@ public class FieldNotesActivity extends BaseActivity {
         if (!Double.isNaN(moist) && moist < 20) s.append("• Tanah kering: prioritaskan pemenuhan air sebelum memberi pupuk larut, lalu cek ulang kelembapan.\n");
         if (!Double.isNaN(moist) && moist > 85) s.append("• Tanah terlalu lembap: cek drainase dan tunda pupuk yang mudah hilang sampai kondisi memungkinkan.\n");
         if (!Double.isNaN(n) && AgronomyEngine.classifyN(n,nLow,nHigh).equals("Rendah")) s.append("• N rendah: utamakan sumber N yang sesuai fase dan bagi aplikasi agar efisiensi lebih baik.\n");
-        String pClass = AgronomyEngine.classifyP(pp,methodName);
-        String kClass = AgronomyEngine.classifyK(k,methodName);
-        if (!Double.isNaN(pp) && (pClass.startsWith("Tinggi") || pClass.startsWith("Sangat Tinggi"))) s.append("• P tinggi: jangan menambah P secara rutin; fokuskan dosis pada unsur yang memang kurang.\n");
-        if (!Double.isNaN(k) && (kClass.startsWith("Tinggi") || kClass.startsWith("Sangat Tinggi"))) s.append("• K tinggi: jangan menambah K tanpa bukti kebutuhan; K dapat mengalami luxury consumption.\n");
+        if (!Double.isNaN(pp) && AgronomyEngine.classifyP(pp,methodName).equals("Tinggi")) s.append("• P tinggi: jangan menambah P secara rutin; fokuskan dosis pada unsur yang memang kurang.\n");
+        if (!Double.isNaN(k) && AgronomyEngine.classifyK(k,methodName).equals("Tinggi")) s.append("• K tinggi: jangan menambah K tanpa bukti kebutuhan; K dapat mengalami luxury consumption.\n");
         if (!Double.isNaN(vpd) && vpd > 2.0) s.append("• VPD tinggi: pantau layu; bila air tersedia, pertahankan kelembapan zona akar dan lakukan aplikasi pupuk pada waktu lebih sejuk.\n");
         if (!Double.isNaN(rain) && !Double.isNaN(e0) && rain < e0) s.append("• Air masuk < kebutuhan atmosfer: cek cadangan air tanah sebelum menetapkan irigasi.\n");
         if (!Double.isNaN(rh) && rh > 90 && !Double.isNaN(rain) && rain > 5) s.append("• RH + hujan tinggi: jadwalkan scouting penyakit lebih rapat; utamakan sanitasi, sirkulasi udara, dan PHT.\n");
@@ -1140,9 +1438,6 @@ public class FieldNotesActivity extends BaseActivity {
     private LocalDate parseDate(String s) { try { return LocalDate.parse(s.trim(), DATE_FMT); } catch (Exception ex) { return null; } }
     private boolean validDate(String s) { return parseDate(s) != null; }
     private boolean sameCrop(String a, String b) { return a != null && b != null && (a.trim().equalsIgnoreCase(b.trim()) || AgronomyEngine.normalizeCrop(a).equalsIgnoreCase(AgronomyEngine.normalizeCrop(b))); }
-    private String show(double v) { return show(v,2); }
-    private String show(double v,int decimals) {
-        return Double.isNaN(v) || Double.isInfinite(v) ? "--" : String.format(Locale.US, "%1$." + Math.max(0,decimals) + "f", v);
-    }
+    private String show(double v) { return Double.isNaN(v) || Double.isInfinite(v) ? "--" : String.format(Locale.US, "%.2f", v); }
     private int dp(int v) { return Math.max(1, Math.round(v * getResources().getDisplayMetrics().density)); }
 }

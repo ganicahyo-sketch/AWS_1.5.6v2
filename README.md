@@ -1,16 +1,19 @@
-# STASIUN CUACA • GANI CAHYO-UNS v1.5.6
+## Hasil analisis yang mudah dibaca
+Bagian hasil analisis dibuat lebih ramah bagi petani: saran praktis diletakkan di awal, isi dipisahkan menjadi bagian pendek, istilah teknis disederhanakan, serta data yang belum lengkap dan tingkat ketidakpastian dijelaskan dengan bahasa sehari-hari. Rincian teknis tetap disertakan dan tersimpan terpisah.
+
+# STASIUN CUACA • GANI CAHYO-UNS v1.5.7
 
 Android project lengkap dengan Open-Meteo + Agronomi + Catatan Lapangan.
 
 ## Fitur
-- Open-Meteo tanpa API key/akun: cuaca saat ini, ET₀ referensi FAO-56, VPD, curah hujan harian, radiasi, tanah, dan arah angin berbasis mata angin.
-- ThingSpeak feed terakhir + ekspor histori CSV tetap dipertahankan sebagai opsi.
+- Open-Meteo tanpa API key/akun: cuaca saat ini, ET0 FAO, VPD, hujan, radiasi, mata angin.
+- ThingSpeak feed terakhir + ekspor seluruh histori CSV.
 - CWT-7in1: N, P, K tersedia; pH; EC uS/cm; kelembapan; suhu tanah.
 - Catatan Lapangan terpadu: pengamatan, pupuk, OPT, pengendalian, irigasi, pertumbuhan; umur tanaman dapat diinput sebagai HST/hari, minggu, bulan, atau tahun dan dikonversi ke HST.
 - Analisis awal seluruh parameter: pH, N/N-total, P, K, EC/ECe, kelembapan tanah, suhu tanah, OM, CEC/KTK, suhu udara, RH, tekanan, hujan, ET0, angin, UV, visibilitas, Shortwave, PAR energi, PPFD, sunshine, VPD, serta parameter lingkungan lain yang tersedia.
 - Analisis pH, N/P/K, EC, kelembapan, VPD, fase tanaman, kebutuhan hara screening, dan risiko OPT per komoditas yang didukung.
 - Mode Konvensional/PHT atau Organik.
-- Arah angin selalu ditampilkan sebagai mata angin; pada kecepatan sangat rendah ditulis **Tenang**. Derajat tidak ditampilkan kepada pengguna.
+- Arah angin selalu ditampilkan sebagai mata angin; tidak menampilkan derajat.
 
 ## Build lokal
 Workflow CI menggunakan Eclipse Temurin JDK 25; source compatibility Android tetap Java 17. Gradle 9.4.1 + Android Gradle Plugin 9.2.0.
@@ -26,7 +29,7 @@ Versi ini menyediakan `LAPORAN PDF - SIMPAN / PRINT` dari dashboard. Pengguna da
 Isi laporan mencakup cuaca Open-Meteo, ET0, VPD, arah angin berbasis mata angin, tanah CWT-7in1, histori catatan/pupuk/OPT, analisis agronomi, rekomendasi teknis, rekomendasi AI terakhir (jika ada), serta catatan dasar ilmiah.
 
 
-## v1.5.6 agronomi
+## v1.5.7 agronomi
 - Interpretasi pH berbasis profil komoditas dan kebutuhan kapur berbasis pH-buffer/Al-dd/H-dd/CEC/lab.
 - P/K memakai kategori berbasis metode; N hanya diklasifikasikan bila ambang metode tersedia.
 - EC sensor dipisahkan dari ECe; kelembapan memakai FC/PWP/FTSW bila tersedia.
@@ -36,18 +39,18 @@ Isi laporan mencakup cuaca Open-Meteo, ET0, VPD, arah angin berbasis mata angin,
 
 
 ## Pembaruan CSV Open-Meteo & Analisis AI
-- Menu **UNDUH DATA CSV** sekarang memakai **Open-Meteo sebagai sumber CSV utama**; ekspor ThingSpeak tetap dipertahankan sebagai opsi terpisah.
-- Open-Meteo mendukung ekspor historis berdasarkan rentang tanggal pada resolusi **per jam** atau **harian**.
-- CSV per jam mencakup Shortwave, PAR energi, **PPFD**, **VPD**, ET₀, hujan, tanah, serta arah angin dalam **8 arah mata angin** tanpa kolom derajat.
-- CSV harian mencakup **PPFD rata-rata/maksimum** dan **VPD rata-rata/maksimum**, dengan arah angin dominan sebagai nama mata angin.
-- Data diberi penanda `source=OPEN-METEO` dan `data_type=HISTORICAL_REANALYSIS`.
+- Menu **UNDUH DATA CSV** sekarang memiliki sumber **ThingSpeak** dan **Open-Meteo**.
+- Open-Meteo mendukung ekspor historis berdasarkan rentang tanggal pada resolusi **per jam** atau **harian**, termasuk cuaca, hujan, tekanan, angin, radiasi, ET₀, VPD dan parameter tanah yang tersedia. Data diberi penanda `source=OPEN-METEO` dan `data_type=HISTORICAL_REANALYSIS`.
 - Tampilan analisis agronomi menyembunyikan uraian metodologi/rentang/rumus dari layar utama. Detail ilmiah dipindahkan ke ikon **ⓘ**.
 - AI menggunakan ruang output hingga **5000 token** dan diarahkan menghasilkan rekomendasi 0–24 jam, 1–7 hari, air, pemupukan, PHT, prioritas tindakan, serta pencarian web untuk OPT di luar database lokal.
 - API key OpenAI tidak lagi ditanam sebagai default di source code. Masukkan key melalui Pengaturan.
 
+USB Soil Meter 8-in-1: automatic USB-OTG detection for CH340/CH34x adapters (VID 0x1A86; PID 0x7523/0x5523/0x5512/0xE010), Modbus RTU 9600 8N1. Initial map: 0x0000 moisture/10, 0x0001 signed temperature/10, 0x0002 EC, 0x0003 pH/10, 0x0004 N, 0x0005 P, 0x0006 K, 0x0007 fertility. This is a generic candidate map derived from the Soil Detector APK and must be confirmed against the meter model/manual. RS485 and manual entry remain available.
 
-### AI Provider Options
-The agronomy AI can use the existing OpenAI provider, Google Gemini, or OpenRouter Free. OpenAI remains the default for backward compatibility. Gemini uses the official Gemini API and Google Search grounding when selected. OpenRouter Free uses the `openrouter/free` router by default. API keys are entered by the user in Settings and are not bundled in the source.
 
-## Definisi data cahaya dan hujan
-PAR berarti radiasi 400–700 nm. PPFD berarti kerapatan fluks foton 400–700 nm dalam µmol m⁻² s⁻¹. Karena Open-Meteo menyediakan shortwave broadband, PPFD dari Open-Meteo adalah **estimasi**, bukan pengukuran quantum sensor. Curah hujan harian mengikuti agregasi `precipitation_sum` pada hari kalender lokal, sehingga tidak disebut rolling 24 jam.
+## Alur rekomendasi pemupukan adaptif (v1.5.7)
+- Data lengkap: gunakan data yang diisi/diukur sebagai dasar perhitungan.
+- Data sebagian: gunakan nilai asli yang tersedia; komponen yang belum ada ditangani dengan asumsi model yang dinyatakan secara eksplisit.
+- Data kosong: tetap tampilkan estimasi awal berbasis profil komoditas, fase, dan baseline kebutuhan; ketidakpastian diberi label tinggi dan data asli yang perlu diukur dicantumkan.
+- Perubahan input, sensor USB, sumber cuaca, metode uji, budidaya, atau riwayat memicu hitung ulang otomatis.
+- Nilai asli tidak pernah diganti dengan angka estimasi. Estimasi hanya dipakai untuk perhitungan sementara dan digantikan otomatis ketika data asli tersedia.

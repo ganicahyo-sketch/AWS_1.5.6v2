@@ -1,5 +1,6 @@
 package id.stasiuncuaca;
 
+import android.app.Activity;
 import android.content.Context;
 import android.os.Bundle;
 import android.text.InputType;
@@ -11,14 +12,14 @@ import android.widget.Toast;
 
 import java.util.Locale;
 
-public class SettingsActivity extends BaseActivity {
+public class SettingsActivity extends Activity {
     private static final String PREFS = "thingspeak_config";
     private static final String DEFAULT_CHANNEL = "2981880";
     private static final String DEFAULT_READ_KEY = "P4B56Z7HZM56Q7HJ";
     private static final String DEFAULT_AI_KEY = "";
     private android.content.SharedPreferences p;
-    private EditText title, channel, readKey, aiKey, aiModel, geminiKey, geminiModel, openRouterKey, openRouterModel, crop, lat, lon, elev;
-    private Spinner cult, themeMode, aiProvider;
+    private EditText title, channel, readKey, aiKey, aiModel, crop, lat, lon, elev;
+    private Spinner cult;
     private TextView toggleRead, toggleAi;
     private EditText[] fieldName = new EditText[8];
     private EditText[] fieldUnit = new EditText[8];
@@ -28,9 +29,9 @@ public class SettingsActivity extends BaseActivity {
         setContentView(R.layout.activity_settings);
         p = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         title=findViewById(R.id.appTitle); channel=findViewById(R.id.channel); readKey=findViewById(R.id.readKey);
-        aiKey=findViewById(R.id.aiKey); aiModel=findViewById(R.id.aiModel); geminiKey=findViewById(R.id.geminiKey); geminiModel=findViewById(R.id.geminiModel); openRouterKey=findViewById(R.id.openRouterKey); openRouterModel=findViewById(R.id.openRouterModel); crop=findViewById(R.id.crop);
+        aiKey=findViewById(R.id.aiKey); aiModel=findViewById(R.id.aiModel); crop=findViewById(R.id.crop);
         lat=findViewById(R.id.latitude); lon=findViewById(R.id.longitude); elev=findViewById(R.id.elevation);
-        cult=findViewById(R.id.cultivation); themeMode=findViewById(R.id.themeMode); aiProvider=findViewById(R.id.aiProvider); toggleRead=findViewById(R.id.toggleReadKey); toggleAi=findViewById(R.id.toggleAiKey);
+        cult=findViewById(R.id.cultivation); toggleRead=findViewById(R.id.toggleReadKey); toggleAi=findViewById(R.id.toggleAiKey);
         for(int i=0;i<8;i++){
             int n=i+1;
             fieldName[i]=findViewById(getResources().getIdentifier("fieldName"+n,"id",getPackageName()));
@@ -38,23 +39,16 @@ public class SettingsActivity extends BaseActivity {
         }
         ArrayAdapter<String> ad=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,new String[]{"Konvensional / PHT","Organik"});
         ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); cult.setAdapter(ad);
-        ArrayAdapter<String> themeAdapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,new String[]{"Ikuti sistem","Terang","Gelap"});
-        themeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        themeMode.setAdapter(themeAdapter);
-        themeMode.setSelection(ThemeManager.getSelectionIndex(this));
-        ArrayAdapter<String> providerAdapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,new String[]{AiProviderClient.OPENAI,AiProviderClient.GEMINI,AiProviderClient.OPENROUTER});
-        providerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); aiProvider.setAdapter(providerAdapter);
-        String savedProvider=p.getString("ai_provider",AiProviderClient.OPENAI);
-        int providerIndex=AiProviderClient.GEMINI.equals(savedProvider)?1:(AiProviderClient.OPENROUTER.equals(savedProvider)?2:0);
-        aiProvider.setSelection(providerIndex);
         load();
-        findViewById(R.id.useGps).setOnClickListener(v->startActivity(new android.content.Intent(this,MainActivity.class)));
+        findViewById(R.id.useGps).setOnClickListener(v->{
+            android.content.Intent i = new android.content.Intent(this, MainActivity.class);
+            i.putExtra("request_fresh_gps", true);
+            startActivity(i);
+        });
         findViewById(R.id.saveSettings).setOnClickListener(v->save());
         findViewById(R.id.cancelSettings).setOnClickListener(v->finish());
         toggleRead.setOnClickListener(v->toggle(readKey,toggleRead));
         toggleAi.setOnClickListener(v->toggle(aiKey,toggleAi));
-        findViewById(R.id.toggleGeminiKey).setOnClickListener(v->toggle(geminiKey,(TextView)findViewById(R.id.toggleGeminiKey)));
-        findViewById(R.id.toggleOpenRouterKey).setOnClickListener(v->toggle(openRouterKey,(TextView)findViewById(R.id.toggleOpenRouterKey)));
     }
 
     private void load(){
@@ -66,13 +60,8 @@ public class SettingsActivity extends BaseActivity {
         String savedAiKey=p.getString("ai_api_key","").trim();
         aiKey.setText(savedAiKey.isEmpty()?DEFAULT_AI_KEY:savedAiKey);
         aiModel.setText(p.getString("ai_model","gpt-6-luna"));
-        geminiKey.setText(p.getString("gemini_api_key",""));
-        geminiModel.setText(p.getString("gemini_model","gemini-3.8-flash"));
-        openRouterKey.setText(p.getString("openrouter_api_key",""));
-        openRouterModel.setText(p.getString("openrouter_model","openrouter/free"));
         crop.setText(p.getString("crop","Tanaman pertanian"));
         lat.setText(f(p.getFloat("latitude",Float.NaN))); lon.setText(f(p.getFloat("longitude",Float.NaN))); elev.setText(f(p.getFloat("elevation",Float.NaN)));
-        themeMode.setSelection(ThemeManager.getSelectionIndex(this));
         cult.setSelection(p.getString("farm_cultivation_mode","Konvensional / PHT").toLowerCase(Locale.US).contains("organik")?1:0);
         for(int i=0;i<8;i++){
             fieldName[i].setText(p.getString("field_name_"+(i+1),""));
@@ -91,11 +80,7 @@ public class SettingsActivity extends BaseActivity {
         android.content.SharedPreferences.Editor e=p.edit().putString("app_title",tv).putString("channel",channel.getText().toString().trim().isEmpty()?DEFAULT_CHANNEL:channel.getText().toString().trim())
                 .putString("read_key",readKey.getText().toString().trim().isEmpty()?DEFAULT_READ_KEY:readKey.getText().toString().trim())
                 .putString("ai_api_key",aiKey.getText().toString().trim()).putString("ai_model",aiModel.getText().toString().trim().isEmpty()?"gpt-6-luna":aiModel.getText().toString().trim())
-                .putString("gemini_api_key",geminiKey.getText().toString().trim()).putString("gemini_model",geminiModel.getText().toString().trim().isEmpty()?"gemini-3.8-flash":geminiModel.getText().toString().trim())
-                .putString("openrouter_api_key",openRouterKey.getText().toString().trim()).putString("openrouter_model",openRouterModel.getText().toString().trim().isEmpty()?"openrouter/free":openRouterModel.getText().toString().trim())
-                .putString("ai_provider",aiProvider.getSelectedItem().toString())
                 .putString("crop",cv).putString("farm_cultivation_mode",cult.getSelectedItem().toString());
-        ThemeManager.saveMode(e, themeMode.getSelectedItemPosition());
         if(!Float.isNaN(la))e.putFloat("latitude",la); else e.remove("latitude");
         if(!Float.isNaN(lo))e.putFloat("longitude",lo); else e.remove("longitude");
         if(!Float.isNaN(el))e.putFloat("elevation",el); else e.remove("elevation");

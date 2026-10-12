@@ -1,5 +1,6 @@
 package id.stasiuncuaca;
 
+import android.app.Activity;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -44,7 +45,7 @@ import java.util.Locale;
  * Laporan PDF mandiri: cuaca, tanah, histori, analisis, rekomendasi, dan AI.
  * Menggunakan PdfDocument bawaan Android - tanpa library tambahan.
  */
-public class PdfReportActivity extends BaseActivity {
+public class PdfReportActivity extends Activity {
     private static final String PREFS = "thingspeak_config";
     private static final ZoneId WIB = ZoneId.of("Asia/Jakarta");
     private static final DateTimeFormatter PRINT_DATE = DateTimeFormatter.ofPattern("dd MMMM yyyy HH:mm", new Locale("id", "ID"));
@@ -87,7 +88,7 @@ public class PdfReportActivity extends BaseActivity {
             lastPdf = buildPdf(reportMode.getSelectedItemPosition() == 0);
             PrintManager pm = (PrintManager) getSystemService(Context.PRINT_SERVICE);
             if (pm == null) throw new Exception("Layanan cetak Android tidak tersedia");
-            pm.print(pref("app_title", "STASIUN CUACA"), new PdfPrintAdapter(lastPdf), printAttributes());
+            pm.print("STASIUN CUACA • GANI CAHYO-UNS", new PdfPrintAdapter(lastPdf), printAttributes());
         } catch (Exception e) {
             Toast.makeText(this, "Gagal membuka cetak: " + safe(e), Toast.LENGTH_LONG).show();
         }
@@ -111,7 +112,7 @@ public class PdfReportActivity extends BaseActivity {
     private PrintAttributes printAttributes() {
         return new PrintAttributes.Builder()
                 .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
-                .setResolution(new PrintAttributes.Resolution("stasiuncuaca", pref("app_title", "STASIUN CUACA"), 300, 300))
+                .setResolution(new PrintAttributes.Resolution("turus", "STASIUN CUACA", 300, 300))
                 .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
                 .build();
     }
@@ -119,18 +120,18 @@ public class PdfReportActivity extends BaseActivity {
     private String fileName() {
         String crop = pref("crop", "Tanaman").trim().replaceAll("[^A-Za-z0-9_-]+", "_");
         String date = LocalDate.now(WIB).format(DateTimeFormatter.BASIC_ISO_DATE);
-        return "STASIUN-CUACA_LAPORAN_" + crop + "_" + date + ".pdf";
+        return "STASIUN-CUACA-DESA-TURUS_LAPORAN_" + crop + "_" + date + ".pdf";
     }
 
     private File buildPdf(boolean complete) throws Exception {
         android.content.SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
         File dir = new File(getCacheDir(), "reports");
         if (!dir.exists() && !dir.mkdirs()) throw new Exception("Folder laporan gagal dibuat");
-        File out = File.createTempFile("stasiuncuaca_report_", ".pdf", dir);
+        File out = File.createTempFile("turus_report_", ".pdf", dir);
 
         PdfDocument doc = new PdfDocument();
         ReportCanvas rc = new ReportCanvas(doc);
-        rc.heading(pref("app_title", "STASIUN CUACA"));
+        rc.heading("STASIUN CUACA • GANI CAHYO-UNS");
         rc.subheading("Laporan " + (complete ? "Lengkap" : "Ringkas") + " - Open-Meteo + Agronomi");
         rc.meta("Dicetak: " + java.time.ZonedDateTime.now(WIB).format(PRINT_DATE) + " WIB");
         rc.meta("Komoditas: " + pref("crop", "Tanaman pertanian") + " | Budidaya: " + pref("farm_cultivation_mode", "Konvensional / PHT"));
@@ -210,21 +211,29 @@ public class PdfReportActivity extends BaseActivity {
 
     private void addAgronomyAnalysis(ReportCanvas rc, android.content.SharedPreferences p) {
         rc.section("3. ANALISIS AGRONOMI");
-        String savedAgro = pref("last_agronomy_analysis", "");
-        String savedField = pref("last_field_analysis", "");
-        long agroEpoch = getSharedPreferences(PREFS, MODE_PRIVATE).getLong("last_agronomy_analysis_epoch", 0L);
-        long fieldEpoch = getSharedPreferences(PREFS, MODE_PRIVATE).getLong("last_field_analysis_epoch", 0L);
-        String saved;
-        if (!savedAgro.trim().isEmpty() && agroEpoch >= fieldEpoch) saved=savedAgro;
-        else if (!savedField.trim().isEmpty()) saved=savedField;
-        else saved=savedAgro;
+        String saved = pref("last_field_analysis", "");
+        if (saved.trim().isEmpty()) saved = pref("last_agronomy_analysis", "");
         if (saved.trim().isEmpty()) {
             double n = num(pref("soil_n", "")), pp = num(pref("soil_p", "")), k = num(pref("soil_k", ""));
             double nLow = num(pref("soil_n_low", "")), nHigh = num(pref("soil_n_high", ""));
             String method = pref("soil_test_method", "Metode tidak diketahui");
             String crop = pref("crop", "Tanaman pertanian"); int hst = (int)Math.round(num(pref("farm_hst", "-1")));
             rc.text("Belum ada analisis tersimpan. Ringkasan otomatis: fase " + AgronomyEngine.phase(hst, crop) + "; N " + AgronomyEngine.classifyN(n,nLow,nHigh) + "; P " + AgronomyEngine.classifyP(pp,method) + "; K " + AgronomyEngine.classifyK(k,method) + "; VPD " + AgronomyEngine.classifyVpd(num(pref("om_vpd", ""))) + ".");
-        } else rc.text(saved);
+        } else {
+            // Preserve paragraph breaks in the farmer-friendly saved analysis.
+            String[] paragraphs = saved.split("\n", -1);
+            boolean firstLine = true;
+            for (String paragraph : paragraphs) {
+                String line = paragraph == null ? "" : paragraph.trim();
+                if (line.isEmpty()) {
+                    rc.gap(4f);
+                    continue;
+                }
+                if (firstLine || line.matches("^[0-9]+\\. .*")) rc.subheading(line);
+                else rc.text(line);
+                firstLine = false;
+            }
+        }
         rc.line();
     }
 
@@ -388,6 +397,7 @@ public class PdfReportActivity extends BaseActivity {
         void meta(String s){need(16);wrap(s,small,16);}
         void section(String s){need(25);y+=8;c.drawText(s,LEFT,y,head);y+=17;}
         void line(){need(12);c.drawLine(LEFT,y,W-RIGHT,y,line);y+=9;}
+        void gap(float h){need(h);y+=h;}
         void kv(String k,String v){need(17);c.drawText(k+":",LEFT,y,body);wrap("  "+v,body,17,145);}
         void text(String s){wrap(s,body,16);}
         void tableHeader(String[] cells, float[] widths){

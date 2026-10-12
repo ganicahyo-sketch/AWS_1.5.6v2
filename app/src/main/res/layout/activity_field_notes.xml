@@ -32,7 +32,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="v1.5.6 • OPEN-METEO + AGRONOMI • TANAH • PUPUK • OPT"
+                android:text="v1.5.7 • OPEN-METEO + AGRONOMI • TANAH • PUPUK • OPT"
                 android:textColor="@color/cyan"
                 android:textSize="14sp"
                 android:letterSpacing="0.08"/>
@@ -223,7 +223,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="2. SENSOR TANAH CWT-7IN1"
+                    android:text="2. SENSOR TANAH CWT-7IN1 / USB 8-IN-1"
                     android:textColor="@color/cyan"
                     android:textStyle="bold"
                     android:textSize="15sp"/>
@@ -231,7 +231,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="RS485 dan USB memakai parameter yang sama. Nilai sensor dianggap benar dan dipakai sebagai input analisis."
+                    android:text="USB 8-in-1 CH340/CH34x dideteksi otomatis. Nilai sensor diisi ke kolom di bawah; RS485 dan input manual tetap tersedia."
                     android:textColor="@color/text_muted"
                     android:textSize="14sp"
                     android:layout_marginTop="4dp"/>
@@ -248,6 +248,26 @@
                     android:id="@+id/fnSoilSource"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"/>
+
+                <TextView
+                    android:id="@+id/fnUsbSoilStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:text="USB Soil Meter 8-in-1: mencari perangkat saat USB/OTG terhubung…"
+                    android:textColor="@color/text_muted"
+                    android:textSize="13sp"/>
+
+                <TextView
+                    android:id="@+id/fnUsbSoilScan"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center"
+                    android:text="DETEKSI / BACA USB SOIL METER"
+                    android:textColor="@color/navy_950"
+                    android:textStyle="bold"
+                    android:background="@drawable/bg_button"/>
 
                 <TextView
                     android:layout_width="match_parent"
@@ -447,7 +467,7 @@
                     android:id="@+id/fnRain24"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
-                    android:hint="Curah hujan harian (00:00–24:00 waktu lokal, mm)"
+                    android:hint="Hujan 24 jam (mm)"
                     android:inputType="numberDecimal"
                     android:textColor="@color/text_main"
                     android:textColorHint="@color/text_muted"
@@ -477,7 +497,7 @@
                     android:id="@+id/fnPar"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
-                    android:hint="PPFD (µmol m⁻² s⁻¹); terukur sensor quantum atau estimasi Open-Meteo"
+                    android:hint="PPFD / PAR foton (µmol m⁻² s⁻¹), bila tersedia"
                     android:inputType="numberDecimal"
                     android:textColor="@color/text_main"
                     android:textColorHint="@color/text_muted"
@@ -672,8 +692,9 @@
                     android:layout_marginTop="7dp"
                     android:text="Belum ada analisis."
                     android:textColor="@color/text_main"
-                    android:textSize="14sp"
-                    android:lineSpacingExtra="2dp"/>
+                    android:textSize="15sp"
+                    android:lineSpacingExtra="6dp"
+                    android:lineSpacingMultiplier="1.08"/>
             </LinearLayout>
 
             <LinearLayout
@@ -707,8 +728,9 @@
                     android:layout_marginTop="7dp"
                     android:text="Pustaka: FAO-56 Penman–Monteith; FAO salinity/crop water; rekomendasi NPK Pertanian Indonesia 2024; review pH/amendment 2023; model VPD tanaman; model penyakit/leaf wetness APS; model degree-day Spodoptera frugiperda."
                     android:textColor="@color/text_muted"
-                    android:textSize="14sp"
-                    android:lineSpacingExtra="2dp"/>
+                    android:textSize="15sp"
+                    android:lineSpacingExtra="6dp"
+                    android:lineSpacingMultiplier="1.08"/>
             </LinearLayout>
 
             <LinearLayout

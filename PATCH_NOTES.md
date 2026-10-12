@@ -1,4 +1,11 @@
-# STASIUN CUACA • GANI CAHYO-UNS v1.5.6 — Open-Meteo + Agronomi
+## Perapian hasil analisis untuk petani
+- Hasil analisis di layar disusun ulang agar saran tindakan dibaca lebih dahulu, diikuti sumber data, kondisi tanah, perkiraan pupuk, cuaca, peringatan OPT, catatan kebun, dan rincian tambahan.
+- Antarbagian diberi jarak, judul dibuat lebih jelas, ukuran teks hasil analisis diperbesar, dan istilah teknis utama diberi penjelasan yang lebih mudah dipahami.
+- Dasar data dan ketidakpastian dijabarkan dengan bahasa sehari-hari; data asli tidak ditimpa asumsi/estimasi. Hasil mentah teknis tetap disimpan terpisah untuk menjaga jejak perhitungan.
+- PDF mempertahankan pergantian paragraf untuk analisis agronomi sehingga laporan tidak menjadi satu blok teks rapat.
+- Perubahan ini hanya menyentuh penyajian hasil; mesin hitung, nilai data, integrasi, dan fitur lainnya tidak sengaja diubah.
+
+# STASIUN CUACA • GANI CAHYO-UNS v1.5.7 — Open-Meteo + Agronomi
 
 Patch ini memperluas v1.5.3 dengan mesin analisis agronomi terpadu.
 
@@ -17,7 +24,7 @@ Patch ini memperluas v1.5.3 dengan mesin analisis agronomi terpadu.
 - Model degree-day untuk fase/serangga serta STCR-style nutrient balance untuk screening kebutuhan pupuk fase.
 - Catatan satu paragraf dengan kisi-kisi pengisian agar NLP/AI dapat membaca pola kejadian.
 - Konteks AI diperkuat dengan evidence brief dan histori Catatan Lapangan.
-- Arah angin ditampilkan sebagai 8 arah mata angin + Tenang/Variabel, tanpa derajat; format yang sama dipakai Field Notes, dashboard, dan CSV Open-Meteo.
+- Arah angin ditampilkan sebagai 16 mata angin + Tenang/Variabel, tanpa derajat.
 
 ## Batas penting
 Ambang N/P/K tersedia tidak universal karena metode ekstraksi, tanah, dan komoditas berbeda. Ambang di mesin adalah screening. Rekomendasi final mengutamakan PUTS, rekomendasi P/K spesifik lokasi, petak omisi, analisis laboratorium, atau persamaan STCR yang telah dikalibrasi.
@@ -73,43 +80,35 @@ Prediksi OPT bukan diagnosis. Verifikasi dengan gejala, populasi, luas serangan,
 - Tabel otomatis membungkus teks dan mengulang header ketika berganti halaman.
 - Histori tetap dimasukkan pada laporan ringkas maupun lengkap karena Print/Save adalah tempat tampilnya histori.
 
-## Build/UI correction - 2026-10-06
-- Fixed `CsvDownloadActivity.readAll(InputStream)` compile error reported by GitHub Actions run #25.
-- Added optional Light / Dark / System appearance selection in Settings.
-- Added theme-qualified colors and a theme-aware Activity base class only; weather, ThingSpeak, agronomy, history, CSV and PDF logic remain intact.
-- OpenAI API key remains blank by default.
+## Tambahan database kelapa sawit
+- Menambahkan `PalmOilAdvisor` sebagai lapisan basis pengetahuan spesifik kelapa sawit, TBM awal/TBM lanjut/TM.
+- Membaca N tersedia, P tersedia, K tersedia (mg/kg), EC sensor (µS/cm), pH, kelembapan, hujan dan RH dari input yang sudah ada.
+- Memberi prioritas pemeriksaan hara dan tindakan teknis kebun tanpa menyamakan pembacaan sensor murah dengan analisis laboratorium.
+- AI prompt meminta pencarian web wajib untuk sumber resmi PPKS/IOPRI dan OPT; melarang mengarang dosis resmi atau konversi langsung NPK sensor menjadi kg pupuk/pokok.
+- Menambahkan sumber resmi PPKS/IOPRI dan catatan keterbatasan sensor ke `SCIENTIFIC_SOURCES.md`.
+- Dosis final tetap memerlukan data tambahan (analisis daun/tanah, umur, jumlah pokok/ha, jenis tanah, produktivitas dan riwayat pemupukan), selaras dengan cakupan layanan rekomendasi PPKS.
 
 
-## Multi-provider AI
-- OpenAI tetap dipertahankan sebagai provider default dan tidak diubah endpoint/logikanya.
-- Ditambahkan Google Gemini melalui Gemini API resmi dengan Google Search grounding.
-- Ditambahkan OpenRouter Free sebagai alternatif untuk model-model gratis.
-- API key OpenAI/Gemini/OpenRouter tidak ditanam ke source; semua dimasukkan pengguna dan disimpan pada pengaturan lokal.
-- Tidak ada field ThingSpeak, data cuaca, analisis agronomi, histori, CSV, PDF, GPS, atau OpenAlex yang dihapus.
-
-## CSV filename follows application title — 2026-10-07
-- Semua nama file CSV ekspor sekarang mengambil judul aplikasi dari `app_title` pada Pengaturan/Konfigurasi.
-- Berlaku untuk ekspor ThingSpeak berdasarkan rentang tanggal, seluruh histori ThingSpeak, dan histori Open-Meteo.
-- Judul hanya disanitasi pada nama file (karakter terlarang diganti dan spasi dirapikan); judul yang tampil di aplikasi tidak diubah.
+## Patch lama penyinaran + refresh GPS perangkat
+- Dashboard Open-Meteo kini menampilkan `sunshine_duration` sebagai lama penyinaran matahari dalam jam/hari; nilainya tetap disimpan di `om_sun_hours` dan dipakai analisis agronomi.
+- CSV Open-Meteo hourly menyertakan `sunshine_hours` (durasi per jam, dikonversi dari detik); CSV daily menyertakan `sunshine_hours` dan `daylight_hours` (dua besaran berbeda).
+- Tombol GUNAKAN GPS HP kini meminta fix lokasi baru dari provider GPS dan/atau jaringan, bukan langsung memakai `getLastKnownLocation()` yang mungkin sudah lama. Koordinat terbaru yang diterima disimpan ke pengaturan, ditampilkan, lalu memicu pembaruan Open-Meteo. Ada batas tunggu 20 detik dan pesan jika perangkat tidak mendapat fix.
+- Tombol GPS pada Pengaturan meneruskan permintaan fix terbaru ke dashboard.
+- Fitur ThingSpeak, riwayat, catatan lapangan, analisis agronomi, dan ekspor CSV lain tidak dihapus atau sengaja diubah.
 
 
-## Sinkronisasi & CSV Open-Meteo — 2026-10-07
-- Memperbaiki compile blocker `fetchOpenAlex(...)` yang dipanggil oleh `AgronomyActivity` tetapi sebelumnya belum memiliki implementasi.
-- `AgronomyActivity` dirender ulang pada `onResume()` agar perubahan dari Field Notes/Settings langsung terlihat saat kembali.
-- Urutan sumber analisis pada PDF memprioritaskan `last_agronomy_analysis`, lalu fallback ke `last_field_analysis`.
-- Memperbaiki rekomendasi P/K agar kelas `Tinggi` dan `Sangat Tinggi` tidak terlewat ketika klasifikasi membawa keterangan basis/metode.
-- Cache Open-Meteo di Field Notes diperluas agar suhu terasa, titik embun, angin/gust, awan, visibilitas, UV, Shortwave, PAR, PPFD, sunshine, dan VPD sinkron dengan dashboard.
-- CSV Open-Meteo menjadi sumber utama pada halaman CSV, tetap mempertahankan ekspor ThingSpeak sebagai opsi.
-- CSV hourly menambahkan kolom PAR energi, PPFD dan VPD; arah angin diekspor sebagai nama mata angin, bukan derajat.
-- CSV daily menambahkan PPFD rata-rata/maksimum dan VPD rata-rata/maksimum yang dihitung dari data hourly Open-Meteo pada tanggal yang sama; arah angin dominan juga dikonversi ke mata angin.
-- Arah angin aplikasi diseragamkan menjadi 8 sektor: Utara, Timur Laut, Timur, Tenggara, Selatan, Barat Daya, Barat, Barat Laut. Label legacy 16 sektor tetap dapat dibaca saat migrasi data tersimpan.
+## Rilis 1.5.7 — lama penyinaran + GPS terbaru
+- Versi aplikasi dinaikkan menjadi 1.5.7 (versionCode 157).
+- Dashboard menampilkan lama penyinaran harian Open-Meteo (`sunshine_duration` → `om_sun_hours`).
+- CSV Open-Meteo hourly dan daily tetap menyertakan `sunshine_hours`; daily juga membedakan `daylight_hours`.
+- Tombol GUNAKAN GPS HP mengabaikan fix lokasi yang sudah kedaluwarsa saat listener baru dipasang, lalu menyimpan koordinat fix baru dan langsung memuat ulang data Open-Meteo. GPS diprioritaskan dengan batas akurasi 50 m; fix jaringan yang akurat (≤25 m) tetap dapat menjadi fallback. Batas tunggu tetap 20 detik.
+- Perubahan terisolasi; ekspor CSV ThingSpeak dan fitur aplikasi lainnya dipertahankan.
 
 
-## Definisi ilmiah dan sinkronisasi akhir — 2026-10-07
-- `fetchOpenAlex()` dibuat robust: kegagalan OpenAlex tidak lagi menggagalkan analisis AI utama; OpenAlex diposisikan sebagai sumber evidence pendukung.
-- P/K tidak lagi diuji dengan `equals()` terhadap string kelas mentah; engine sekarang membaca prefiks kelas sehingga keterangan metode seperti `Tinggi (P Olsen screening)` tetap diproses benar.
-- `FieldNotesActivity` kini memperbarui cache cuaca global `om_*` saat catatan manual disimpan, termasuk suhu, RH, tekanan, curah hujan harian, ET₀, PPFD, VPD dan arah angin. Nilai Open-Meteo yang tidak diinput manual tidak dipertahankan sebagai data terkini sehingga laporan tidak mencampur timestamp sumber yang berbeda.
-- Analisis terakhir diberi timestamp terpisah (`last_agronomy_analysis_epoch` dan `last_field_analysis_epoch`). PDF memilih analisis yang benar-benar paling baru, kemudian memakai fallback bila salah satu belum tersedia.
-- Terminologi cahaya diperjelas: PAR energi 400–700 nm, PPFD 400–700 nm dalam µmol m⁻² s⁻¹. PPFD dari Open-Meteo diberi label estimasi broadband; PPFD manual tidak dibalik menjadi PAR energi.
-- Istilah `Hujan 24 jam` diganti menjadi `Curah hujan harian (00:00–24:00 waktu lokal)` karena `precipitation_sum` Open-Meteo adalah agregasi hari kalender, bukan rolling 24 jam.
-- CSV Open-Meteo tetap mempertahankan PPFD/VPD dan arah angin berbasis mata angin tanpa kolom derajat.
+## v1.5.7 — alur rekomendasi pemupukan adaptif dan asal data
+- Analisis Catatan Lapangan menghitung ulang otomatis setelah input agronomi/cuaca berubah, pilihan metode uji atau budidaya berubah, data otomatis diperbarui, pembacaan USB masuk, atau riwayat pemupukan berubah. Perhitungan dibatasi debounce singkat agar tidak menghitung ulang pada setiap karakter secara berlebihan.
+- Laporan analisis membedakan nilai yang tersedia dari input/sensor/API/riwayat, parameter yang belum tersedia, dan nilai default/asumsi model. Tingkat ketidakpastian ditampilkan berdasarkan kelengkapan data.
+- Nilai estimasi hanya digunakan secara internal dalam perhitungan dan tidak ditulis ke kolom data asli. Data N/P/K yang hilang tidak dibuat seolah-olah hasil sensor/laboratorium; mesin memakai baseline kebutuhan komoditas/fase dan asumsi konservatif tanpa kredit kontribusi tanah untuk unsur yang belum diuji.
+- Ketika nilai asli baru masuk atau diperbarui, nilai itu langsung dipakai untuk analisis ulang; estimasi sementara tidak mengunci atau menimpa input pengguna, USB/RS485, ThingSpeak/Open-Meteo, atau riwayat.
+- Rekomendasi numerik tetap diberi label screening/STCR-style dan ketidakpastian, bukan dosis resmi spesifik lokasi. Data penting yang belum ada tetap dicantumkan agar pengguna tahu pengukuran yang perlu dilengkapi.
+- Fitur lama Open-Meteo, pemetaan ThingSpeak, OpenAlex, riwayat, analisis OPT, CSV, PDF, dan deteksi USB Soil Meter tetap dipertahankan.
