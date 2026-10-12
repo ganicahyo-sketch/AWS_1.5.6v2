@@ -1,15 +1,15 @@
 plugins { id 'com.android.application' }
 
 android {
-    namespace 'id.stasiuncuaca'
+    namespace 'id.turus.stasiuncuaca'
     compileSdk 36
 
     defaultConfig {
-        applicationId 'id.stasiuncuaca'
+        applicationId 'id.turus.stasiuncuaca'
         minSdk 26
         targetSdk 36
-        versionCode 157
-        versionName '1.5.7'
+        versionCode 156
+        versionName '1.5.6'
     }
 
     buildTypes {
@@ -27,10 +27,4 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-}
-
-
-dependencies {
-    // USB serial CH340/CH34x used by USB 8-in-1 soil meters.
-    implementation 'com.github.mik3y:usb-serial-for-android:3.9.0'
 }
