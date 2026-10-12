@@ -11,6 +11,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Required for the USB serial library declared in app/build.gradle.
+        maven { url = uri("https://jitpack.io") }
     }
 }
 

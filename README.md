@@ -1,3 +1,9 @@
+## Pembaruan tampilan hasil analisis
+Hasil analisis ditampilkan dalam kartu terpisah dengan saran tindakan di bagian awal. Istilah teknis disederhanakan dan laporan teknis asli tetap dipertahankan untuk konteks AI/laporan.
+
+## Pembaruan tampilan hasil analisis
+Hasil analisis ditampilkan dalam kartu terpisah dengan saran tindakan di bagian awal. Istilah teknis disederhanakan dan laporan teknis asli tetap dipertahankan untuk konteks AI/laporan.
+
 ## Hasil analisis yang mudah dibaca
 Bagian hasil analisis dibuat lebih ramah bagi petani: saran praktis diletakkan di awal, isi dipisahkan menjadi bagian pendek, istilah teknis disederhanakan, serta data yang belum lengkap dan tingkat ketidakpastian dijelaskan dengan bahasa sehari-hari. Rincian teknis tetap disertakan dan tersimpan terpisah.
 
@@ -54,3 +60,11 @@ USB Soil Meter 8-in-1: automatic USB-OTG detection for CH340/CH34x adapters (VID
 - Data kosong: tetap tampilkan estimasi awal berbasis profil komoditas, fase, dan baseline kebutuhan; ketidakpastian diberi label tinggi dan data asli yang perlu diukur dicantumkan.
 - Perubahan input, sensor USB, sumber cuaca, metode uji, budidaya, atau riwayat memicu hitung ulang otomatis.
 - Nilai asli tidak pernah diganti dengan angka estimasi. Estimasi hanya dipakai untuk perhitungan sementara dan digantikan otomatis ketika data asli tersedia.
+
+### Tampilan analisis yang lebih mudah dibaca
+Hasil analisis agronomi sekarang dipisah menjadi kartu-kartu per topik di Catatan Lapangan dan halaman Analisis Agronomi. Judul dan isi mempunyai jarak lebih longgar, saran tindakan lebih menonjol, dan istilah teknis umum dijelaskan dengan bahasa yang lebih sederhana. Isi mentah analisis tetap disimpan untuk konteks AI serta laporan; perubahan tampilan tidak mengganti data masukan atau rumus perhitungan.
+
+
+### Perbaikan build USB Soil Meter
+
+Jika membangun proyek ini, `settings.gradle` sudah menyertakan JitPack karena dependensi USB serial `com.github.mik3y:usb-serial-for-android:3.9.0` diambil dari repositori tersebut.

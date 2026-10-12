@@ -685,16 +685,35 @@
                     android:textStyle="bold"
                     android:textSize="15sp"/>
 
+                <!-- Hidden plain-text fallback remains available for errors/accessibility. Successful
+                     analyses are rendered below as individually spaced farmer-friendly cards. -->
                 <TextView
                     android:id="@+id/fnAnalysis"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="7dp"
-                    android:text="Belum ada analisis."
+                    android:text="Analisis belum tersedia. Lengkapi data kebun, lalu tekan tombol analisis."
                     android:textColor="@color/text_main"
-                    android:textSize="15sp"
+                    android:textSize="16sp"
                     android:lineSpacingExtra="6dp"
-                    android:lineSpacingMultiplier="1.08"/>
+                    android:lineSpacingMultiplier="1.10"
+                    android:visibility="gone"/>
+
+                <LinearLayout
+                    android:id="@+id/fnAnalysisCards"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Hasil analisis akan tampil di sini setelah tombol ANALISIS AGRONOMI SEKARANG ditekan."
+                        android:textColor="@color/text_muted"
+                        android:textSize="16sp"
+                        android:lineSpacingExtra="5dp" />
+                </LinearLayout>
             </LinearLayout>
 
             <LinearLayout

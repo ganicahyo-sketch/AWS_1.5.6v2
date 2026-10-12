@@ -112,3 +112,27 @@ Prediksi OPT bukan diagnosis. Verifikasi dengan gejala, populasi, luas serangan,
 - Ketika nilai asli baru masuk atau diperbarui, nilai itu langsung dipakai untuk analisis ulang; estimasi sementara tidak mengunci atau menimpa input pengguna, USB/RS485, ThingSpeak/Open-Meteo, atau riwayat.
 - Rekomendasi numerik tetap diberi label screening/STCR-style dan ketidakpastian, bukan dosis resmi spesifik lokasi. Data penting yang belum ada tetap dicantumkan agar pengguna tahu pengukuran yang perlu dilengkapi.
 - Fitur lama Open-Meteo, pemetaan ThingSpeak, OpenAlex, riwayat, analisis OPT, CSV, PDF, dan deteksi USB Soil Meter tetap dipertahankan.
+
+## Tampilan analisis ramah petani — perbaikan keterbacaan lanjutan
+- Hasil di Catatan Lapangan tidak lagi berupa satu blok teks panjang; hasil dirender dalam kartu per bagian dengan jarak antarkartu, judul lebih besar, dan isi tiap poin dipisahkan.
+- Bagian saran tindakan diberi penekanan visual agar pembaca melihat langkah yang dapat dilakukan terlebih dahulu. Profil tanaman/cara budidaya/tahap tanaman dipisahkan dari uraian.
+- Halaman Analisis Agronomi juga dibagi menjadi bagian kondisi tanah, pemeriksaan parameter, perkiraan pupuk, cuaca/air, peringatan hama-penyakit, saran tindakan, serta catatan metode.
+- Istilah teknis umum diganti atau dijelaskan dengan bahasa Indonesia yang lebih sehari-hari. Catatan bahwa perkiraan bukan hasil laboratorium tetap ditampilkan.
+- Jawaban AI mendapat jarak antarbaris dan penekanan visual pada judul bagian; isi jawaban aslinya tetap disimpan.
+- Laporan PDF menggunakan teks isi yang lebih besar dan jarak baris/paragraf yang lebih longgar agar lebih nyaman dibaca/ dicetak.
+- Perhitungan, input asli, estimasi, sejarah, Open-Meteo, OpenWeather, OpenAlex, analisis OPT, CSV, serta dukungan USB Soil Meter tidak sengaja diubah.
+- Pemeriksaan XML dan integritas ZIP dilakukan. Build APK belum diverifikasi di lingkungan ini karena Gradle/Android build dependencies tidak tersedia secara lokal dan unduhan Gradle memerlukan jaringan.
+
+## Penyajian hasil analisis — pembacaan petani
+- Hasil pada halaman Analisis Agronomi kini dipisahkan menjadi kartu dengan judul, jarak, dan ukuran tulisan yang lebih jelas.
+- Bagian saran tindakan ditampilkan terlebih dahulu; pemeriksaan tanah, kebutuhan pupuk, cuaca, peringatan OPT, rincian tambahan, dan catatan teknis diletakkan setelahnya.
+- Istilah seperti N/P/K, EC, pH, VPD, dan kg/ha dijelaskan dengan kata yang lebih umum.
+- Laporan teknis asli tetap disimpan untuk konteks AI/PDF; perubahan ini hanya mengatur cara hasil ditampilkan.
+
+
+## Perbaikan build Actions — 12 Oktober 2026
+
+- Menambahkan repositori JitPack ke `dependencyResolutionManagement.repositories` pada `settings.gradle`.
+- Perubahan ini memperbaiki resolusi dependensi `com.github.mik3y:usb-serial-for-android:3.9.0` yang menyebabkan task `:app:processDebugNavigationResources` gagal di GitHub Actions run 38205864030.
+- Versi dependensi dan kode USB Soil Meter tidak diubah. Fitur lain tetap dipertahankan.
+- Build setelah patch perlu dikonfirmasi melalui GitHub Actions setelah ZIP diunggah.

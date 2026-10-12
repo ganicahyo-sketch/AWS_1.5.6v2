@@ -15,8 +15,11 @@ import android.text.style.ForegroundColorSpan;
 import android.text.style.RelativeSizeSpan;
 import android.text.style.StyleSpan;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.text.InputType;
 import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.AdapterView;
 import android.widget.EditText;
@@ -62,6 +65,7 @@ public class FieldNotesActivity extends Activity {
     private EditText airTemp, airRh, pressure, rain24, et0, lux, par, sunHours, windSpeed;
     private Spinner noteType, severity, soilSource, windDirection, cultivation;
     private TextView autoPhase, analysisView, timelineView, soilSummaryView, dataSourceStatus, usbSoilStatus;
+    private LinearLayout analysisCards;
     private UsbSoilMeter usbSoilMeter;
     private final ExecutorService net = Executors.newSingleThreadExecutor();
     private final Handler recalculationHandler = new Handler(Looper.getMainLooper());
@@ -161,10 +165,12 @@ public class FieldNotesActivity extends Activity {
 
         autoPhase = findViewById(R.id.fnAutoPhase);
         analysisView = findViewById(R.id.fnAnalysis);
-        // More breathing room and clearer visual hierarchy for non-technical readers.
-        analysisView.setTextSize(15);
-        analysisView.setLineSpacing(dp(6), 1.08f);
+        analysisCards = findViewById(R.id.fnAnalysisCards);
+        // Successful results use separate, readable cards rather than one dense wall of text.
+        analysisView.setTextSize(16);
+        analysisView.setLineSpacing(dp(6), 1.10f);
         analysisView.setPadding(0, dp(6), 0, dp(8));
+        analysisView.setVisibility(View.GONE);
         timelineView = findViewById(R.id.fnTimeline);
         soilSummaryView = findViewById(R.id.fnSoilSummary);
 
@@ -1015,6 +1021,206 @@ public class FieldNotesActivity extends Activity {
         return out.toString().trim();
     }
 
+    /** Presents the same calculated result as spacious cards for readers with little technical background. */
+    private void renderFarmerAnalysisCards(String text) {
+        if (analysisCards == null) {
+            analysisView.setVisibility(View.VISIBLE);
+            analysisView.setText(styleFarmerFriendlyAnalysis(text));
+            return;
+        }
+        analysisView.setVisibility(View.GONE);
+        analysisCards.setVisibility(View.VISIBLE);
+        analysisCards.removeAllViews();
+
+        String safe = text == null ? "" : text.trim();
+        String[] lines = safe.split("\\r?\\n");
+        String title = lines.length > 0 && !lines[0].trim().isEmpty() ? lines[0].trim() : "HASIL ANALISIS KEBUN";
+        TextView titleView = new TextView(this);
+        titleView.setText(title);
+        titleView.setTextColor(0xFF29C6C7);
+        titleView.setTextSize(20);
+        titleView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        titleView.setLineSpacing(dp(3), 1.05f);
+        titleView.setPadding(dp(2), dp(4), dp(2), dp(5));
+        analysisCards.addView(titleView, matchWrap());
+
+        // Crop, cultivation mode and plant stage are compact metadata, not part of the long report.
+        StringBuilder meta = new StringBuilder();
+        int cursor = 1;
+        for (; cursor < lines.length && cursor < 4; cursor++) {
+            String line = lines[cursor].trim();
+            if (line.isEmpty() || isFarmerSectionHeader(line) || line.startsWith("Catatan:")) break;
+            if (meta.length() > 0) meta.append("\n");
+            meta.append(line);
+        }
+        if (meta.length() > 0) addMetaCard(meta.toString());
+
+        StringBuilder intro = new StringBuilder();
+        int index = cursor;
+        while (index < lines.length && !isFarmerSectionHeader(lines[index].trim())) {
+            String line = lines[index].trim();
+            if (!line.isEmpty()) {
+                if (intro.length() > 0) intro.append(" ");
+                intro.append(line);
+            }
+            index++;
+        }
+        if (intro.length() > 0) addInfoCard("SEBELUM MENGIKUTI SARAN", intro.toString(), 0xFFFFD479);
+
+        String currentHeading = null;
+        ArrayList<String> bodyLines = new ArrayList<>();
+        for (; index < lines.length; index++) {
+            String line = lines[index].trim();
+            if (isFarmerSectionHeader(line)) {
+                if (currentHeading != null) addAnalysisSectionCard(currentHeading, bodyLines);
+                currentHeading = line;
+                bodyLines = new ArrayList<>();
+            } else if (!line.isEmpty()) {
+                bodyLines.add(line);
+            }
+        }
+        if (currentHeading != null) addAnalysisSectionCard(currentHeading, bodyLines);
+        if (analysisCards.getChildCount() <= 1) {
+            addInfoCard("HASIL BELUM TERSEDIA", "Lengkapi data kebun lalu tekan tombol ANALISIS AGRONOMI SEKARANG.", 0xFFFFD479);
+        }
+    }
+
+    private boolean isFarmerSectionHeader(String line) {
+        return line != null && (line.matches("^[1-9][0-9]*\\. .+") || line.equalsIgnoreCase("ARTI ISTILAH SEDERHANA"));
+    }
+
+    private void addMetaCard(String text) {
+        TextView view = new TextView(this);
+        view.setText(text);
+        view.setTextColor(0xFFC4D3DB);
+        view.setTextSize(14);
+        view.setLineSpacing(dp(3), 1.08f);
+        view.setPadding(dp(10), dp(7), dp(10), dp(7));
+        view.setBackground(roundBackground(0xFF102B3C, 0xFF214457));
+        LinearLayout.LayoutParams lp = matchWrap();
+        lp.bottomMargin = dp(8);
+        analysisCards.addView(view, lp);
+    }
+
+    private void addAnalysisSectionCard(String heading, ArrayList<String> bodyLines) {
+        boolean priority = heading.startsWith("1.");
+        int accent = priority ? 0xFFF3B64A : 0xFF29C6C7;
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(13), dp(12), dp(13), dp(12));
+        card.setBackground(roundBackground(priority ? 0xFF193747 : 0xFF122B3B, priority ? 0xFF80612C : 0xFF214457));
+        LinearLayout.LayoutParams cardLp = matchWrap();
+        cardLp.topMargin = dp(9);
+        analysisCards.addView(card, cardLp);
+
+        TextView title = new TextView(this);
+        title.setText(cleanSectionHeading(heading));
+        title.setTextColor(accent);
+        title.setTextSize(17);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        title.setLineSpacing(dp(2), 1.04f);
+        title.setPadding(0, 0, 0, dp(7));
+        card.addView(title, matchWrap());
+
+        if (bodyLines == null || bodyLines.isEmpty()) {
+            addBodyParagraph(card, "Belum ada informasi yang cukup untuk bagian ini.", false);
+            return;
+        }
+        for (String item : bodyLines) {
+            String line = item == null ? "" : item.trim();
+            if (line.isEmpty()) continue;
+            // Break apart bullet lists that were returned on one line by a data source.
+            String[] split = line.split("\\n");
+            for (String sub : split) {
+                String content = sub.trim();
+                if (content.isEmpty()) continue;
+                boolean bullet = content.startsWith("•") || content.startsWith("-");
+                if (bullet) content = content.replaceFirst("^[•-]\\s*", "");
+                addBodyParagraph(card, content, bullet);
+            }
+        }
+    }
+
+    private String cleanSectionHeading(String heading) {
+        if (heading == null) return "Hasil analisis";
+        String value = heading.replaceFirst("^[0-9]+\\.\\s*", "").trim();
+        value = value.replace("SARAN YANG BISA DILAKUKAN", "SARAN UNTUK KEBUN ANDA")
+                .replace("DATA DAN KEPASTIAN HASIL", "DATA YANG DIGUNAKAN")
+                .replace("PERKIRAAN KEBUTUHAN PUPUK", "PERKIRAAN KEBUTUHAN PUPUK")
+                .replace("PERINGATAN DINI HAMA / PENYAKIT", "WASPADA HAMA DAN PENYAKIT")
+                .replace("RINCIAN TAMBAHAN", "RINCIAN TAMBAHAN (BOLEH DIBACA BELAKANGAN)");
+        return value;
+    }
+
+    private void addBodyParagraph(LinearLayout parent, String text, boolean bullet) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.TOP);
+        LinearLayout.LayoutParams rowLp = matchWrap();
+        rowLp.topMargin = dp(3);
+        rowLp.bottomMargin = dp(5);
+        parent.addView(row, rowLp);
+
+        if (bullet) {
+            TextView marker = new TextView(this);
+            marker.setText("•");
+            marker.setTextColor(0xFF45D483);
+            marker.setTextSize(17);
+            marker.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+            marker.setPadding(0, 0, dp(8), 0);
+            row.addView(marker, new LinearLayout.LayoutParams(dp(18), -2));
+        }
+        TextView body = new TextView(this);
+        body.setText(text);
+        body.setTextColor(0xFFF0F4F6);
+        body.setTextSize(15.5f);
+        body.setLineSpacing(dp(5), 1.08f);
+        body.setIncludeFontPadding(true);
+        row.addView(body, new LinearLayout.LayoutParams(0, -2, 1f));
+    }
+
+    private void addInfoCard(String heading, String body, int accent) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(12), dp(10), dp(12), dp(11));
+        card.setBackground(roundBackground(0xFF173546, 0xFF3E5A67));
+        LinearLayout.LayoutParams lp = matchWrap();
+        lp.topMargin = dp(7);
+        lp.bottomMargin = dp(2);
+        analysisCards.addView(card, lp);
+        TextView title = new TextView(this);
+        title.setText(heading);
+        title.setTextColor(accent);
+        title.setTextSize(14);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        card.addView(title, matchWrap());
+        addBodyParagraph(card, body, false);
+    }
+
+    private GradientDrawable roundBackground(int color, int stroke) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(color);
+        bg.setCornerRadius(dp(13));
+        bg.setStroke(dp(1), stroke);
+        return bg;
+    }
+
+    private LinearLayout.LayoutParams matchWrap() {
+        return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+    }
+
+    private void renderFarmerAnalysisError(String message) {
+        if (analysisView != null) analysisView.setVisibility(View.GONE);
+        if (analysisCards == null) {
+            analysisView.setVisibility(View.VISIBLE);
+            analysisView.setText(message);
+            return;
+        }
+        analysisCards.setVisibility(View.VISIBLE);
+        analysisCards.removeAllViews();
+        addInfoCard("ANALISIS BELUM BERHASIL", message, 0xFFFFD479);
+    }
+
     private CharSequence styleFarmerFriendlyAnalysis(String text) {
         SpannableString styled = new SpannableString(text == null ? "" : text);
         if (styled.length() == 0) return styled;
@@ -1214,14 +1420,14 @@ public class FieldNotesActivity extends Activity {
 
             String compact = compactAnalysis(s.toString());
             String readable = formatFarmerFriendlyAnalysis(compact);
-            analysisView.setText(styleFarmerFriendlyAnalysis(readable));
+            renderFarmerAnalysisCards(readable);
             // Keep the technical source text too; the readable version is used by the PDF/report.
             prefs.edit().putString("last_field_analysis_raw", compact)
                     .putString("last_field_analysis", readable).apply();
             soilSummaryView.setText(buildSoilSummary());
             timelineView.setText(buildTimeline(prefs, c));
         } catch (Exception ex) {
-            analysisView.setText("Analisis gagal dihitung: " + (ex.getMessage() == null ? "data belum lengkap" : ex.getMessage()));
+            renderFarmerAnalysisError("Analisis belum berhasil dihitung. Periksa kembali data kebun yang diisi.\n\nRincian: " + (ex.getMessage() == null ? "data belum lengkap" : ex.getMessage()));
         }
     }
 

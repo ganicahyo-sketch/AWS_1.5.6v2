@@ -386,9 +386,9 @@ public class PdfReportActivity extends Activity {
 
     private static final class ReportCanvas {
         private static final int W=595,H=842,LEFT=40,RIGHT=40,TOP=42,BOTTOM=42;
-        private final PdfDocument doc; private PdfDocument.Page page; private Canvas c; private Paint title,head,body,small,line; private float y;
+        private final PdfDocument doc; private PdfDocument.Page page; private Canvas c; private Paint title,head,body,paragraph,small,line; private float y;
         private String[] lastTableHeader; private float[] lastTableWidths;
-        ReportCanvas(PdfDocument doc){this.doc=doc; title=p(20,true);head=p(13,true);body=p(10,false);small=p(8,false);line=p(1,false);newPage();}
+        ReportCanvas(PdfDocument doc){this.doc=doc; title=p(20,true);head=p(14,true);body=p(10,false);paragraph=p(11.5f,false);small=p(9,false);line=p(1,false);newPage();}
         private Paint p(float size,boolean bold){Paint x=new Paint(Paint.ANTI_ALIAS_FLAG);x.setColor(0xFF16232D);x.setTextSize(size);x.setTypeface(bold?Typeface.create(Typeface.DEFAULT,Typeface.BOLD):Typeface.DEFAULT);return x;}
         private void newPage(){if(page!=null)doc.finishPage(page);page=doc.startPage(new PdfDocument.PageInfo.Builder(W,H,doc.getPages().size()+1).create());c=page.getCanvas();y=TOP;if(lastTableHeader!=null)tableHeaderInternal(lastTableHeader,lastTableWidths);}
         private void need(float h){if(y+h>BOTTOM){newPage();y=TOP;}}
@@ -399,7 +399,7 @@ public class PdfReportActivity extends Activity {
         void line(){need(12);c.drawLine(LEFT,y,W-RIGHT,y,line);y+=9;}
         void gap(float h){need(h);y+=h;}
         void kv(String k,String v){need(17);c.drawText(k+":",LEFT,y,body);wrap("  "+v,body,17,145);}
-        void text(String s){wrap(s,body,16);}
+        void text(String s){wrap(s,paragraph,19);}
         void tableHeader(String[] cells, float[] widths){
             lastTableHeader=cells.clone(); lastTableWidths=widths.clone();
             tableHeaderInternal(cells,widths);
@@ -434,7 +434,24 @@ public class PdfReportActivity extends Activity {
             return result.isEmpty()?new String[]{""}:result.toArray(new String[0]);
         }
         private void wrap(String s,Paint paint,float lh){wrap(s,paint,lh,LEFT);}
-        private void wrap(String s,Paint paint,float lh,float x){if(s==null)return;String t=s.replace('\n',' ');String[] words=t.split("\\s+");String cur="";float max=W-RIGHT-x;for(String w:words){String nxt=cur.isEmpty()?w:cur+" "+w;if(paint.measureText(nxt)>max){need(lh);c.drawText(cur,x,y,paint);y+=lh;cur=w;}else cur=nxt;}if(!cur.isEmpty()){need(lh);c.drawText(cur,x,y,paint);y+=lh;}}
+        private void wrap(String s,Paint paint,float lh,float x){
+            if(s==null)return;
+            String[] paragraphs=s.split("\\n",-1);
+            float max=W-RIGHT-x;
+            for(int pi=0;pi<paragraphs.length;pi++){
+                String t=paragraphs[pi].trim();
+                if(t.isEmpty()){y+=Math.max(4f,lh*0.40f);continue;}
+                String[] words=t.split("\\s+");String cur="";
+                for(String w:words){
+                    String nxt=cur.isEmpty()?w:cur+" "+w;
+                    if(paint.measureText(nxt)>max&&!cur.isEmpty()){
+                        need(lh);c.drawText(cur,x,y,paint);y+=lh;cur=w;
+                    }else cur=nxt;
+                }
+                if(!cur.isEmpty()){need(lh);c.drawText(cur,x,y,paint);y+=lh;}
+                if(pi<paragraphs.length-1)y+=2f;
+            }
+        }
         void finish(File out)throws Exception{if(page!=null)doc.finishPage(page);try(FileOutputStream f=new FileOutputStream(out)){doc.writeTo(f);}doc.close();}
     }
 }
