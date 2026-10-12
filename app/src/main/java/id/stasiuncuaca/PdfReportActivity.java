@@ -188,6 +188,9 @@ public class PdfReportActivity extends Activity {
         String method=pref("soil_test_method","Metode tidak diketahui");
         rc.section("2. TANAH CWT-7IN1 + LABORATORIUM");
         rc.kv("Sumber sensor",pref("soil_source","CWT-7IN1 RS485 / USB"));
+        if (cp.source != null && cp.source.toLowerCase(java.util.Locale.US).contains("profil hortikultura screening")) {
+            rc.kv("Catatan profil sayuran","Kisaran dan baseline hara adalah perkiraan awal, bukan dosis resmi. Verifikasi dengan varietas, ketinggian, hasil uji tanah, target hasil, dan rekomendasi setempat.");
+        }
         rc.kv("Metode N/P/K",method);
         rc.kv("pH",show(ph)+" -> "+AgronomyEngine.classifyPH(ph,cp));
         rc.kv("Tindakan pH",AgronomyEngine.limeAdvice(ph,cp,pref("farm_cultivation_mode","Konvensional / PHT"),phBuf,al,hd,cec,om,lime));

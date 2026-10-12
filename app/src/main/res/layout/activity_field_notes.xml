@@ -108,7 +108,7 @@
                     android:id="@+id/fnCrop"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
-                    android:hint="Tanaman/komoditas"
+                    android:hint="Tanaman/komoditas (mis. padi, kedelai, brokoli, sawi, wortel)"
                     android:textColor="@color/text_main"
                     android:textColorHint="@color/text_muted"
                     android:singleLine="true"/>

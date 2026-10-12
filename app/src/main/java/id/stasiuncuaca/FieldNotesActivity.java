@@ -1324,6 +1324,9 @@ public class FieldNotesActivity extends Activity {
             double vpd = AgronomyEngine.vpd(at, rh);
             double[] credit = fertilizerCredit(prefs, c, 90);
             double targetYieldValue = num(targetYield.getText().toString());
+            // Read these fields before provenance reporting; the report uses them to explain
+            // whether soil-stock calculations rely on a user value or a model default.
+            double depth = num(soilDepth.getText().toString()), bd = num(soilBulkDensity.getText().toString());
 
             StringBuilder s = new StringBuilder();
             s.append("ANALISIS AGRONOMI TERPADU • ").append(p.name).append("\n");
@@ -1337,7 +1340,6 @@ public class FieldNotesActivity extends Activity {
             String methodName = soilTestMethod.getSelectedItem().toString();
             double phBuffer = num(soilPhBuffer.getText().toString()), alDd = num(soilAlDd.getText().toString()), hDd = num(soilHDd.getText().toString()), cec = num(soilCec.getText().toString()), om = num(soilOm.getText().toString());
             double ece = num(soilEce.getText().toString()), limeLab = num(soilLimeReq.getText().toString());
-            double depth = num(soilDepth.getText().toString()), bd = num(soilBulkDensity.getText().toString());
             double fc = num(soilFc.getText().toString()), pwp = num(soilPwp.getText().toString());
             s.append("Metode uji tanah: ").append(methodName).append("\n");
             s.append("pH-buffer: ").append(show(phBuffer)).append("; Al-dd: ").append(show(alDd)).append("; H-dd: ").append(show(hDd)).append("; CEC: ").append(show(cec)).append("; bahan organik: ").append(show(om)).append(" %\n");
@@ -1393,6 +1395,9 @@ public class FieldNotesActivity extends Activity {
             if (!Double.isNaN(sunVal)) s.append("Lama penyinaran: ").append(show(sunVal)).append(" jam/hari.\n");
             s.append("Arah angin: ").append(windDirection.getSelectedItem()).append("; kecepatan: ").append(show(wind)).append(" m/s.\n");
             s.append("Kisaran suhu rujukan screening komoditas: ").append(show(p.tempMin)).append("–").append(show(p.tempMax)).append(" °C.\n");
+            if (p.source != null && p.source.toLowerCase(Locale.US).contains("profil hortikultura screening")) {
+                s.append("Catatan profil sayuran: umur, kisaran pH/suhu dan kebutuhan hara adalah perkiraan awal; sesuaikan varietas, ketinggian, analisis tanah, target hasil dan pedoman lokal.\n");
+            }
 
             s.append("\n5. PREDIKSI POTENSI OPT (BERDASARKAN CUACA + RIWAYAT)\n");
             s.append(AgronomyEngine.optRisk(c, at, rh, rain, wind, recentOptSummary(prefs, c))).append("\n");

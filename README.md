@@ -68,3 +68,12 @@ Hasil analisis agronomi sekarang dipisah menjadi kartu-kartu per topik di Catata
 ### Perbaikan build USB Soil Meter
 
 Jika membangun proyek ini, `settings.gradle` sudah menyertakan JitPack karena dependensi USB serial `com.github.mik3y:usb-serial-for-android:3.9.0` diambil dari repositori tersebut.
+
+
+## Profil komoditas hortikultura tambahan (v1.5.7)
+Profil screening kini mencakup kembang kol, brokoli, selada, sawi, kale, wortel, kubis, pakcoy, kailan, bayam, kangkung, dan sayuran daun umum. Nama lokal/Inggris seperti cauliflower, broccoli, lettuce, mustard greens, bok choy, gai lan, carrot, amaranth, dan water spinach dikenali otomatis. Fase tanaman menyesuaikan organ panen (krop, daun, atau akar). Baseline nutrisi tetap perkiraan awal dan harus diverifikasi dengan varietas, elevasi, analisis tanah, target hasil dan rekomendasi setempat.
+
+
+## Perbaikan build run 38208610702
+
+Dua kesalahan kompilasi Java diperbaiki: variabel `depth`/`bd` sekarang dideklarasikan sebelum laporan asal data menggunakannya di `FieldNotesActivity`, dan `CsvDownloadActivity` mendapat helper `readAll(InputStream)` untuk respons JSON. Profil tanaman sayuran, dependensi USB serial/JitPack, serta fitur lain tetap disertakan. Build APK penuh belum diklaim lulus; validasi akhir dilakukan melalui GitHub Actions.

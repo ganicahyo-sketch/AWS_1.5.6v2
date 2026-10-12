@@ -80,6 +80,9 @@ public class AgronomyActivity extends Activity {
         StringBuilder s=new StringBuilder();
         s.append("ANALISIS AGRONOMI TERPADU v1.5.7\n\n");
         s.append("KOMODITAS: ").append(crop).append("\nMODE: ").append(mode).append("\nHST: ").append(hst<0?"--":hst).append("\nFASE: ").append(AgronomyEngine.phase(hst,crop)).append("\nLUAS: ").append(pref("farm_area_ha","--")).append(" ha\nTARGET HASIL: ").append(pref("farm_target_yield_t_ha","--")).append(" t/ha\n\n");
+        if (cp.source != null && cp.source.toLowerCase(Locale.US).contains("profil hortikultura screening")) {
+            s.append("CATATAN PROFIL SAYURAN: kisaran pH/suhu, umur panen dan kebutuhan hara adalah perkiraan awal. Sesuaikan dengan varietas, ketinggian, hasil uji tanah, target hasil dan rekomendasi setempat; jangan anggap angka ini sebagai dosis resmi.\n\n");
+        }
         s.append("1. TANAH\n");
         s.append("pH ").append(show(ph)).append(" -> ").append(AgronomyEngine.classifyPH(ph,cp)).append("\n");
         s.append("Metode N/P/K: ").append(method).append("\n");

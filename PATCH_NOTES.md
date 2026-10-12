@@ -136,3 +136,20 @@ Prediksi OPT bukan diagnosis. Verifikasi dengan gejala, populasi, luas serangan,
 - Perubahan ini memperbaiki resolusi dependensi `com.github.mik3y:usb-serial-for-android:3.9.0` yang menyebabkan task `:app:processDebugNavigationResources` gagal di GitHub Actions run 38205864030.
 - Versi dependensi dan kode USB Soil Meter tidak diubah. Fitur lain tetap dipertahankan.
 - Build setelah patch perlu dikonfirmasi melalui GitHub Actions setelah ZIP diunggah.
+
+
+## Penambahan profil sayuran — 12 Oktober 2026
+- Menambahkan profil agronomi screening untuk kembang kol, brokoli, selada, sawi, kale, wortel, kubis, pakcoy, kailan, bayam, kangkung, serta sayuran daun umum.
+- Menerima alias nama Indonesia dan Inggris (antara lain cauliflower, broccoli, lettuce, mustard greens, bok choy/pak choi, gai lan, carrot, amaranth, dan water spinach) agar input yang lazim tetap memperoleh profil yang benar.
+- Fase agronomi disesuaikan dengan organ panen: pembentukan krop/kepala untuk kembang kol/brokoli/kubis; pembentukan serta panen daun untuk tanaman daun; pembentukan/pembesaran akar untuk wortel.
+- Default hasil, rentang pH/suhu, durasi siklus dan baseline kebutuhan hara ditambahkan sebagai screening. Angka bukan dosis resmi; varietas, ketinggian, kondisi tanah, target hasil, hasil laboratorium dan rekomendasi lokal harus diperhitungkan.
+- Analisis OPT mendapat penapisan cuaca yang terbatas untuk kelompok Brassica, selada, wortel dan sayuran daun; gejala/populasi lapangan tetap diperlukan untuk memastikan penyebab dan keputusan pengendalian.
+- Dependensi USB serial dan repositori JitPack, GPS, Sunshine Duration, ThingSpeak, Open-Meteo, OpenAlex, riwayat, CSV/PDF dan fitur agronomi sebelumnya dipertahankan.
+
+
+## Perbaikan build Java — GitHub Actions run 38208610702
+
+- Memindahkan pembacaan `soil_depth_cm` dan bulk density ke sebelum `appendDataQualityAndProvenance(...)` di `FieldNotesActivity.java`, sehingga variabel `depth` dan `bd` sudah berada dalam cakupan saat dipakai.
+- Menambahkan helper `readAll(InputStream)` pada `CsvDownloadActivity.java` untuk membaca respons JSON Open-Meteo sebagai UTF-8 dan menutup stream dengan aman. Helper ini menyelesaikan pemanggilan yang sebelumnya tidak memiliki deklarasi sehingga `javac` gagal.
+- Tidak mengubah rumus rekomendasi pupuk maupun perilaku input data; perubahan hanya memperbaiki dua error kompilasi yang disebutkan log run tersebut.
+- Repositori JitPack untuk dependensi USB serial tetap disertakan. ZIP telah diperiksa integritasnya; build Android penuh tetap perlu dikonfirmasi oleh GitHub Actions karena Gradle tidak tersedia secara lokal di lingkungan ini.
