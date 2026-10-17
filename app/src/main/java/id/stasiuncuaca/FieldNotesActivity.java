@@ -46,7 +46,7 @@ import java.util.concurrent.Executors;
 /**
  * Catatan Lapangan + mesin analisis agronomi v1.5.7.
  *
- * Semua nilai CWT-7in1 (RS485/USB) dianggap benar sebagai input proyek.
+ * Data CWT-7in1 RS485 dan USB Soil Meter 8-in-1 (CH34x) tetap dibedakan sebagai sumber input.
  * Interpretasi tetap diberi label screening bila standar sangat tergantung
  * metode ekstraksi/laboratorium.
  */
@@ -81,7 +81,7 @@ public class FieldNotesActivity extends Activity {
             "Tidak ada", "Ringan", "Sedang", "Berat", "Sangat berat"
     };
     private static final String[] SOIL_SOURCE = {
-            "CWT-7in1 RS485", "CWT-7in1 USB", "Input manual"
+            "CWT-7in1 RS485", "USB Soil Meter 8-in-1 (CH34x)", "Input manual"
     };
     private static final String[] CULTIVATION = {
             "Konvensional / PHT", "Organik"
@@ -281,7 +281,7 @@ public class FieldNotesActivity extends Activity {
                 soilN.setText(String.format(Locale.US, "%.0f", v.nitrogen));
                 soilP.setText(String.format(Locale.US, "%.0f", v.phosphorus));
                 soilK.setText(String.format(Locale.US, "%.0f", v.potassium));
-                selectSpinner(soilSource, SOIL_SOURCE[3]);
+                selectSpinner(soilSource, SOIL_SOURCE[1]);
                 prefs.edit()
                     .putString("soil_moisture_pct", soilMoisture.getText().toString())
                     .putString("soil_temp_c", soilTemp.getText().toString())
@@ -290,7 +290,7 @@ public class FieldNotesActivity extends Activity {
                     .putString("soil_n", soilN.getText().toString())
                     .putString("soil_p", soilP.getText().toString())
                     .putString("soil_k", soilK.getText().toString())
-                    .putString("soil_source", SOIL_SOURCE[3]).apply();
+                    .putString("soil_source", SOIL_SOURCE[1]).apply();
                 soilSummaryView.setText(buildSoilSummary());
                 scheduleAnalysisRecalculation();
                 if (usbSoilStatus != null) usbSoilStatus.setText("USB 8-in-1 aktif • M=" + String.format(Locale.US, "%.1f", v.moisturePct)
@@ -453,11 +453,22 @@ public class FieldNotesActivity extends Activity {
                     .putInt("soil_bd_preset", bulkDensityPreset.getSelectedItemPosition())
                     .apply();
 
+            // Storage has completed successfully at this point. Do not report a save failure
+            // because a later UI refresh or agronomy analysis happens to throw.
             Toast.makeText(this, "Catatan lapangan tersimpan.", Toast.LENGTH_SHORT).show();
             observation.setText(""); action.setText("");
-            refreshViews(prefs); runAnalysis(prefs);
         } catch (Exception ex) {
-            Toast.makeText(this, "Catatan lapangan gagal disimpan.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Catatan lapangan gagal disimpan: " +
+                    (ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage()),
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            refreshViews(prefs);
+            runAnalysis(prefs);
+        } catch (Exception ex) {
+            Toast.makeText(this, "Catatan sudah tersimpan, tetapi tampilan analisis gagal diperbarui.",
+                    Toast.LENGTH_LONG).show();
         }
     }
 
@@ -1324,9 +1335,6 @@ public class FieldNotesActivity extends Activity {
             double vpd = AgronomyEngine.vpd(at, rh);
             double[] credit = fertilizerCredit(prefs, c, 90);
             double targetYieldValue = num(targetYield.getText().toString());
-            // Read these fields before provenance reporting; the report uses them to explain
-            // whether soil-stock calculations rely on a user value or a model default.
-            double depth = num(soilDepth.getText().toString()), bd = num(soilBulkDensity.getText().toString());
 
             StringBuilder s = new StringBuilder();
             s.append("ANALISIS AGRONOMI TERPADU • ").append(p.name).append("\n");
@@ -1340,6 +1348,7 @@ public class FieldNotesActivity extends Activity {
             String methodName = soilTestMethod.getSelectedItem().toString();
             double phBuffer = num(soilPhBuffer.getText().toString()), alDd = num(soilAlDd.getText().toString()), hDd = num(soilHDd.getText().toString()), cec = num(soilCec.getText().toString()), om = num(soilOm.getText().toString());
             double ece = num(soilEce.getText().toString()), limeLab = num(soilLimeReq.getText().toString());
+            double depth = num(soilDepth.getText().toString()), bd = num(soilBulkDensity.getText().toString());
             double fc = num(soilFc.getText().toString()), pwp = num(soilPwp.getText().toString());
             s.append("Metode uji tanah: ").append(methodName).append("\n");
             s.append("pH-buffer: ").append(show(phBuffer)).append("; Al-dd: ").append(show(alDd)).append("; H-dd: ").append(show(hDd)).append("; CEC: ").append(show(cec)).append("; bahan organik: ").append(show(om)).append(" %\n");
@@ -1360,9 +1369,9 @@ public class FieldNotesActivity extends Activity {
             s.append("Kelembapan tanah: ").append(show(moist)).append(" % → ").append(AgronomyEngine.classifyMoisture(moist, c)).append("\n");
             if (!Double.isNaN(st)) s.append("Suhu tanah: ").append(show(st)).append(" °C\n");
 
-            double nNeed = AgronomyEngine.nutrientNeed(n, "N", c, days, credit[0], targetYieldValue, methodName, depth, bd);
-            double pNeed = AgronomyEngine.nutrientNeed(pp, "P", c, days, credit[1], targetYieldValue, methodName, depth, bd);
-            double kNeed = AgronomyEngine.nutrientNeed(k, "K", c, days, credit[2], targetYieldValue, methodName, depth, bd);
+            double nNeed = AgronomyEngine.nutrientNeed(n, "N", c, days, credit[0], targetYieldValue, methodName, depth, bd, nLow, nHigh);
+            double pNeed = AgronomyEngine.nutrientNeed(pp, "P", c, days, credit[1], targetYieldValue, methodName, depth, bd, nLow, nHigh);
+            double kNeed = AgronomyEngine.nutrientNeed(k, "K", c, days, credit[2], targetYieldValue, methodName, depth, bd, nLow, nHigh);
             s.append("\n2. ANALISIS RENTANG SEMUA PARAMETER\n");
             s.append(AgronomyEngine.comprehensiveRangeAnalysis(
                     c, ph, n, nLow, nHigh, pp, k, ec, ece, moist, fc, pwp,
@@ -1376,7 +1385,9 @@ public class FieldNotesActivity extends Activity {
             if (!Double.isNaN(hDd)) s.append("H-dd: ").append(show(hDd)).append(" → interpretasi mengikuti metode laboratorium/lokasi.\n");
             s.append("\n3. KECUKUPAN NPK & PERKIRAAN DOSIS FASE\n");
             s.append("Kebutuhan screening fase ini: N ").append(show(nNeed)).append(" kg/ha, P2O5 ").append(show(pNeed)).append(" kg/ha, K2O ").append(show(kNeed)).append(" kg/ha.\n");
-            s.append("Kredit pupuk tercatat 90 hari: N ").append(show(credit[0])).append(", P2O5 ").append(show(credit[1])).append(", K2O ").append(show(credit[2])).append(" kg/ha.\n");
+            s.append("Rumus screening: ").append(AgronomyEngine.nutrientFormulaText()).append("\n");
+            if ("Komoditas umum".equals(p.name)) s.append("PERHATIAN: komoditas ini belum memiliki profil kebutuhan spesifik di aplikasi; angka memakai baseline umum dan tingkat ketidakpastian tinggi. Verifikasi dengan rekomendasi penyuluh/laboratorium setempat.\n");
+            s.append("Kredit pupuk tercatat 90 hari (jumlah hara nominal dari label): N ").append(show(credit[0])).append(", P2O5 ").append(show(credit[1])).append(", K2O ").append(show(credit[2])).append(" kg/ha; model hanya mengkreditkan fraksi pemulihan estimasi.\n");
             s.append("Interpretasi: status rendah → peluang respons pupuk lebih besar; sedang → dosis sebaiknya berimbang; tinggi → jangan menambah unsur tersebut tanpa alasan agronomis.\n");
             s.append("Catatan model: dosis di atas adalah STCR-style screening, bukan dosis legal/spesifik kabupaten. Bila tersedia rekomendasi PUTS, peta status hara, petak omisi, atau persamaan STCR lokal, gunakan itu sebagai prioritas.\n");
 
@@ -1395,9 +1406,6 @@ public class FieldNotesActivity extends Activity {
             if (!Double.isNaN(sunVal)) s.append("Lama penyinaran: ").append(show(sunVal)).append(" jam/hari.\n");
             s.append("Arah angin: ").append(windDirection.getSelectedItem()).append("; kecepatan: ").append(show(wind)).append(" m/s.\n");
             s.append("Kisaran suhu rujukan screening komoditas: ").append(show(p.tempMin)).append("–").append(show(p.tempMax)).append(" °C.\n");
-            if (p.source != null && p.source.toLowerCase(Locale.US).contains("profil hortikultura screening")) {
-                s.append("Catatan profil sayuran: umur, kisaran pH/suhu dan kebutuhan hara adalah perkiraan awal; sesuaikan varietas, ketinggian, analisis tanah, target hasil dan pedoman lokal.\n");
-            }
 
             s.append("\n5. PREDIKSI POTENSI OPT (BERDASARKAN CUACA + RIWAYAT)\n");
             s.append(AgronomyEngine.optRisk(c, at, rh, rain, wind, recentOptSummary(prefs, c))).append("\n");
@@ -1531,9 +1539,9 @@ public class FieldNotesActivity extends Activity {
         if (!Double.isNaN(ec) && ec / 1000.0 > p.ecThresholdDsM) s.append("• EC tinggi: kurangi pupuk pekat sekali aplikasi, periksa kualitas air, drainase, dan lakukan pemantauan ulang setelah hujan/irigasi.\n");
         if (!Double.isNaN(moist) && moist < 20) s.append("• Tanah kering: prioritaskan pemenuhan air sebelum memberi pupuk larut, lalu cek ulang kelembapan.\n");
         if (!Double.isNaN(moist) && moist > 85) s.append("• Tanah terlalu lembap: cek drainase dan tunda pupuk yang mudah hilang sampai kondisi memungkinkan.\n");
-        if (!Double.isNaN(n) && AgronomyEngine.classifyN(n,nLow,nHigh).equals("Rendah")) s.append("• N rendah: utamakan sumber N yang sesuai fase dan bagi aplikasi agar efisiensi lebih baik.\n");
-        if (!Double.isNaN(pp) && AgronomyEngine.classifyP(pp,methodName).equals("Tinggi")) s.append("• P tinggi: jangan menambah P secara rutin; fokuskan dosis pada unsur yang memang kurang.\n");
-        if (!Double.isNaN(k) && AgronomyEngine.classifyK(k,methodName).equals("Tinggi")) s.append("• K tinggi: jangan menambah K tanpa bukti kebutuhan; K dapat mengalami luxury consumption.\n");
+        if (!Double.isNaN(n) && (AgronomyEngine.classifyN(n,nLow,nHigh).startsWith("Rendah") || AgronomyEngine.classifyN(n,nLow,nHigh).startsWith("Sangat Rendah"))) s.append("• N rendah: utamakan sumber N yang sesuai fase dan bagi aplikasi agar efisiensi lebih baik.\n");
+        if (!Double.isNaN(pp) && (AgronomyEngine.classifyP(pp,methodName).startsWith("Tinggi") || AgronomyEngine.classifyP(pp,methodName).startsWith("Sangat Tinggi"))) s.append("• P tinggi: jangan menambah P secara rutin; fokuskan dosis pada unsur yang memang kurang.\n");
+        if (!Double.isNaN(k) && (AgronomyEngine.classifyK(k,methodName).startsWith("Tinggi") || AgronomyEngine.classifyK(k,methodName).startsWith("Sangat Tinggi"))) s.append("• K tinggi: jangan menambah K tanpa bukti kebutuhan; K dapat mengalami luxury consumption.\n");
         if (!Double.isNaN(vpd) && vpd > 2.0) s.append("• VPD tinggi: pantau layu; bila air tersedia, pertahankan kelembapan zona akar dan lakukan aplikasi pupuk pada waktu lebih sejuk.\n");
         if (!Double.isNaN(rain) && !Double.isNaN(e0) && rain < e0) s.append("• Air masuk < kebutuhan atmosfer: cek cadangan air tanah sebelum menetapkan irigasi.\n");
         if (!Double.isNaN(rh) && rh > 90 && !Double.isNaN(rain) && rain > 5) s.append("• RH + hujan tinggi: jadwalkan scouting penyakit lebih rapat; utamakan sanitasi, sirkulasi udara, dan PHT.\n");
@@ -1627,8 +1635,19 @@ public class FieldNotesActivity extends Activity {
     }
 
     private void appendHistory(SharedPreferences prefs, String key, JSONObject o, int max) throws Exception {
-        JSONArray old = new JSONArray(prefs.getString(key, "[]")); JSONArray out = new JSONArray();
-        int start = Math.max(0, old.length() - max + 1); for (int i = start; i < old.length(); i++) out.put(old.get(i)); out.put(o);
+        String raw = prefs.getString(key, "[]");
+        JSONArray old;
+        try {
+            old = new JSONArray(raw);
+        } catch (Exception corruptHistory) {
+            // Preserve a damaged history for recovery rather than blocking all new saves.
+            prefs.edit().putString(key + "_corrupt_backup", raw == null ? "" : raw).apply();
+            old = new JSONArray();
+        }
+        JSONArray out = new JSONArray();
+        int start = Math.max(0, old.length() - max + 1);
+        for (int i = start; i < old.length(); i++) out.put(old.get(i));
+        out.put(o);
         prefs.edit().putString(key, out.toString()).apply();
     }
 

@@ -22,7 +22,13 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** USB CH340/CH34x Modbus RTU reader for common USB soil 8-in-1 meters. */
+/**
+ * USB Soil Meter 8-in-1 Modbus RTU reader.
+ * The supplied Soil_Detector_1.0.2 APK contains CH34x support and identifies
+ * adapters 1A86:5512, 1A86:5523, 1A86:7523 and 1A86:E010. Keep these IDs aligned.
+ * Reads 8 registers when supported and falls back to two 4-register reads for
+ * firmware that limits a Modbus request to four registers.
+ */
 final class UsbSoilMeter {
     interface Listener {
         void onStatus(String status);
@@ -86,7 +92,7 @@ final class UsbSoilMeter {
         if (Build.VERSION.SDK_INT >= 33) context.registerReceiver(receiver, f, Context.RECEIVER_NOT_EXPORTED);
         else context.registerReceiver(receiver, f);
         receiverRegistered = true;
-        status("Mencari USB Soil Meter 8-in-1 (CH340/CH34x)…");
+        status("Mencari USB Soil Meter 8-in-1 (CH34x)…");
         handler.post(discoverTask);
     }
 
@@ -157,7 +163,7 @@ final class UsbSoilMeter {
             p.setParameters(BAUD, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
             p.setDTR(true); p.setRTS(true);
             connection = conn; port = p;
-            status("USB Soil Meter tersambung (CH340, " + BAUD + " baud). Membaca register Modbus…");
+            status("USB Soil Meter 8-in-1 tersambung (CH34x, " + BAUD + " baud). Membaca register Modbus…");
             readOnce();
         } catch (Exception e) {
             closePort(); status("Gagal membuka port serial: " + safeMessage(e));

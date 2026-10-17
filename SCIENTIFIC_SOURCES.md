@@ -1,4 +1,4 @@
-# Pustaka ilmiah dan sumber teknis — v1.5.6
+# Pustaka ilmiah dan sumber teknis — v1.5.7
 
 ## Evapotranspirasi, air tanah, dan cuaca
 - Allen, R.G. et al. (1998), FAO Irrigation and Drainage Paper 56 (FAO-56): Penman–Monteith reference ET0, crop coefficient Kc, crop ET, TAW/RAW/available soil water.

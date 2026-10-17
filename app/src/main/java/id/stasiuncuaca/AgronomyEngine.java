@@ -29,6 +29,7 @@ public final class AgronomyEngine {
         public final double nMin, nMax;
         public final double pMin, pMax;
         public final double kMin, kMax;
+        /** Seasonal nutrient baselines in kg/ha: N as N, P as P2O5, K as K2O. Screening defaults only. */
         public final double seasonalN, seasonalP, seasonalK;
         public final double tBase;
         public final String source;
@@ -62,7 +63,6 @@ public final class AgronomyEngine {
     public static CropProfile profile(String crop) {
         String c = norm(crop);
         String src = "FAO/Indonesia fertilizer baseline + crop ecology; verify local SOP.";
-        String vegSrc = "Profil hortikultura screening berdasarkan panduan budidaya TNAU/extension; siklus dan kebutuhan hara adalah asumsi awal, sesuaikan varietas, ketinggian, hasil uji tanah, target hasil dan rekomendasi lokal.";
         if (c.contains("padi") || c.contains("rice"))
             return new CropProfile("Padi",115,5.0,7.0,20,32,3.0,20,40,8,15,80,120,80,45,20,10,src);
         if (c.contains("jagung") || c.contains("maize") || c.contains("corn"))
@@ -81,32 +81,6 @@ public final class AgronomyEngine {
             return new CropProfile("Kentang",100,5.0,6.5,15,25,1.7,20,40,10,20,100,180,105,70,35,7,src);
         if (c.contains("bawang merah") || c.contains("shallot") || c.contains("onion"))
             return new CropProfile("Bawang",90,5.5,6.8,15,30,1.2,20,40,10,20,80,160,100,55,35,8,src);
-
-        // Vegetable profiles are screening defaults, not calibrated local fertilizer prescriptions.
-        if (c.contains("kembang kol") || c.contains("kubis bunga") || c.contains("cauliflower"))
-            return new CropProfile("Kembang kol",80,5.5,6.6,15,25,1.5,20,40,8,15,80,140,120,60,100,10,vegSrc);
-        if (c.contains("brokoli") || c.contains("broccoli"))
-            return new CropProfile("Brokoli",70,6.0,7.0,15,25,1.5,20,40,8,15,80,140,110,55,100,10,vegSrc);
-        if (c.contains("selada") || c.contains("lettuce"))
-            return new CropProfile("Selada",55,5.5,6.5,12,24,1.3,20,40,8,15,80,140,90,40,90,7,vegSrc);
-        if (c.contains("wortel") || c.contains("carrot"))
-            return new CropProfile("Wortel",80,5.5,7.0,15,24,1.0,20,40,8,15,80,140,70,40,120,7,vegSrc);
-        if (c.contains("kale"))
-            return new CropProfile("Kale",55,5.5,6.8,15,25,1.5,20,40,8,15,80,140,100,40,80,7,vegSrc);
-        if (c.contains("kailan") || c.contains("gai lan"))
-            return new CropProfile("Kailan",60,5.5,6.8,18,28,1.5,20,40,8,15,80,140,100,45,90,10,vegSrc);
-        if (c.contains("pakcoy") || c.contains("pak choi") || c.contains("bok choy") || c.contains("pokcoy"))
-            return new CropProfile("Pakcoy",45,5.5,6.8,18,28,1.5,20,40,8,15,80,140,90,40,80,10,vegSrc);
-        if (c.contains("sawi") || c.contains("mustard greens") || c.contains("caisim") || c.contains("caisin") || c.contains("choy sum"))
-            return new CropProfile("Sawi",40,5.5,6.5,18,30,1.5,20,40,8,15,80,140,80,35,65,10,vegSrc);
-        if (c.contains("bayam") || c.contains("amaranth") || c.equals("spinach") || (c.contains("spinach") && !c.contains("water spinach")))
-            return new CropProfile("Bayam",35,6.0,7.5,20,30,2.0,20,40,8,15,80,140,70,30,50,10,vegSrc);
-        if (c.contains("kangkung") || c.contains("water spinach") || c.contains("kangkong"))
-            return new CropProfile("Kangkung",35,5.5,7.0,24,32,2.0,20,40,8,15,80,140,70,30,50,12,vegSrc);
-        if (c.contains("sayuran daun") || c.contains("leafy greens") || c.contains("leafy vegetable") || c.equals("sayuran"))
-            return new CropProfile("Sayuran daun umum",45,5.5,6.8,18,30,1.5,20,40,8,15,80,140,80,35,65,10,vegSrc);
-        if (c.contains("kubis") || c.equals("kol") || c.contains("cabbage"))
-            return new CropProfile("Kubis",90,5.5,6.5,15,25,1.8,20,40,8,15,80,140,150,60,120,10,vegSrc);
         if (c.contains("kelapa sawit") || c.contains("sawit") || c.contains("oil palm"))
             return new CropProfile("Kelapa sawit",3650,4.0,7.0,25,32,2.5,20,40,8,15,100,180,120,60,180,15,src);
         return new CropProfile("Komoditas umum",120,5.5,7.0,18,32,2.0,20,40,8,15,80,140,80,40,30,10,src);
@@ -123,18 +97,6 @@ public final class AgronomyEngine {
         if (c.contains("ubi jalar") || c.contains("sweet potato")) return "Ubi jalar";
         if (c.contains("kentang") || c.contains("potato")) return "Kentang";
         if (c.contains("bawang merah") || c.contains("shallot") || c.contains("onion")) return "Bawang";
-        if (c.contains("kembang kol") || c.contains("kubis bunga") || c.contains("cauliflower")) return "Kembang kol";
-        if (c.contains("brokoli") || c.contains("broccoli")) return "Brokoli";
-        if (c.contains("selada") || c.contains("lettuce")) return "Selada";
-        if (c.contains("wortel") || c.contains("carrot")) return "Wortel";
-        if (c.contains("kale")) return "Kale";
-        if (c.contains("kailan") || c.contains("gai lan")) return "Kailan";
-        if (c.contains("pakcoy") || c.contains("pak choi") || c.contains("bok choy") || c.contains("pokcoy")) return "Pakcoy";
-        if (c.contains("sawi") || c.contains("mustard greens") || c.contains("caisim") || c.contains("caisin") || c.contains("choy sum")) return "Sawi";
-        if (c.contains("bayam") || c.contains("amaranth") || c.equals("spinach") || (c.contains("spinach") && !c.contains("water spinach"))) return "Bayam";
-        if (c.contains("kangkung") || c.contains("water spinach") || c.contains("kangkong")) return "Kangkung";
-        if (c.contains("sayuran daun") || c.contains("leafy greens") || c.contains("leafy vegetable") || c.equals("sayuran")) return "Sayuran daun umum";
-        if (c.contains("kubis") || c.equals("kol") || c.contains("cabbage")) return "Kubis";
         if (c.contains("kelapa sawit") || c.contains("sawit") || c.contains("oil palm")) return "Kelapa sawit";
         return crop == null || crop.trim().isEmpty() ? "Komoditas umum" : crop.trim();
     }
@@ -147,23 +109,6 @@ public final class AgronomyEngine {
             if (hst < 1095) return "TBM lanjut / vegetatif";
             return "TM / produksi";
         }
-        if (hst <= Math.max(12, (int)(p.cycleDays * 0.18))
-                && (isLeafyVegetable(p.name) || isHeadVegetable(p.name) || p.name.equals("Wortel")))
-            return "Awal tanam / pemulihan bibit";
-        if (isHeadVegetable(p.name)) {
-            if (hst <= (int)(p.cycleDays * 0.50)) return "Vegetatif / pembentukan daun";
-            if (hst <= (int)(p.cycleDays * 0.78)) return "Pembentukan krop/kepala (reproduktif)";
-            if (hst <= p.cycleDays) return "Pengisian hasil / pembesaran krop";
-        }
-        if (isLeafyVegetable(p.name)) {
-            if (hst <= (int)(p.cycleDays * 0.70)) return "Vegetatif / pembentukan dan pembesaran daun";
-            if (hst <= p.cycleDays) return "Panen daun / panen bertahap";
-        }
-        if (p.name.equals("Wortel")) {
-            if (hst <= (int)(p.cycleDays * 0.45)) return "Pembentukan tajuk dan akar";
-            if (hst <= (int)(p.cycleDays * 0.80)) return "Pembesaran akar / pengisian hasil";
-            if (hst <= p.cycleDays) return "Pematangan akar / siap panen";
-        }
         if (hst <= Math.max(20, (int)(p.cycleDays * 0.18))) return "Perkecambahan / establishment";
         if (hst <= Math.max(35, (int)(p.cycleDays * 0.45))) return "Vegetatif";
         if (hst <= Math.max(60, (int)(p.cycleDays * 0.68))) return "Pembungaan / reproduktif";
@@ -171,23 +116,13 @@ public final class AgronomyEngine {
         return "Lewat umur normal panen — verifikasi varietas/rotasi";
     }
 
-    private static boolean isHeadVegetable(String name) {
-        return "Kembang kol".equals(name) || "Brokoli".equals(name) || "Kubis".equals(name);
-    }
-
-    private static boolean isLeafyVegetable(String name) {
-        return "Selada".equals(name) || "Sawi".equals(name) || "Kale".equals(name)
-                || "Pakcoy".equals(name) || "Kailan".equals(name) || "Bayam".equals(name)
-                || "Kangkung".equals(name) || "Sayuran daun umum".equals(name);
-    }
-
     public static double stageFraction(int hst, String crop) {
         CropProfile p = profile(crop);
         String ph = phase(hst, crop).toLowerCase(Locale.US);
-        if (ph.contains("establishment") || ph.contains("awal tanam")) return 0.15;
+        if (ph.contains("establishment")) return 0.15;
         if (ph.contains("vegetatif")) return 0.30;
         if (ph.contains("reproduktif") || ph.contains("pembungaan")) return 0.35;
-        if (ph.contains("pengisian") || ph.contains("pemasakan") || ph.contains("pematangan akar")) return 0.20;
+        if (ph.contains("pengisian") || ph.contains("pemasakan")) return 0.20;
         return 0.25;
     }
 
@@ -632,9 +567,13 @@ public final class AgronomyEngine {
         if (nutrient.equals("N")) cls = classifyN(soilValue);
         else if (nutrient.equals("P")) cls = classifyP(soilValue);
         else cls = classifyK(soilValue);
-        if ("Rendah".equals(cls)) return "BELUM CUKUP / berpotensi membatasi fase ini";
-        if ("Sedang".equals(cls)) return "CUKUP SEMENTARA, tetapi sesuaikan dengan target hasil dan fase";
-        return "CUKUP–TINGGI; jangan menambah rutin tanpa dasar kebutuhan";
+        if (cls == null || cls.startsWith("Tidak ada data") || cls.startsWith("Metode/ambang"))
+            return "BELUM DAPAT DIKLASIFIKASIKAN — perlu hasil uji/metode dan ambang yang sesuai";
+        if (cls.startsWith("Sangat Rendah") || cls.startsWith("Rendah"))
+            return "RENDAH — berpotensi membatasi; gunakan kebutuhan komoditas/fase dan validasi metode uji";
+        if (cls.startsWith("Sedang"))
+            return "SEDANG — sesuaikan dengan target hasil, fase, dan rekomendasi lokal";
+        return "TINGGI–SANGAT TINGGI — hindari penambahan rutin tanpa dasar kebutuhan";
     }
 
     public static String classifyVpd(double vpd) {
@@ -673,29 +612,56 @@ public final class AgronomyEngine {
     }
 
     public static double nutrientNeed(double soilValue, String nutrient, String crop, int hst, double recentCreditKgHa, double yieldTargetTPerHa) {
-        return nutrientNeed(soilValue,nutrient,crop,hst,recentCreditKgHa,yieldTargetTPerHa,"",20,1.30);
+        return nutrientNeed(soilValue,nutrient,crop,hst,recentCreditKgHa,yieldTargetTPerHa,"",20,1.30,Double.NaN,Double.NaN);
     }
 
     public static double nutrientNeed(double soilValue, String nutrient, String crop, int hst, double recentCreditKgHa, double yieldTargetTPerHa, String method, double depthCm, double bulkDensityGcm3) {
-        CropProfile p=profile(crop);
-        double seasonal=nutrient.equals("N")?p.seasonalN:(nutrient.equals("P")?p.seasonalP:p.seasonalK);
-        double yieldScale=1.0;
-        if (Double.isFinite(yieldTargetTPerHa) && yieldTargetTPerHa>0) yieldScale=Math.max(0.5,Math.min(1.8,yieldTargetTPerHa/Math.max(0.1,defaultYield(p))));
-        double stageNeed=seasonal*stageFraction(hst,crop)*yieldScale;
-        double support=0; String cls;
-        if (nutrient.equals("N")) cls=classifyN(soilValue); else if (nutrient.equals("P")) cls=classifyP(soilValue,method); else cls=classifyK(soilValue,method);
-        if ("Rendah".equals(cls)) support=0.20;
-        else if ("Sedang".equals(cls)) support=0.50;
-        else if ("Tinggi".equals(cls)) support=0.80;
-        double gross=stageNeed*(1.0-support);
-        double recovery=nutrient.equals("N")?0.50:(nutrient.equals("P")?0.30:0.60);
-        double need=Math.max(0,gross/Math.max(0.1,recovery)-Math.max(0,recentCreditKgHa));
-        // The stock is reported separately; it is not treated as fully plant-available uptake.
-        return need;
+        return nutrientNeed(soilValue,nutrient,crop,hst,recentCreditKgHa,yieldTargetTPerHa,method,depthCm,bulkDensityGcm3,Double.NaN,Double.NaN);
     }
 
+    /**
+     * Screening kebutuhan hara per fase. P dan K pada keluaran dinyatakan sebagai
+     * P2O5 dan K2O (satuan konvensi label pupuk), sedangkan hasil uji tanah mg/kg
+     * hanya dipakai untuk kelas screening sesuai metode yang dipilih.
+     * Ambang N harus diisi sesuai metode/lab; tanpa ambang N tidak ada pengurangan
+     * kebutuhan berdasarkan N tanah. Ini mencegah klasifikasi N palsu.
+     */
+    public static double nutrientNeed(double soilValue, String nutrient, String crop, int hst,
+            double recentCreditKgHa, double yieldTargetTPerHa, String method, double depthCm,
+            double bulkDensityGcm3, double nLow, double nHigh) {
+        CropProfile p=profile(crop);
+        String nutrientKey = nutrient == null ? "N" : nutrient.trim().toUpperCase(Locale.US);
+        if (!nutrientKey.equals("N") && !nutrientKey.equals("P") && !nutrientKey.equals("K")) return 0;
+        double seasonal=nutrientKey.equals("N")?p.seasonalN:(nutrientKey.equals("P")?p.seasonalP:p.seasonalK);
+        double yieldScale=1.0;
+        if (Double.isFinite(yieldTargetTPerHa) && yieldTargetTPerHa>0)
+            yieldScale=Math.max(0.5,Math.min(1.8,yieldTargetTPerHa/Math.max(0.1,defaultYield(p))));
+        double stageNeed=seasonal*stageFraction(hst,crop)*yieldScale;
+        String cls;
+        if (nutrientKey.equals("N")) cls=classifyN(soilValue,nLow,nHigh);
+        else if (nutrientKey.equals("P")) cls=classifyP(soilValue,method);
+        else cls=classifyK(soilValue,method);
+
+        // Screening credit from soil-test class. Class labels may contain method notes.
+        // Missing/unknown results give zero soil credit rather than a fabricated class.
+        double support=0.0;
+        if (cls != null) {
+            if (cls.startsWith("Sangat Rendah")) support=0.0;
+            else if (cls.startsWith("Rendah")) support=0.20;
+            else if (cls.startsWith("Sedang")) support=0.50;
+            else if (cls.startsWith("Tinggi")) support=0.80;
+            else if (cls.startsWith("Sangat Tinggi")) support=0.90;
+        }
+        double grossRequirement=stageNeed*(1.0-support);
+        double recovery=nutrientKey.equals("N")?0.50:(nutrientKey.equals("P")?0.30:0.60);
+        // Fertilizer history is nominal nutrient (N, P2O5, K2O). Credit only its
+        // estimated recovered fraction, consistently with the same recovery factor.
+        double recoveredCredit=Math.max(0,Double.isFinite(recentCreditKgHa)?recentCreditKgHa:0)*recovery;
+        double remainingAvailable=Math.max(0,grossRequirement-recoveredCredit);
+        return remainingAvailable/Math.max(0.1,recovery);
+    }
     public static String nutrientFormulaText() {
-        return "Kebutuhan fase ≈ kebutuhan musim × fraksi fase × skala target hasil × (1−dukungan soil-test) ÷ efisiensi pemulihan − kredit pupuk. Stok tanah = konsentrasi × BD × kedalaman × 0,10 kg/ha; stok bukan serapan tanaman. Model ini screening/STCR-style, bukan QUEFTS atau STCR terkalibrasi.";
+        return "Estimasi pupuk fase (kg/ha) ≈ max(0, kebutuhan fase setelah dukungan soil-test − kredit hara pupuk terdahulu × efisiensi pemulihan) ÷ efisiensi pemulihan. P/K keluaran sebagai P2O5/K2O sesuai label pupuk; kelas tanah hanya screening sesuai metode ekstraksi. N hanya diklasifikasikan jika ambang N rendah/tinggi diisi sesuai lab. Stok tanah = konsentrasi × BD × kedalaman × 0,10 kg/ha; stok bukan serapan langsung. Model ini estimasi screening, bukan QUEFTS atau STCR terkalibrasi.";
     }
 
     private static double defaultYield(CropProfile p) {
@@ -704,14 +670,11 @@ public final class AgronomyEngine {
         if (p.name.equals("Kedelai")) return 2.5;
         if (p.name.equals("Tomat")) return 40;
         if (p.name.equals("Cabai")) return 8;
-        if (p.name.equals("Kembang kol")) return 20;
-        if (p.name.equals("Brokoli")) return 12;
-        if (p.name.equals("Selada")) return 20;
-        if (p.name.equals("Sawi") || p.name.equals("Kale") || p.name.equals("Kailan")) return 15;
-        if (p.name.equals("Pakcoy")) return 20;
-        if (p.name.equals("Bayam") || p.name.equals("Kangkung") || p.name.equals("Sayuran daun umum")) return 15;
-        if (p.name.equals("Wortel")) return 25;
-        if (p.name.equals("Kubis")) return 25;
+        if (p.name.equals("Singkong")) return 25;
+        if (p.name.equals("Ubi jalar")) return 15;
+        if (p.name.equals("Kentang")) return 20;
+        if (p.name.equals("Bawang")) return 12;
+        if (p.name.equals("Kelapa sawit")) return 20;
         return 5;
     }
 
@@ -777,48 +740,6 @@ public final class AgronomyEngine {
             double rust = (!Double.isNaN(rh) && rh >= 80 ? 35 : 0) + (!Double.isNaN(rain) && rain >= 5 ? 30 : 0) + (!Double.isNaN(t) && t >= 20 && t <= 28 ? 20 : 0);
             s.append("Kedelai — Phakopsora pachyrhizi (karat kedelai): ").append(level(rust)).append("; periksa pustula di bawah daun setelah periode lembap.");
             s.append("\nKedelai — hama pengisap/pemakan polong: risiko tidak dapat dipastikan hanya dari cuaca; masukkan populasi dan stadia ke catatan OPT.");
-        } else if (c.contains("kembang kol") || c.contains("kubis bunga") || c.contains("cauliflower")
-                || c.contains("brokoli") || c.contains("broccoli") || c.contains("kubis") || c.equals("kol") || c.contains("cabbage")
-                || c.contains("sawi") || c.contains("mustard greens") || c.contains("caisim") || c.contains("caisin")
-                || c.contains("kale") || c.contains("pakcoy") || c.contains("pak choi") || c.contains("bok choy")
-                || c.contains("kailan") || c.contains("gai lan")) {
-            double downy = (!Double.isNaN(rh) && rh >= 85 ? 35 : 0)
-                    + (!Double.isNaN(rain) && rain >= 5 ? 25 : 0)
-                    + (!Double.isNaN(t) && t >= 12 && t <= 25 ? 20 : 0);
-            s.append(normalizeCrop(crop)).append(" — embun bulu (Hyaloperonospora/kerabat pada Brassica): ")
-                    .append(weatherLevel(downy,t,rh,rain)).append(". Risiko meningkat pada daun yang lama basah; periksa bercak kuning dan pertumbuhan putih di bawah daun.");
-            double blackRot = (!Double.isNaN(rh) && rh >= 85 ? 25 : 0)
-                    + (!Double.isNaN(rain) && rain >= 10 ? 30 : 0)
-                    + (!Double.isNaN(t) && t >= 20 && t <= 30 ? 20 : 0);
-            s.append("\n").append(normalizeCrop(crop)).append(" — Xanthomonas campestris pv. campestris (busuk hitam/bakteri): ")
-                    .append(weatherLevel(blackRot,t,rh,rain)).append(". Cari bercak berbentuk huruf V di tepi daun dan urat daun menghitam; cuaca saja tidak cukup untuk memastikan penyakit.");
-            s.append("\nHama ulat daun/Plutella xylostella: lakukan pemeriksaan bawah daun dan titik tumbuh; nilai serangan dari jumlah ulat dan kerusakan nyata, bukan cuaca saja.");
-        } else if (c.contains("selada") || c.contains("lettuce")) {
-            double mildew = (!Double.isNaN(rh) && rh >= 85 ? 35 : 0)
-                    + (!Double.isNaN(rain) && rain >= 5 ? 25 : 0)
-                    + (!Double.isNaN(t) && t >= 8 && t <= 22 ? 20 : 0);
-            s.append("Selada — Bremia lactucae (embun bulu): ").append(weatherLevel(mildew,t,rh,rain))
-                    .append(". Periksa bercak pucat kekuningan dan lapisan putih di bawah daun saat udara lembap.");
-            double rot = (!Double.isNaN(rh) && rh >= 90 ? 30 : 0)
-                    + (!Double.isNaN(rain) && rain >= 10 ? 25 : 0)
-                    + (!Double.isNaN(t) && t >= 15 && t <= 28 ? 15 : 0);
-            s.append("\nSelada — busuk lunak/kelabu (kompleks Botrytis/Sclerotinia): ").append(weatherLevel(rot,t,rh,rain))
-                    .append("; periksa pangkal dan daun yang menyentuh tanah, terutama saat bedengan terlalu basah.");
-            s.append("\nAphid/kutu daun: periksa pucuk dan bagian bawah daun secara langsung; cuaca tidak dapat memastikan populasi.");
-        } else if (c.contains("wortel") || c.contains("carrot")) {
-            double leafBlight = (!Double.isNaN(rh) && rh >= 85 ? 30 : 0)
-                    + (!Double.isNaN(rain) && rain >= 5 ? 30 : 0)
-                    + (!Double.isNaN(t) && t >= 20 && t <= 30 ? 20 : 0);
-            s.append("Wortel — Alternaria dauci (bercak/hawar daun): ").append(weatherLevel(leafBlight,t,rh,rain))
-                    .append(". Periksa bercak cokelat pada daun dan tangkai; tingkat risiko ini hanya penapisan cuaca.");
-            s.append("\nWortel — cek kondisi akar: tanah padat, batu, atau genangan dapat membuat akar bercabang/bentuk tidak normal. Jaga bedengan gembur dan drainase baik.");
-        } else if (c.contains("bayam") || c.contains("amaranth") || c.contains("spinach")
-                || c.contains("kangkung") || c.contains("water spinach") || c.contains("kangkong")
-                || c.contains("sayuran daun") || c.contains("leafy greens") || c.contains("leafy vegetable") || c.equals("sayuran")) {
-            double wetRisk = (!Double.isNaN(rh) && rh >= 85 ? 30 : 0) + (!Double.isNaN(rain) && rain >= 10 ? 30 : 0);
-            s.append(normalizeCrop(crop)).append(" — risiko umum bercak/busuk daun saat basah berkepanjangan: ").append(weatherLevel(wetRisk,t,rh,rain))
-                    .append(". Buang daun busuk, hindari percikan air yang tidak perlu, dan periksa tanaman langsung untuk menentukan penyebabnya.");
-            s.append("\nHama pemakan daun: periksa lubang gigitan, ulat, dan bagian bawah daun; tentukan tindakan dari hasil pengamatan lapangan.");
         } else {
             s.append("Komoditas belum memiliki model OPT lokal di mesin. Jangan menebak nama OPT hanya dari cuaca. Masukkan nama OPT + gejala + populasi/luas serangan pada Catatan Lapangan agar AI dapat mencocokkan pustaka.");
         }
@@ -826,11 +747,6 @@ public final class AgronomyEngine {
             s.append("\nRiwayat lapang: ").append(historyText.trim());
         }
         return s.toString();
-    }
-
-    private static String weatherLevel(double score, double t, double rh, double rain) {
-        if (!Double.isFinite(t) && !Double.isFinite(rh) && !Double.isFinite(rain)) return "DATA BELUM CUKUP";
-        return level(score);
     }
 
     private static String level(double score) {

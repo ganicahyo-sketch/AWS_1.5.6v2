@@ -11,8 +11,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Required for the USB serial library declared in app/build.gradle.
+        maven { url = uri("https://jitpack.io") }
     }
 }
 
-rootProject.name = 'STASIUN-CUACA-DESA-TURUS-v1.5.6'
+rootProject.name = 'STASIUN-CUACA-v1.5.7'
 include ':app'

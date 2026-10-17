@@ -31,6 +31,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Locale;
+import java.time.LocalDate;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -80,9 +81,6 @@ public class AgronomyActivity extends Activity {
         StringBuilder s=new StringBuilder();
         s.append("ANALISIS AGRONOMI TERPADU v1.5.7\n\n");
         s.append("KOMODITAS: ").append(crop).append("\nMODE: ").append(mode).append("\nHST: ").append(hst<0?"--":hst).append("\nFASE: ").append(AgronomyEngine.phase(hst,crop)).append("\nLUAS: ").append(pref("farm_area_ha","--")).append(" ha\nTARGET HASIL: ").append(pref("farm_target_yield_t_ha","--")).append(" t/ha\n\n");
-        if (cp.source != null && cp.source.toLowerCase(Locale.US).contains("profil hortikultura screening")) {
-            s.append("CATATAN PROFIL SAYURAN: kisaran pH/suhu, umur panen dan kebutuhan hara adalah perkiraan awal. Sesuaikan dengan varietas, ketinggian, hasil uji tanah, target hasil dan rekomendasi setempat; jangan anggap angka ini sebagai dosis resmi.\n\n");
-        }
         s.append("1. TANAH\n");
         s.append("pH ").append(show(ph)).append(" -> ").append(AgronomyEngine.classifyPH(ph,cp)).append("\n");
         s.append("Metode N/P/K: ").append(method).append("\n");
@@ -99,7 +97,7 @@ public class AgronomyActivity extends Activity {
         s.append("FC/PWP: ").append(show(fc)).append(" / ").append(show(pwp)).append(" % volume -> ").append(AgronomyEngine.soilWaterAssessment(moist,fc,pwp,depth,et0,crop)).append("\n");
         if(Double.isFinite(depth)&&Double.isFinite(bd)){
             s.append("Stok lapisan ").append(show(depth)).append(" cm; BD ").append(show(bd)).append(" g/cm³: N ").append(show(AgronomyEngine.soilStockKgHa(n,bd,depth))).append("; P ").append(show(AgronomyEngine.soilStockKgHa(p,bd,depth))).append("; K ").append(show(AgronomyEngine.soilStockKgHa(k,bd,depth))).append(" kg/ha.\n");
-            s.append("Stok = konsentrasi × BD × kedalaman × 0,01; stok ≠ serapan langsung tanaman.\n");
+            s.append("Stok = konsentrasi (mg/kg) × BD (g/cm³) × kedalaman (cm) × 0,10 kg/ha; stok ≠ serapan langsung tanaman.\n");
         }
         s.append("\n2. ANALISIS RENTANG SEMUA PARAMETER\n");
         s.append(AgronomyEngine.comprehensiveRangeAnalysis(
@@ -109,11 +107,14 @@ public class AgronomyActivity extends Activity {
                 visibility, num(prefs.getString("lux","")), shortwave, parEnergy, ppfd, sunshine, vpd, method));
         s.append("\n\n3. NPK & PREDIKSI KEBUTUHAN FASE\n");
         double target=num(pref("farm_target_yield_t_ha",""));
-        double nn=AgronomyEngine.nutrientNeed(n,"N",crop,hst,fertCredit(crop)[0],target,method,depth,bd);
-        double pp=AgronomyEngine.nutrientNeed(p,"P",crop,hst,fertCredit(crop)[1],target,method,depth,bd);
-        double kk=AgronomyEngine.nutrientNeed(k,"K",crop,hst,fertCredit(crop)[2],target,method,depth,bd);
+        double[] credit=fertCredit(crop);
+        double nn=AgronomyEngine.nutrientNeed(n,"N",crop,hst,credit[0],target,method,depth,bd,nLow,nHigh);
+        double pp=AgronomyEngine.nutrientNeed(p,"P",crop,hst,credit[1],target,method,depth,bd,nLow,nHigh);
+        double kk=AgronomyEngine.nutrientNeed(k,"K",crop,hst,credit[2],target,method,depth,bd,nLow,nHigh);
         s.append("N skrining fase: ").append(show(nn)).append(" kg N/ha\nP2O5 skrining fase: ").append(show(pp)).append(" kg P2O5/ha\nK2O skrining fase: ").append(show(kk)).append(" kg K2O/ha\n");
         s.append("Rumus skrining: ").append(AgronomyEngine.nutrientFormulaText()).append("\n");
+        s.append("INDIKATOR & BATAS: kelas P/K merupakan screening sesuai pilihan metode; ambang N hanya diterapkan jika batas rendah/tinggi diisi sesuai hasil laboratorium. Tanpa ambang N, kebutuhan memakai baseline komoditas/fase tanpa menganggap N tanah cukup. Angka pupuk adalah estimasi awal, bukan rekomendasi laboratorium atau STCR/PUTS terkalibrasi.\n");
+        if ("Komoditas umum".equals(cp.name)) s.append("PERHATIAN: komoditas belum memiliki profil spesifik di aplikasi; kebutuhan musim memakai baseline umum dan ketidakpastian tinggi. Verifikasi dengan rekomendasi penyuluh/laboratorium setempat.\n");
         s.append("PENTING: bukan QUEFTS/STCR penuh. Gunakan persamaan STCR/PUTS lokal bila tersedia.\n");
         s.append("\n4. CUACA, VPD, AIR & EKOLOGI\n");
         s.append("Suhu ").append(show(temp)).append(" °C -> ").append(AgronomyEngine.temperatureStatus(temp,crop)).append("; kisaran profil ").append(show(cp.tempMin)).append("–").append(show(cp.tempMax)).append(" °C\n");
@@ -428,58 +429,77 @@ public class AgronomyActivity extends Activity {
         s.append("• Fase: ").append(AgronomyEngine.phase(hst,crop)).append(". Prioritaskan tindakan berdasarkan fase dan data lapang, bukan umur saja.\n");
     }
 
-    private double[] fertCredit(String crop){double n=0,p=0,k=0;try{JSONArray a=new JSONArray(prefs.getString("fert_history","[]"));for(int i=0;i<a.length();i++){JSONObject o=a.optJSONObject(i);if(o==null||!same(o.optString("crop",""),crop)||!"kg/ha".equalsIgnoreCase(o.optString("unit","kg/ha")))continue;double d=o.optDouble("dose",0);n+=d*o.optDouble("nPct",0)/100;p+=d*o.optDouble("pPct",0)/100;k+=d*o.optDouble("kPct",0)/100;}}catch(Exception ignored){}return new double[]{n,p,k};}
+    private double[] fertCredit(String crop){
+        double n=0,p=0,k=0;
+        try {
+            JSONArray a=new JSONArray(prefs.getString("fert_history","[]"));
+            LocalDate cutoff=LocalDate.now().minusDays(90);
+            for(int i=0;i<a.length();i++){
+                JSONObject o=a.optJSONObject(i);
+                if(o==null||!same(o.optString("crop",""),crop)||!"kg/ha".equalsIgnoreCase(o.optString("unit","kg/ha")))continue;
+                String date=o.optString("date","");
+                if(date.isEmpty()) continue;
+                LocalDate d;
+                try { d=LocalDate.parse(date); } catch(Exception invalidDate) { continue; }
+                if(d.isBefore(cutoff)) continue;
+                double dose=o.optDouble("dose",0);
+                n+=dose*o.optDouble("nPct",0)/100.0;
+                p+=dose*o.optDouble("pPct",0)/100.0;
+                k+=dose*o.optDouble("kPct",0)/100.0;
+            }
+        } catch(Exception ignored) {}
+        return new double[]{n,p,k};
+    }
     private boolean same(String a,String b){return AgronomyEngine.normalizeCrop(a).equalsIgnoreCase(AgronomyEngine.normalizeCrop(b));}
     private String recent(String key,int max){try{JSONArray a=new JSONArray(prefs.getString(key,"[]"));StringBuilder s=new StringBuilder();for(int i=Math.max(0,a.length()-max);i<a.length();i++)s.append(a.optJSONObject(i)).append("\n");return s.toString().trim().isEmpty()?"(tidak ada)":s.toString();}catch(Exception e){return "(tidak ada)";}}
     private void requestAi(){
-        String key=prefs.getString("ai_api_key",DEFAULT_AI_KEY).trim(); if(key.isEmpty()){aiStatus.setText("Masukkan OpenAI API key di Pengaturan.");return;}
+        final String provider=prefs.getString("ai_provider","OpenAI");
+        final String key;
+        final String model;
+        if("Google Gemini".equalsIgnoreCase(provider)){key=prefs.getString("gemini_api_key","").trim();model=prefs.getString("gemini_model","gemini-2.5-flash").trim();}
+        else if("OpenRouter".equalsIgnoreCase(provider)){key=prefs.getString("openrouter_api_key","").trim();model=prefs.getString("openrouter_model","google/gemini-2.5-flash").trim();}
+        else {key=prefs.getString("ai_api_key",DEFAULT_AI_KEY).trim();model=prefs.getString("ai_model","gpt-6-luna").trim();}
+        if(key.isEmpty()){aiStatus.setText("Masukkan API key untuk penyedia "+provider+" di Pengaturan.");return;}
         final TextView button=findViewById(R.id.agroAiButton); button.setEnabled(false); aiStatus.setText("Menganalisis data, mencari OPT dan menyusun rekomendasi AI...");
-        final String model=prefs.getString("ai_model","gpt-6-luna").trim().isEmpty()?"gpt-6-luna":prefs.getString("ai_model","gpt-6-luna").trim();
-        final double aiLat=prefs.getFloat("latitude",Float.NaN);
-        final double aiLon=prefs.getFloat("longitude",Float.NaN);
+        final String actualModel=model.isEmpty()?("Google Gemini".equalsIgnoreCase(provider)?"gemini-2.5-flash":("OpenRouter".equalsIgnoreCase(provider)?"google/gemini-2.5-flash":"gpt-6-luna")):model;
+        final boolean webSearch=prefs.getBoolean("ai_google_search",true);
+        final double aiLat=prefs.getFloat("latitude",Float.NaN); final double aiLon=prefs.getFloat("longitude",Float.NaN);
         final String context="LOKASI GPS: "+(Double.isFinite(aiLat)?String.format(Locale.US,"%.6f",aiLat):"--")+", "+(Double.isFinite(aiLon)?String.format(Locale.US,"%.6f",aiLon):"--")+"\n"+report.getText().toString();
-        net.execute(()->{try{String lit=fetchOpenAlex(prefs.getString("crop","Tanaman pertanian"), context);String ans=callAi(key,model,context,lit);prefs.edit().putString("last_ai_advice",ans).putLong("last_ai_advice_epoch",System.currentTimeMillis()).apply();runOnUiThread(()->{aiStatus.setText(styleAiResponse(ans));button.setEnabled(true);});}catch(Exception e){runOnUiThread(()->{aiStatus.setText("AI gagal: "+msg(e));button.setEnabled(true);});}});
+        net.execute(()->{try{String lit=fetchOpenAlex(prefs.getString("crop","Tanaman pertanian"), context);String ans=callAi(provider,key,actualModel,context,lit,webSearch);prefs.edit().putString("last_ai_advice",ans).putLong("last_ai_advice_epoch",System.currentTimeMillis()).apply();runOnUiThread(()->{aiStatus.setText(styleAiResponse(ans));button.setEnabled(true);});}catch(Exception e){runOnUiThread(()->{aiStatus.setText("AI gagal ("+provider+"): "+msg(e));button.setEnabled(true);});}});
     }
     private String fetchOpenAlex(String crop,String context)throws Exception{
         String q=""+crop+" agriculture soil fertility pest disease weather forecasting";
         String url="https://api.openalex.org/works?search="+URLEncoder.encode(q,"UTF-8")+"&filter=from_publication_date:2018-01-01&per-page=6&sort=relevance_score:desc";
         HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();c.setConnectTimeout(8000);c.setReadTimeout(12000);c.setRequestMethod("GET");if(c.getResponseCode()!=200)throw new Exception("OpenAlex HTTP "+c.getResponseCode());JSONObject r=new JSONObject(readAll(c.getInputStream()));JSONArray a=r.optJSONArray("results");StringBuilder out=new StringBuilder();if(a!=null)for(int i=0;i<a.length();i++){JSONObject w=a.optJSONObject(i);if(w==null)continue;out.append(i+1).append(") ").append(w.optString("display_name",""));out.append(" | year=").append(w.optInt("publication_year",0));String doi=w.optString("doi","");if(!doi.isEmpty())out.append(" | ").append(doi);out.append("\n");}return out.length()==0?"Tidak ada hasil OpenAlex yang cocok.":out.toString();
     }
-    private String callAi(String key,String model,String ctx,String lit)throws Exception{
-        JSONObject p=new JSONObject();
-        p.put("model",model);
-        p.put("store",false);
-        p.put("max_output_tokens",5000);
-        JSONArray tools=new JSONArray();
-        JSONObject webSearch=new JSONObject();
-        webSearch.put("type","web_search");
-        tools.put(webSearch);
-        p.put("tools",tools);
-        // OPT discovery is a mandatory web-search step for this agronomy advisor.
-        p.put("tool_choice","required");
-        p.put("instructions",
-                "Anda adalah agronom pendamping petani Indonesia. Tujuan utama Anda bukan sekadar menjelaskan data, tetapi mengubah data menjadi KEPUTUSAN DAN REKOMENDASI TINDAKAN. " +
-                "DATA ANALISIS AWAL sudah berisi klasifikasi parameter dari mesin agronomi; jangan mengulang seluruh parameter satu per satu. Fokus pada faktor pembatas dan tindakan. " +
-                "WAJIB keluarkan bagian: 1) RINGKASAN KONDISI, 2) FAKTOR PEMBATAS UTAMA, 3) REKOMENDASI 0-24 JAM, 4) REKOMENDASI 1-7 HARI, 5) REKOMENDASI PEMUPUKAN, 6) REKOMENDASI AIR, 7) PREDIKSI POTENSI OPT, 8) TINDAKAN PHT/OPT, 9) PRIORITAS TINDAKAN, 10) DATA YANG MASIH PERLU DIUKUR. " +
-                "Untuk OPT, JANGAN membatasi diri pada database lokal. Gunakan web search untuk mencari OPT yang relevan jika komoditas atau OPT tidak ada di aplikasi. Cari berdasarkan komoditas, fase tanaman, lokasi Indonesia/Jawa Tengah bila tersedia, gejala/riwayat lapangan, serta hubungan dengan suhu, RH, hujan, VPD dan kondisi lainnya. Prioritaskan sumber resmi pemerintah/universitas, extension service, jurnal ilmiah, atau organisasi pertanian terpercaya. " +
-                "Sebutkan nama umum dan nama ilmiah bila dapat diverifikasi, tingkat potensi, alasan, gejala yang harus diperiksa dan sumber. Hasil OPT adalah risk screening, bukan diagnosis. Jangan membuat dosis pestisida baru; untuk pengendalian kimia rujuk label terdaftar dan aturan setempat. " +
-                "Untuk kelapa sawit, gunakan basis data khusus TBM/TM dan fase umur. WAJIB lakukan web search untuk panduan resmi PPKS/IOPRI tentang rekomendasi pemupukan sawit; prioritaskan dokumen resmi. Jelaskan bahwa dosis resmi PPKS umumnya membutuhkan analisis daun dan tanah, evaluasi pertumbuhan/kultur teknis, umur, jumlah pokok/ha, jenis tanah, produktivitas dan riwayat pupuk. Gunakan NPK, EC (µS/cm) dan pH dari sensor USB 8-in-1 atau 7-in-1 CWT sebagai skrining, bukan sebagai angka laboratorium yang setara. Jangan mengarang tabel/dosis resmi PPKS atau mengubah mg/kg sensor menjadi kg pupuk/pokok tanpa metode tervalidasi. Jika data belum cukup, berikan prioritas unsur dan langkah sampling serta nyatakan data yang dibutuhkan sebelum dosis final. Berikan rekomendasi teknis sawit: drainase/air, konservasi tanah, penutup tanah, pengelolaan pelepah, piringan/jalur panen, monitoring pertumbuhan dan waktu aplikasi berdasarkan hujan. Untuk pH, jangan menghitung dosis kapur/dolomit dari pH saja. Untuk EC sensor, bedakan dari ECe dan jangan konversi otomatis menjadi ECe. Bedakan stok hara dari serapan tanaman. Untuk kebutuhan pupuk komoditas lain, nyatakan sebagai skrining bila tidak ada kalibrasi lokal/PUTS/STCR. Untuk mode organik, batasi input pada yang diizinkan sistem organik yang berlaku. " +
-                "Gunakan bahasa Indonesia yang mudah dipahami petani tetapi tetap ilmiah. Jangan mengarang data yang tidak tersedia. Pisahkan fakta terukur, hasil model screening, dan rekomendasi. Jika data kurang, katakan apa yang perlu diukur. Selalu akhiri dengan PRIORITAS TINDAKAN yang konkret.");
-        p.put("input",
-                "DATA DAN ANALISIS AWAL:\n"+ctx+
-                "\n\nHASIL PUSTAKA OPENALEX:\n"+lit+
-                "\n\nGunakan web search khusus untuk memperluas pencarian OPT dan untuk mencari rekomendasi resmi PPKS/IOPRI jika komoditas kelapa sawit. Beri URL/sumber untuk klaim dosis resmi. Buat rekomendasi yang dapat ditindaklanjuti, bukan hanya deskripsi.");
-        HttpURLConnection c=(HttpURLConnection)new URL("https://api.openai.com/v1/responses").openConnection();
-        c.setRequestMethod("POST"); c.setConnectTimeout(12000); c.setReadTimeout(60000); c.setDoOutput(true);
-        c.setRequestProperty("Authorization","Bearer "+key); c.setRequestProperty("Content-Type","application/json; charset=UTF-8");
-        byte[] b=p.toString().getBytes(StandardCharsets.UTF_8); c.setFixedLengthStreamingMode(b.length);
-        try(OutputStream o=c.getOutputStream()){o.write(b);} int code=c.getResponseCode();
-        if(code<200||code>=300){String er=readAll(c.getErrorStream());throw new Exception("OpenAI HTTP "+code+(er.isEmpty()?"":" — "+er.substring(0,Math.min(500,er.length()))));}
-        JSONObject r=new JSONObject(readAll(c.getInputStream())); String t=r.optString("output_text","").trim();
-        if(!t.isEmpty()) return t;
-        JSONArray out=r.optJSONArray("output"); if(out!=null){StringBuilder z=new StringBuilder(); for(int i=0;i<out.length();i++){JSONObject it=out.optJSONObject(i); if(it==null)continue; JSONArray cc=it.optJSONArray("content"); if(cc==null)continue; for(int j=0;j<cc.length();j++){JSONObject part=cc.optJSONObject(j); if(part!=null&&"output_text".equals(part.optString("type"))){z.append(part.optString("text","")).append("\n");}}} if(z.length()>0)return z.toString().trim();}
-        throw new Exception("Respons AI tidak berisi teks.");
+    private String agronomyPrompt(String ctx,String lit){
+        return "Anda adalah agronom pendamping petani Indonesia. Berikan keputusan dan rekomendasi tindakan berbasis data. Wajib bagian: RINGKASAN KONDISI; FAKTOR PEMBATAS; REKOMENDASI 0-24 JAM; REKOMENDASI 1-7 HARI; PEMUPUKAN; AIR; PREDIKSI POTENSI OPT; TINDAKAN PHT/OPT; PRIORITAS TINDAKAN; DATA YANG PERLU DIUKUR. " +
+        "Untuk OPT, cari OPT relevan berdasarkan komoditas, fase, lokasi Indonesia, cuaca dan gejala; utamakan sumber resmi pemerintah/universitas, extension, jurnal dan organisasi pertanian. Sebut nama umum/ilmiah bila dapat diverifikasi, potensi risiko, alasan, gejala yang perlu diperiksa dan sumber. Ini skrining risiko, bukan diagnosis; jangan mengarang dosis pestisida. " +
+        "Untuk kelapa sawit, gunakan data TBM/TM dan umur; prioritaskan panduan resmi PPKS/IOPRI bila tersedia. Dosis resmi memerlukan analisis daun/tanah, umur, populasi, jenis tanah, hasil dan riwayat pupuk. Sensor USB NPK/EC/pH hanya skrining, bukan data lab. Jangan mengarang dosis resmi, jangan konversi sensor mg/kg menjadi dosis pupuk tanpa metode tervalidasi. Bedakan EC dari ECe; jangan hitung kapur hanya dari pH. Jika data kurang, berikan estimasi/skenario yang jelas berlabel dan nyatakan ketidakpastian. " +
+        "Gunakan bahasa Indonesia mudah dipahami petani. Pisahkan fakta terukur, screening model dan rekomendasi. Akhiri dengan prioritas tindakan konkret.\n\nDATA DAN ANALISIS AWAL:\n"+ctx+"\n\nHASIL PUSTAKA OPENALEX:\n"+lit+"\n\nJika pencarian web aktif, gunakan untuk verifikasi OPT, rekomendasi resmi PPKS/IOPRI dan sumber teknis; berikan URL sumber untuk klaim penting.";
     }
+    private String callAi(String provider,String key,String model,String ctx,String lit,boolean webSearch)throws Exception{
+        String prompt=agronomyPrompt(ctx,lit);
+        if("Google Gemini".equalsIgnoreCase(provider)) return callGemini(key,model,prompt,webSearch);
+        if("OpenRouter".equalsIgnoreCase(provider)) return callOpenRouter(key,model,prompt,webSearch);
+        return callOpenAi(key,model,prompt,webSearch);
+    }
+    private String callOpenAi(String key,String model,String prompt,boolean webSearch)throws Exception{
+        JSONObject p=new JSONObject();p.put("model",model);p.put("store",false);p.put("max_output_tokens",5000);p.put("instructions","Anda adalah agronom pendamping petani Indonesia. Jangan mengarang data.");p.put("input",prompt);
+        if(webSearch){JSONArray tools=new JSONArray();JSONObject t=new JSONObject();t.put("type","web_search");tools.put(t);p.put("tools",tools);p.put("tool_choice","required");}
+        HttpURLConnection c=(HttpURLConnection)new URL("https://api.openai.com/v1/responses").openConnection();c.setRequestMethod("POST");c.setConnectTimeout(12000);c.setReadTimeout(60000);c.setDoOutput(true);c.setRequestProperty("Authorization","Bearer "+key);c.setRequestProperty("Content-Type","application/json; charset=UTF-8");writeJson(c,p);int code=c.getResponseCode();if(code<200||code>=300)throw httpError("OpenAI",code,c);JSONObject r=new JSONObject(readAll(c.getInputStream()));String t=r.optString("output_text","").trim();if(!t.isEmpty())return t;JSONArray out=r.optJSONArray("output");if(out!=null){StringBuilder z=new StringBuilder();for(int i=0;i<out.length();i++){JSONObject it=out.optJSONObject(i);if(it==null)continue;JSONArray cc=it.optJSONArray("content");if(cc==null)continue;for(int j=0;j<cc.length();j++){JSONObject part=cc.optJSONObject(j);if(part!=null&&"output_text".equals(part.optString("type")))z.append(part.optString("text","")).append("\n");}}if(z.length()>0)return z.toString().trim();}throw new Exception("Respons OpenAI tidak berisi teks.");
+    }
+    private String callGemini(String key,String model,String prompt,boolean webSearch)throws Exception{
+        JSONObject body=new JSONObject();JSONArray contents=new JSONArray();JSONObject content=new JSONObject();JSONArray parts=new JSONArray();JSONObject part=new JSONObject();part.put("text",prompt);parts.put(part);content.put("parts",parts);contents.put(content);body.put("contents",contents);JSONObject cfg=new JSONObject();cfg.put("temperature",0.4);cfg.put("maxOutputTokens",5000);body.put("generationConfig",cfg);
+        if(webSearch){JSONArray tools=new JSONArray();JSONObject tool=new JSONObject();tool.put("google_search",new JSONObject());tools.put(tool);body.put("tools",tools);}
+        String url="https://generativelanguage.googleapis.com/v1beta/models/"+URLEncoder.encode(model,"UTF-8")+":generateContent?key="+URLEncoder.encode(key,"UTF-8");HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();c.setRequestMethod("POST");c.setConnectTimeout(12000);c.setReadTimeout(60000);c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json; charset=UTF-8");writeJson(c,body);int code=c.getResponseCode();if(code<200||code>=300)throw httpError("Gemini",code,c);JSONObject r=new JSONObject(readAll(c.getInputStream()));JSONArray candidates=r.optJSONArray("candidates");if(candidates==null||candidates.length()==0)throw new Exception("Respons Gemini kosong.");JSONObject candidate=candidates.optJSONObject(0);JSONObject cont=candidate==null?null:candidate.optJSONObject("content");JSONArray ps=cont==null?null:cont.optJSONArray("parts");StringBuilder out=new StringBuilder();if(ps!=null)for(int i=0;i<ps.length();i++){JSONObject pp=ps.optJSONObject(i);if(pp!=null)out.append(pp.optString("text", ""));}if(out.length()==0)throw new Exception("Gemini tidak mengembalikan teks.");return out.toString().trim();
+    }
+    private String callOpenRouter(String key,String model,String prompt,boolean webSearch)throws Exception{
+        String selected=model;if(webSearch&&!selected.endsWith(":online"))selected=selected+":online";JSONObject body=new JSONObject();body.put("model",selected);body.put("temperature",0.4);body.put("max_tokens",5000);JSONArray messages=new JSONArray();JSONObject m=new JSONObject();m.put("role","user");m.put("content",prompt);messages.put(m);body.put("messages",messages);
+        HttpURLConnection c=(HttpURLConnection)new URL("https://openrouter.ai/api/v1/chat/completions").openConnection();c.setRequestMethod("POST");c.setConnectTimeout(12000);c.setReadTimeout(60000);c.setDoOutput(true);c.setRequestProperty("Authorization","Bearer "+key);c.setRequestProperty("Content-Type","application/json; charset=UTF-8");c.setRequestProperty("HTTP-Referer","https://github.com/ganicahyo-sketch");c.setRequestProperty("X-Title","Agronomy Advisor");writeJson(c,body);int code=c.getResponseCode();if(code<200||code>=300)throw httpError("OpenRouter",code,c);JSONObject r=new JSONObject(readAll(c.getInputStream()));JSONArray choices=r.optJSONArray("choices");if(choices==null||choices.length()==0)throw new Exception("Respons OpenRouter kosong.");JSONObject choice=choices.optJSONObject(0);JSONObject message=choice==null?null:choice.optJSONObject("message");String out=message==null?"":message.optString("content","").trim();if(out.isEmpty())throw new Exception("OpenRouter tidak mengembalikan teks.");return out;
+    }
+    private void writeJson(HttpURLConnection c,JSONObject body)throws Exception{byte[] b=body.toString().getBytes(StandardCharsets.UTF_8);c.setFixedLengthStreamingMode(b.length);try(OutputStream o=c.getOutputStream()){o.write(b);}}
+    private Exception httpError(String provider,int code,HttpURLConnection c){try{String er=readAll(c.getErrorStream());return new Exception(provider+" HTTP "+code+(er.isEmpty()?"":" — "+er.substring(0,Math.min(500,er.length()))));}catch(Exception ignored){return new Exception(provider+" HTTP "+code);}}
     private String pref(String k,String d){return prefs.getString(k,d);}
     private double num(String s){try{return s==null||s.trim().isEmpty()?Double.NaN:Double.parseDouble(s.trim().replace(',','.'));}catch(Exception e){return Double.NaN;}}
     private String show(double v){return Double.isFinite(v)?String.format(Locale.US,"%.2f",v):"--";}

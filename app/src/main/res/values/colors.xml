@@ -12,7 +12,4 @@
     <color name="green">#45D483</color>
     <color name="red">#FF6B6B</color>
     <color name="white">#FFFFFF</color>
-    <color name="root_bg">#07131F</color>
-    <color name="panel_stroke">#214457</color>
-    <color name="edit_stroke">#31566A</color>
 </resources>

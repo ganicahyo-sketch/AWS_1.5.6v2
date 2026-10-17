@@ -5,6 +5,7 @@ import android.content.Context;
 import android.os.Bundle;
 import android.text.InputType;
 import android.widget.ArrayAdapter;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -18,8 +19,10 @@ public class SettingsActivity extends Activity {
     private static final String DEFAULT_READ_KEY = "P4B56Z7HZM56Q7HJ";
     private static final String DEFAULT_AI_KEY = "";
     private android.content.SharedPreferences p;
-    private EditText title, channel, readKey, aiKey, aiModel, crop, lat, lon, elev;
-    private Spinner cult;
+    private EditText title, channel, readKey, aiKey, aiModel, geminiKey, geminiModel, openRouterKey, openRouterModel, crop, lat, lon, elev;
+    private Spinner cult, aiProvider;
+    private CheckBox aiGoogleSearch;
+    private boolean awaitingGpsReturn = false;
     private TextView toggleRead, toggleAi;
     private EditText[] fieldName = new EditText[8];
     private EditText[] fieldUnit = new EditText[8];
@@ -30,6 +33,9 @@ public class SettingsActivity extends Activity {
         p = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         title=findViewById(R.id.appTitle); channel=findViewById(R.id.channel); readKey=findViewById(R.id.readKey);
         aiKey=findViewById(R.id.aiKey); aiModel=findViewById(R.id.aiModel); crop=findViewById(R.id.crop);
+        aiProvider=findViewById(R.id.aiProvider); aiGoogleSearch=findViewById(R.id.aiGoogleSearch);
+        geminiKey=findViewById(R.id.geminiKey); geminiModel=findViewById(R.id.geminiModel);
+        openRouterKey=findViewById(R.id.openRouterKey); openRouterModel=findViewById(R.id.openRouterModel);
         lat=findViewById(R.id.latitude); lon=findViewById(R.id.longitude); elev=findViewById(R.id.elevation);
         cult=findViewById(R.id.cultivation); toggleRead=findViewById(R.id.toggleReadKey); toggleAi=findViewById(R.id.toggleAiKey);
         for(int i=0;i<8;i++){
@@ -37,10 +43,13 @@ public class SettingsActivity extends Activity {
             fieldName[i]=findViewById(getResources().getIdentifier("fieldName"+n,"id",getPackageName()));
             fieldUnit[i]=findViewById(getResources().getIdentifier("fieldUnit"+n,"id",getPackageName()));
         }
+        ArrayAdapter<String> providerAdapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,new String[]{"OpenAI","Google Gemini","OpenRouter"});
+        providerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); aiProvider.setAdapter(providerAdapter);
         ArrayAdapter<String> ad=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,new String[]{"Konvensional / PHT","Organik"});
         ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); cult.setAdapter(ad);
         load();
         findViewById(R.id.useGps).setOnClickListener(v->{
+            awaitingGpsReturn = true;
             android.content.Intent i = new android.content.Intent(this, MainActivity.class);
             i.putExtra("request_fresh_gps", true);
             startActivity(i);
@@ -49,6 +58,18 @@ public class SettingsActivity extends Activity {
         findViewById(R.id.cancelSettings).setOnClickListener(v->finish());
         toggleRead.setOnClickListener(v->toggle(readKey,toggleRead));
         toggleAi.setOnClickListener(v->toggle(aiKey,toggleAi));
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        // MainActivity obtains a fresh GPS fix and persists it. Refresh the visible
+        // fields on return so saving Settings cannot overwrite the new coordinates
+        // with stale latitude/longitude values.
+        if (awaitingGpsReturn && p != null) {
+            lat.setText(f(p.getFloat("latitude", Float.NaN)));
+            lon.setText(f(p.getFloat("longitude", Float.NaN)));
+            awaitingGpsReturn = false;
+        }
     }
 
     private void load(){
@@ -60,6 +81,10 @@ public class SettingsActivity extends Activity {
         String savedAiKey=p.getString("ai_api_key","").trim();
         aiKey.setText(savedAiKey.isEmpty()?DEFAULT_AI_KEY:savedAiKey);
         aiModel.setText(p.getString("ai_model","gpt-6-luna"));
+        geminiKey.setText(p.getString("gemini_api_key","")); geminiModel.setText(p.getString("gemini_model","gemini-2.5-flash"));
+        openRouterKey.setText(p.getString("openrouter_api_key","")); openRouterModel.setText(p.getString("openrouter_model","google/gemini-2.5-flash"));
+        String provider=p.getString("ai_provider","OpenAI"); aiProvider.setSelection(provider.equalsIgnoreCase("Google Gemini")?1:(provider.equalsIgnoreCase("OpenRouter")?2:0));
+        aiGoogleSearch.setChecked(p.getBoolean("ai_google_search",true));
         crop.setText(p.getString("crop","Tanaman pertanian"));
         lat.setText(f(p.getFloat("latitude",Float.NaN))); lon.setText(f(p.getFloat("longitude",Float.NaN))); elev.setText(f(p.getFloat("elevation",Float.NaN)));
         cult.setSelection(p.getString("farm_cultivation_mode","Konvensional / PHT").toLowerCase(Locale.US).contains("organik")?1:0);
@@ -80,6 +105,9 @@ public class SettingsActivity extends Activity {
         android.content.SharedPreferences.Editor e=p.edit().putString("app_title",tv).putString("channel",channel.getText().toString().trim().isEmpty()?DEFAULT_CHANNEL:channel.getText().toString().trim())
                 .putString("read_key",readKey.getText().toString().trim().isEmpty()?DEFAULT_READ_KEY:readKey.getText().toString().trim())
                 .putString("ai_api_key",aiKey.getText().toString().trim()).putString("ai_model",aiModel.getText().toString().trim().isEmpty()?"gpt-6-luna":aiModel.getText().toString().trim())
+                .putString("ai_provider",aiProvider.getSelectedItem().toString()).putBoolean("ai_google_search",aiGoogleSearch.isChecked())
+                .putString("gemini_api_key",geminiKey.getText().toString().trim()).putString("gemini_model",geminiModel.getText().toString().trim().isEmpty()?"gemini-2.5-flash":geminiModel.getText().toString().trim())
+                .putString("openrouter_api_key",openRouterKey.getText().toString().trim()).putString("openrouter_model",openRouterModel.getText().toString().trim().isEmpty()?"google/gemini-2.5-flash":openRouterModel.getText().toString().trim())
                 .putString("crop",cv).putString("farm_cultivation_mode",cult.getSelectedItem().toString());
         if(!Float.isNaN(la))e.putFloat("latitude",la); else e.remove("latitude");
         if(!Float.isNaN(lo))e.putFloat("longitude",lo); else e.remove("longitude");

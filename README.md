@@ -1,4 +1,13 @@
-# STASIUN CUACA • GANI CAHYO-UNS v1.5.6
+## Pembaruan tampilan hasil analisis
+Hasil analisis ditampilkan dalam kartu terpisah dengan saran tindakan di bagian awal. Istilah teknis disederhanakan dan laporan teknis asli tetap dipertahankan untuk konteks AI/laporan.
+
+## Pembaruan tampilan hasil analisis
+Hasil analisis ditampilkan dalam kartu terpisah dengan saran tindakan di bagian awal. Istilah teknis disederhanakan dan laporan teknis asli tetap dipertahankan untuk konteks AI/laporan.
+
+## Hasil analisis yang mudah dibaca
+Bagian hasil analisis dibuat lebih ramah bagi petani: saran praktis diletakkan di awal, isi dipisahkan menjadi bagian pendek, istilah teknis disederhanakan, serta data yang belum lengkap dan tingkat ketidakpastian dijelaskan dengan bahasa sehari-hari. Rincian teknis tetap disertakan dan tersimpan terpisah.
+
+# STASIUN CUACA • GANI CAHYO-UNS v1.5.7
 
 Android project lengkap dengan Open-Meteo + Agronomi + Catatan Lapangan.
 
@@ -26,7 +35,7 @@ Versi ini menyediakan `LAPORAN PDF - SIMPAN / PRINT` dari dashboard. Pengguna da
 Isi laporan mencakup cuaca Open-Meteo, ET0, VPD, arah angin berbasis mata angin, tanah CWT-7in1, histori catatan/pupuk/OPT, analisis agronomi, rekomendasi teknis, rekomendasi AI terakhir (jika ada), serta catatan dasar ilmiah.
 
 
-## v1.5.6 agronomi
+## v1.5.7 agronomi
 - Interpretasi pH berbasis profil komoditas dan kebutuhan kapur berbasis pH-buffer/Al-dd/H-dd/CEC/lab.
 - P/K memakai kategori berbasis metode; N hanya diklasifikasikan bila ambang metode tersedia.
 - EC sensor dipisahkan dari ECe; kelembapan memakai FC/PWP/FTSW bila tersedia.
@@ -41,3 +50,21 @@ Isi laporan mencakup cuaca Open-Meteo, ET0, VPD, arah angin berbasis mata angin,
 - Tampilan analisis agronomi menyembunyikan uraian metodologi/rentang/rumus dari layar utama. Detail ilmiah dipindahkan ke ikon **ⓘ**.
 - AI menggunakan ruang output hingga **5000 token** dan diarahkan menghasilkan rekomendasi 0–24 jam, 1–7 hari, air, pemupukan, PHT, prioritas tindakan, serta pencarian web untuk OPT di luar database lokal.
 - API key OpenAI tidak lagi ditanam sebagai default di source code. Masukkan key melalui Pengaturan.
+
+USB Soil Meter 8-in-1: automatic USB-OTG detection for CH340/CH34x adapters (VID 0x1A86; PID 0x7523/0x5523/0x5512/0xE010), Modbus RTU 9600 8N1. Initial map: 0x0000 moisture/10, 0x0001 signed temperature/10, 0x0002 EC, 0x0003 pH/10, 0x0004 N, 0x0005 P, 0x0006 K, 0x0007 fertility. This is a generic candidate map derived from the Soil Detector APK and must be confirmed against the meter model/manual. RS485 and manual entry remain available.
+
+
+## Alur rekomendasi pemupukan adaptif (v1.5.7)
+- Data lengkap: gunakan data yang diisi/diukur sebagai dasar perhitungan.
+- Data sebagian: gunakan nilai asli yang tersedia; komponen yang belum ada ditangani dengan asumsi model yang dinyatakan secara eksplisit.
+- Data kosong: tetap tampilkan estimasi awal berbasis profil komoditas, fase, dan baseline kebutuhan; ketidakpastian diberi label tinggi dan data asli yang perlu diukur dicantumkan.
+- Perubahan input, sensor USB, sumber cuaca, metode uji, budidaya, atau riwayat memicu hitung ulang otomatis.
+- Nilai asli tidak pernah diganti dengan angka estimasi. Estimasi hanya dipakai untuk perhitungan sementara dan digantikan otomatis ketika data asli tersedia.
+
+### Tampilan analisis yang lebih mudah dibaca
+Hasil analisis agronomi sekarang dipisah menjadi kartu-kartu per topik di Catatan Lapangan dan halaman Analisis Agronomi. Judul dan isi mempunyai jarak lebih longgar, saran tindakan lebih menonjol, dan istilah teknis umum dijelaskan dengan bahasa yang lebih sederhana. Isi mentah analisis tetap disimpan untuk konteks AI serta laporan; perubahan tampilan tidak mengganti data masukan atau rumus perhitungan.
+
+
+### Perbaikan build USB Soil Meter
+
+Jika membangun proyek ini, `settings.gradle` sudah menyertakan JitPack karena dependensi USB serial `com.github.mik3y:usb-serial-for-android:3.9.0` diambil dari repositori tersebut.
