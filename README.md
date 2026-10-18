@@ -100,3 +100,8 @@ Run GitHub Actions 39154602530 gagal di kompilasi Java karena import `SharedPref
 
 ### FIX11 — Release lint resource fallback
 Run GitHub Actions `39155582051` berhasil membangun debug tetapi release gagal di lint karena tiga warna hanya ada pada `values-night`. FIX11 mengembalikan warna default yang sama di `app/src/main/res/values/colors.xml`, tanpa mematikan lint.
+
+
+## FIX12 — Ikon aplikasi
+
+Ikon launcher sekarang memakai logo kedua pilihan pengguna. Aset tersedia sebagai adaptive icon Android 8+ dan fallback PNG untuk lima kepadatan layar. Lihat `APP_LOGO_PREVIEW.png` dan `PATCH_NOTES_FIX12_APP_LOGO.md`.

@@ -189,3 +189,8 @@ Prediksi OPT bukan diagnosis. Verifikasi dengan gejala, populasi, luas serangan,
 - Memulihkan deklarasi fallback base untuk `root_bg`, `panel_stroke`, dan `edit_stroke` di `app/src/main/res/values/colors.xml`.
 - Mempertahankan nilai `values-night/colors.xml` dan tidak menonaktifkan Android Lint.
 - Akar masalah: debug build berhasil, tetapi release terhenti di `:app:lintVitalRelease` pada tiga temuan `MissingDefaultResource`.
+
+
+## FIX12 — Ikon aplikasi
+- Memasang logo kedua sebagai ikon launcher STASIUN CUACA v1.5.7.
+- Menyediakan adaptive icon dan density-specific fallback PNG; mengatur ikon launcher di manifest.
