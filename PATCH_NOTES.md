@@ -179,3 +179,8 @@ Prediksi OPT bukan diagnosis. Verifikasi dengan gejala, populasi, luas serangan,
 - Memperbaiki permintaan Open-Meteo Historical API dengan menghapus parameter `visibility` dan `uv_index` yang tidak disediakan endpoint arsip. Kolom CSV lama tetap tersedia namun kosong untuk dua variabel tersebut, dengan pemberitahuan di layar.
 - Pesan error Open-Meteo kini menampilkan `reason` dari JSON respons bila tersedia.
 - Sumber: Open-Meteo Historical Weather API (https://open-meteo.com/en/docs/historical-weather-api) dan ThingSpeak Read Data API (https://www.mathworks.com/help/thingspeak/readdata.html).
+
+## FIX10 — Build Java GitHub Actions 39154602530
+- Menambahkan import `android.content.SharedPreferences` yang dibutuhkan `SettingsActivity` saat menulis koordinat GPS.
+- Menambahkan helper `isExcludedPalm(String)` yang sebelumnya dipanggil tetapi belum didefinisikan, menyelesaikan dua error javac pada `FieldNotesActivity`.
+- Detail: `PATCH_NOTES_FIX10_BUILD_39154602530.md`. Build penuh tetap harus dikonfirmasi di GitHub Actions karena Gradle lokal gagal diunduh akibat DNS.

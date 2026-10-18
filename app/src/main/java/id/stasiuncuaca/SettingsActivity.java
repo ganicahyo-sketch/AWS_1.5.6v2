@@ -3,6 +3,7 @@ package id.stasiuncuaca;
 import android.app.Activity;
 import android.Manifest;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Build;
 import android.os.Handler;

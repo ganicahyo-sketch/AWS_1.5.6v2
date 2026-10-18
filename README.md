@@ -94,3 +94,6 @@ Jika basis ambang N-spesifik tidak dipilih atau batas tidak valid, aplikasi meng
 - Mendukung alias key preferensi lama saat migrasi.
 - Memperbaiki ekspor Open-Meteo Historical API karena `visibility` dan `uv_index` tidak tersedia pada endpoint historis; dua kolom tetap ada di CSV namun kosong.
 - Detail: `PATCH_NOTES_FIX9_CSV_EXPORT.md`.
+
+## Build fix (FIX10)
+Run GitHub Actions 39154602530 gagal di kompilasi Java karena import `SharedPreferences` dan helper `isExcludedPalm(String)` yang belum ada. FIX10 menambahkan keduanya tanpa mengubah ID versi aplikasi. Lihat `PATCH_NOTES_FIX10_BUILD_39154602530.md`.

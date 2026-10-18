@@ -2193,6 +2193,21 @@ public class FieldNotesActivity extends Activity {
     private int hstInt() { return currentHst(); }
     private LocalDate parseDate(String s) { try { return LocalDate.parse(s.trim(), DATE_FMT); } catch (Exception ex) { return null; } }
     private boolean validDate(String s) { return parseDate(s) != null; }
+    /**
+     * STASIUN CUACA v1.5.7 focuses on general crop/weather advisories;
+     * oil-palm-specific recommendations belong to the dedicated SIM-TANI app.
+     */
+    private boolean isExcludedPalm(String cropName) {
+        if (cropName == null || cropName.trim().isEmpty()) return false;
+        String normalized = cropName.toLowerCase(Locale.ROOT)
+                .replace('\u00a0', ' ')
+                .replaceAll("[^a-z0-9]+", " ")
+                .trim();
+        return normalized.equals("sawit")
+                || normalized.contains("kelapa sawit")
+                || normalized.contains("oil palm")
+                || normalized.contains("elaeis guineensis");
+    }
     private boolean sameCrop(String a, String b) { return a != null && b != null && (a.trim().equalsIgnoreCase(b.trim()) || AgronomyEngine.normalizeCrop(a).equalsIgnoreCase(AgronomyEngine.normalizeCrop(b))); }
     private String show(double v) { return Double.isNaN(v) || Double.isInfinite(v) ? "--" : String.format(Locale.US, "%.2f", v); }
     private int dp(int v) { return Math.max(1, Math.round(v * getResources().getDisplayMetrics().density)); }
