@@ -46,7 +46,7 @@ import java.util.concurrent.Executors;
 /**
  * Catatan Lapangan + mesin analisis agronomi v1.5.7.
  *
- * Data CWT-7in1 RS485 dan USB Soil Meter 8-in-1 (CH34x) tetap dibedakan sebagai sumber input.
+ * Semua nilai CWT-7in1 (RS485/USB) dianggap benar sebagai input proyek.
  * Interpretasi tetap diberi label screening bila standar sangat tergantung
  * metode ekstraksi/laboratorium.
  */
@@ -81,7 +81,7 @@ public class FieldNotesActivity extends Activity {
             "Tidak ada", "Ringan", "Sedang", "Berat", "Sangat berat"
     };
     private static final String[] SOIL_SOURCE = {
-            "CWT-7in1 RS485", "USB Soil Meter 8-in-1 (CH34x)", "Input manual"
+            "CWT-7in1 RS485", "CWT-7in1 USB", "Input manual"
     };
     private static final String[] CULTIVATION = {
             "Konvensional / PHT", "Organik"
@@ -1329,6 +1329,7 @@ public class FieldNotesActivity extends Activity {
             double ph = num(soilPh.getText().toString()), ec = num(soilEc.getText().toString()),
                     moist = num(soilMoisture.getText().toString()), st = num(soilTemp.getText().toString());
             double n = num(soilN.getText().toString()), pp = num(soilP.getText().toString()), k = num(soilK.getText().toString());
+            double depth = num(soilDepth.getText().toString()), bd = num(soilBulkDensity.getText().toString());
             double nLow = num(soilNLow.getText().toString());
             double nHigh = num(soilNHigh.getText().toString());
             double at = num(airTemp.getText().toString()), rh = num(airRh.getText().toString()), pressureHpa = num(pressure.getText().toString()), rain = num(rain24.getText().toString()), e0 = num(et0.getText().toString()), luxVal = num(lux.getText().toString()), parVal = num(par.getText().toString()), sunVal = num(sunHours.getText().toString()), wind = num(windSpeed.getText().toString());
@@ -1348,7 +1349,6 @@ public class FieldNotesActivity extends Activity {
             String methodName = soilTestMethod.getSelectedItem().toString();
             double phBuffer = num(soilPhBuffer.getText().toString()), alDd = num(soilAlDd.getText().toString()), hDd = num(soilHDd.getText().toString()), cec = num(soilCec.getText().toString()), om = num(soilOm.getText().toString());
             double ece = num(soilEce.getText().toString()), limeLab = num(soilLimeReq.getText().toString());
-            double depth = num(soilDepth.getText().toString()), bd = num(soilBulkDensity.getText().toString());
             double fc = num(soilFc.getText().toString()), pwp = num(soilPwp.getText().toString());
             s.append("Metode uji tanah: ").append(methodName).append("\n");
             s.append("pH-buffer: ").append(show(phBuffer)).append("; Al-dd: ").append(show(alDd)).append("; H-dd: ").append(show(hDd)).append("; CEC: ").append(show(cec)).append("; bahan organik: ").append(show(om)).append(" %\n");

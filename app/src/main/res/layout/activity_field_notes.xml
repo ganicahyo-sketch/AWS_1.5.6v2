@@ -223,7 +223,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="2. SENSOR TANAH USB 8-IN-1 / CWT-7IN1 RS485"
+                    android:text="2. SENSOR TANAH CWT-7IN1 / USB 8-IN-1"
                     android:textColor="@color/cyan"
                     android:textStyle="bold"
                     android:textSize="15sp"/>
@@ -231,7 +231,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="USB Soil Meter 8-in-1 dengan adaptor serial CH34x dideteksi otomatis. Nilai sensor diisi ke kolom di bawah; CWT-7in1 RS485 dan input manual tetap tersedia."
+                    android:text="USB 8-in-1 CH340/CH34x dideteksi otomatis. Nilai sensor diisi ke kolom di bawah; RS485 dan input manual tetap tersedia."
                     android:textColor="@color/text_muted"
                     android:textSize="14sp"
                     android:layout_marginTop="4dp"/>
@@ -254,7 +254,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="5dp"
-                    android:text="USB Soil Meter 8-in-1 (CH34x): mencari perangkat saat USB/OTG terhubung…"
+                    android:text="USB Soil Meter 8-in-1: mencari perangkat saat USB/OTG terhubung…"
                     android:textColor="@color/text_muted"
                     android:textSize="13sp"/>
 

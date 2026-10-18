@@ -891,6 +891,16 @@ public class CsvDownloadActivity extends Activity {
         return column == targetColumn ? field.toString() : null;
     }
 
+    private String readAll(InputStream in) throws IOException {
+        if (in == null) return "";
+        StringBuilder b = new StringBuilder();
+        try (BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = r.readLine()) != null) b.append(line).append('\n');
+        }
+        return b.toString();
+    }
+
     private String readErrorBody(HttpURLConnection c) {
         InputStream stream = null;
         try {
