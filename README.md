@@ -97,3 +97,6 @@ Jika basis ambang N-spesifik tidak dipilih atau batas tidak valid, aplikasi meng
 
 ## Build fix (FIX10)
 Run GitHub Actions 39154602530 gagal di kompilasi Java karena import `SharedPreferences` dan helper `isExcludedPalm(String)` yang belum ada. FIX10 menambahkan keduanya tanpa mengubah ID versi aplikasi. Lihat `PATCH_NOTES_FIX10_BUILD_39154602530.md`.
+
+### FIX11 — Release lint resource fallback
+Run GitHub Actions `39155582051` berhasil membangun debug tetapi release gagal di lint karena tiga warna hanya ada pada `values-night`. FIX11 mengembalikan warna default yang sama di `app/src/main/res/values/colors.xml`, tanpa mematikan lint.

@@ -3,6 +3,10 @@
     <color name="navy_950">#07131F</color>
     <color name="navy_900">#0B1D2A</color>
     <color name="navy_800">#102B3C</color>
+    <!-- Base fallbacks required by Android Lint; keep aligned with values-night. -->
+    <color name="root_bg">#07131F</color>
+    <color name="panel_stroke">#214457</color>
+    <color name="edit_stroke">#31566A</color>
     <color name="panel">#122B3B</color>
     <color name="panel_2">#173546</color>
     <color name="cyan">#29C6C7</color>

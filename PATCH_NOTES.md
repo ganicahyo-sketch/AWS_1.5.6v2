@@ -184,3 +184,8 @@ Prediksi OPT bukan diagnosis. Verifikasi dengan gejala, populasi, luas serangan,
 - Menambahkan import `android.content.SharedPreferences` yang dibutuhkan `SettingsActivity` saat menulis koordinat GPS.
 - Menambahkan helper `isExcludedPalm(String)` yang sebelumnya dipanggil tetapi belum didefinisikan, menyelesaikan dua error javac pada `FieldNotesActivity`.
 - Detail: `PATCH_NOTES_FIX10_BUILD_39154602530.md`. Build penuh tetap harus dikonfirmasi di GitHub Actions karena Gradle lokal gagal diunduh akibat DNS.
+
+## FIX11 — Release lint resources (run 39155582051)
+- Memulihkan deklarasi fallback base untuk `root_bg`, `panel_stroke`, dan `edit_stroke` di `app/src/main/res/values/colors.xml`.
+- Mempertahankan nilai `values-night/colors.xml` dan tidak menonaktifkan Android Lint.
+- Akar masalah: debug build berhasil, tetapi release terhenti di `:app:lintVitalRelease` pada tiga temuan `MissingDefaultResource`.
