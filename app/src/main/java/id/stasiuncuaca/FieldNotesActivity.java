@@ -23,6 +23,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
 import android.widget.AdapterView;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -70,7 +71,8 @@ public class FieldNotesActivity extends Activity {
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US);
     private SharedPreferences prefs;
 
-    private EditText date, time, crop, variety, plantDate, hst, area, observation, action, targetYield, phaseManual;
+    private EditText date, time, variety, plantDate, hst, area, observation, action, targetYield, phaseManual;
+    private AutoCompleteTextView crop;
     private EditText soilPh, soilMoisture, soilTemp, soilEc, soilN, soilP, soilK, soilDepth, soilBulkDensity, soilFc, soilPwp, soilPhBuffer, soilAlDd, soilHDd, soilCec, soilOm, soilEce, soilLimeReq, soilNLow, soilNHigh;
     private Spinner soilTestMethod, ageUnit, dataSource, bulkDensityPreset;
     private String previousAgeUnit = "HST / hari";
@@ -126,6 +128,22 @@ public class FieldNotesActivity extends Activity {
         date = findViewById(R.id.fnDate);
         time = findViewById(R.id.fnTime);
         crop = findViewById(R.id.fnCrop);
+        ArrayAdapter<String> cropAdapter = new ArrayAdapter<>(this, android.R.layout.simple_dropdown_item_1line, CropDatabase.CROPS);
+        crop.setAdapter(cropAdapter);
+        crop.setThreshold(0);
+        crop.setOnItemClickListener((parent, view, position, id) -> {
+            String selected = String.valueOf(parent.getItemAtPosition(position));
+            if (CropDatabase.isManual(selected)) {
+                crop.setText("");
+                crop.setHint("Ketik nama komoditas manual");
+                crop.requestFocus();
+            } else {
+                crop.setText(AgronomyEngine.normalizeCrop(selected));
+                crop.setSelection(crop.length());
+                updateAutoPhase();
+            }
+        });
+        crop.setOnClickListener(v -> crop.showDropDown());
         variety = findViewById(R.id.fnVariety);
         plantDate = findViewById(R.id.fnPlantDate);
         hst = findViewById(R.id.fnHst);

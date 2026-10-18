@@ -15,6 +15,7 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.text.InputType;
 import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.Spinner;
@@ -29,7 +30,8 @@ public class SettingsActivity extends Activity {
     private static final String DEFAULT_READ_KEY = "P4B56Z7HZM56Q7HJ";
     private static final String DEFAULT_AI_KEY = "";
     private android.content.SharedPreferences p;
-    private EditText title, channel, readKey, aiKey, aiModel, geminiKey, geminiModel, openRouterKey, openRouterModel, crop, lat, lon, elev;
+    private EditText title, channel, readKey, aiKey, aiModel, geminiKey, geminiModel, openRouterKey, openRouterModel, lat, lon, elev;
+    private AutoCompleteTextView crop;
     private Spinner cult, aiProvider;
     private CheckBox aiGoogleSearch;
     private static final int LOCATION_REQ = 78;
@@ -50,6 +52,14 @@ public class SettingsActivity extends Activity {
         p = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         title=findViewById(R.id.appTitle); channel=findViewById(R.id.channel); readKey=findViewById(R.id.readKey);
         aiKey=findViewById(R.id.aiKey); aiModel=findViewById(R.id.aiModel); crop=findViewById(R.id.crop);
+        ArrayAdapter<String> cropAdapter=new ArrayAdapter<>(this,android.R.layout.simple_dropdown_item_1line,CropDatabase.CROPS);
+        crop.setAdapter(cropAdapter); crop.setThreshold(0);
+        crop.setOnItemClickListener((parent,view,position,id)->{
+            String selected=String.valueOf(parent.getItemAtPosition(position));
+            if(CropDatabase.isManual(selected)){ crop.setText(""); crop.setHint("Ketik nama komoditas manual"); crop.requestFocus(); }
+            else { crop.setText(AgronomyEngine.normalizeCrop(selected)); crop.setSelection(crop.length()); }
+        });
+        crop.setOnClickListener(v->crop.showDropDown());
         aiProvider=findViewById(R.id.aiProvider); aiGoogleSearch=findViewById(R.id.aiGoogleSearch);
         geminiKey=findViewById(R.id.geminiKey); geminiModel=findViewById(R.id.geminiModel);
         openRouterKey=findViewById(R.id.openRouterKey); openRouterModel=findViewById(R.id.openRouterModel);

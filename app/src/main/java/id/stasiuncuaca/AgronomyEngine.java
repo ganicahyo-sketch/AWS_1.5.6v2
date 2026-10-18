@@ -72,15 +72,15 @@ public final class AgronomyEngine {
         if (c.contains("cabai") || c.contains("chili") || c.contains("pepper"))
             return new CropProfile("Cabai",130,5.5,7.0,20,32,1.7,20,40,10,20,100,180,90,55,35,10,src);
         if (c.contains("tomat") || c.contains("tomato"))
-            return new CropProfile("Tomat",110,5.5,7.0,18,30,2.5,20,40,10,20,100,180,90,60,40,10,src);
+            return new CropProfile("Tomat",110,5.5,7.0,18,30,2.5,20,40,10,20,100,180,90,60,40,7,src);
         if (c.contains("singkong") || c.contains("cassava"))
-            return new CropProfile("Singkong",300,4.5,7.0,20,32,2.5,20,40,8,15,80,160,70,35,35,12,src);
+            return new CropProfile("Singkong",300,4.5,7.0,20,32,2.5,20,40,8,15,80,160,70,35,35,10,src);
         if (c.contains("ubi jalar") || c.contains("sweet potato"))
             return new CropProfile("Ubi jalar",120,5.5,6.8,20,30,1.5,20,40,8,15,80,140,60,30,30,12,src);
         if (c.contains("kentang") || c.contains("potato"))
-            return new CropProfile("Kentang",100,5.0,6.5,15,25,1.7,20,40,10,20,100,180,105,70,35,7,src);
+            return new CropProfile("Kentang",100,5.0,6.5,15,25,1.7,20,40,10,20,100,180,105,70,35,2,src);
         if (c.contains("bawang") || c.contains("shallot") || c.contains("onion"))
-            return new CropProfile("Bawang merah",90,5.5,6.8,15,30,1.2,20,40,10,20,80,160,100,55,35,8,src);
+            return new CropProfile("Bawang merah",90,5.5,6.8,15,30,1.2,20,40,10,20,80,160,100,55,35,4.5,src);
         if (c.contains("kacang tanah") || c.contains("groundnut"))
             return new CropProfile("Kacang tanah",100,5.0,7.0,20,32,2.0,15,35,8,15,60,120,25,40,10,10, "FAO Indonesia; angka acuan umum, validasi lokasi.");
         if (c.contains("kacang hijau") || c.contains("mungbean"))
@@ -90,31 +90,31 @@ public final class AgronomyEngine {
         if (c.contains("kubis") || c.equals("kol") || c.contains("cabbage"))
             return new CropProfile("Kubis",100,5.5,6.8,15,25,1.7,20,40,10,20,80,150,90,60,20,7, "FAO Indonesia; baseline screening umum, cek SOP lokal.");
         if (c.contains("pakcoy") || c.contains("pokcoy") || c.contains("pak choi") || c.contains("bok choy"))
-            return new CropProfile("Pakcoy",45,5.5,6.8,18,28,1.5,20,40,8,15,70,130,90,40,80,5, "Baseline screening sayuran Brassica; verifikasi varietas, hasil uji tanah dan SOP lokal.");
+            return new CropProfile("Pakcoy",45,5.5,6.8,18,28,1.5,20,40,8,15,70,130,90,40,80,4.5, "Baseline screening sayuran Brassica; verifikasi varietas, hasil uji tanah dan SOP lokal.");
         if (c.contains("sawi") || c.contains("mustard green") || c.contains("caisim") || c.contains("caisin") || c.contains("choy sum"))
-            return new CropProfile("Sawi",45,5.5,7.0,18,30,1.5,20,40,8,15,70,130,95,40,10,10, "FAO Indonesia; baseline screening umum, cek SOP lokal.");
+            return new CropProfile("Sawi",45,5.5,7.0,18,30,1.5,20,40,8,15,70,130,95,40,10,5, "FAO Indonesia; baseline screening umum, cek SOP lokal.");
         if (c.contains("selada") || c.contains("lettuce"))
-            return new CropProfile("Selada",55,5.5,6.8,12,24,1.5,20,40,8,15,80,140,100,60,90,5, "Baseline screening sayuran daun; verifikasi berdasarkan varietas dan SOP setempat.");
+            return new CropProfile("Selada",55,5.5,6.8,12,24,1.5,20,40,8,15,80,140,100,60,90,4, "Baseline screening sayuran daun; verifikasi berdasarkan varietas dan SOP setempat.");
         if (c.contains("brokoli") || c.contains("broccoli"))
-            return new CropProfile("Brokoli",85,5.5,7.0,15,24,1.7,20,40,10,20,80,150,110,70,80,7, "Baseline screening Brassica; verifikasi berdasarkan varietas dan SOP setempat.");
+            return new CropProfile("Brokoli",85,5.5,7.0,15,24,1.7,20,40,10,20,80,150,110,70,80,4.5, "Baseline screening Brassica; verifikasi berdasarkan varietas dan SOP setempat.");
         if (c.contains("kembang kol") || c.contains("cauliflower"))
-            return new CropProfile("Kembang kol",85,5.5,7.0,15,24,1.7,20,40,10,20,80,150,110,70,80,7, "Baseline screening Brassica; verifikasi berdasarkan varietas dan SOP setempat.");
+            return new CropProfile("Kembang kol",85,5.5,7.0,15,24,1.7,20,40,10,20,80,150,110,70,80,4.5, "Baseline screening Brassica; verifikasi berdasarkan varietas dan SOP setempat.");
         if (c.contains("kangkung") || c.contains("water spinach"))
             return new CropProfile("Kangkung",35,5.0,7.0,20,32,1.7,15,35,8,15,60,120,80,35,30,12, "Baseline screening sayuran daun; verifikasi berdasarkan SOP lokal.");
         if (c.contains("bayam") || c.contains("amaranth"))
             return new CropProfile("Bayam",35,5.5,7.0,20,32,1.7,15,35,8,15,60,120,80,35,30,12, "Baseline screening sayuran daun; verifikasi berdasarkan SOP lokal.");
         if (c.contains("wortel") || c.contains("carrot"))
-            return new CropProfile("Wortel",100,5.5,7.0,15,25,1.7,15,35,8,15,80,150,85,50,90,7, "Baseline screening umbi; verifikasi berdasarkan SOP lokal.");
+            return new CropProfile("Wortel",100,5.5,7.0,15,25,1.7,15,35,8,15,80,150,85,50,90,6, "Baseline screening umbi; verifikasi berdasarkan SOP lokal.");
         if (c.contains("timun") || c.contains("mentimun") || c.contains("cucumber"))
             return new CropProfile("Mentimun",70,5.5,7.0,20,30,1.7,20,40,10,20,80,160,100,55,100,10, "Baseline screening Cucurbitaceae; verifikasi berdasarkan SOP lokal.");
         if (c.contains("terong") || c.contains("eggplant"))
-            return new CropProfile("Terong",120,5.5,7.0,22,32,1.7,20,40,10,20,80,160,100,70,100,12, "Baseline screening sayuran buah; verifikasi berdasarkan SOP lokal.");
+            return new CropProfile("Terong",120,5.5,7.0,22,32,1.7,20,40,10,20,80,160,100,70,100,10, "Baseline screening sayuran buah; verifikasi berdasarkan SOP lokal.");
         if (c.contains("melon"))
             return new CropProfile("Melon",90,5.5,7.0,22,32,1.7,20,40,10,20,90,170,100,70,120,12, "Baseline screening Cucurbitaceae; verifikasi berdasarkan SOP lokal.");
         if (c.contains("semangka") || c.contains("watermelon"))
             return new CropProfile("Semangka",90,5.5,7.0,22,32,1.7,20,40,10,20,90,170,100,60,100,12, "Baseline screening Cucurbitaceae; verifikasi berdasarkan SOP lokal.");
         if (c.contains("kale") || c.contains("kailan"))
-            return new CropProfile("Kale / kailan",65,5.5,7.0,15,26,1.7,20,40,10,20,80,150,95,55,60,7, "Baseline screening Brassica; verifikasi berdasarkan varietas dan SOP lokal.");
+            return new CropProfile("Kale / kailan",65,5.5,7.0,15,26,1.7,20,40,10,20,80,150,95,55,60,4.5, "Baseline screening Brassica; verifikasi berdasarkan varietas dan SOP lokal.");
         return new CropProfile("Komoditas umum",120,5.5,7.0,18,32,2.0,20,40,8,15,80,140,80,40,30,10,src);
     }
 

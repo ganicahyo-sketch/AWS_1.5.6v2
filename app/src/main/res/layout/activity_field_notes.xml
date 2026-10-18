@@ -106,7 +106,7 @@
                         android:singleLine="true"/>
                 </LinearLayout>
 
-                <EditText
+                <AutoCompleteTextView
                     android:id="@+id/fnCrop"
                     android:layout_width="match_parent"
                     android:layout_height="48dp"

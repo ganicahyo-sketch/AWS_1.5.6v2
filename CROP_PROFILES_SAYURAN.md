@@ -50,3 +50,14 @@ Dokumen ini mencerminkan profil screening yang dipakai `AgronomyEngine.java`. Ni
 - Daftar lebih luas mengenai klasifikasi hara, pembenah tanah, EC, cahaya, SOP dan sumber teknis tersedia di `SCIENTIFIC_SOURCES.md`.
 
 Data produktivitas per kabupaten atau deskripsi varietas perlu dicocokkan dengan lokasi, varietas, bentuk produk yang dipanen dan cara budidaya. Bila belum cocok, hasil di aplikasi tetap disebut estimasi screening dengan ketidakpastian, bukan dosis resmi atau prediksi hasil terjamin.
+
+
+## FIX13 — katalog komoditas dan Tbase
+
+Katalog komoditas dipulihkan sebagai pilihan editable pada Pengaturan dan Catatan Lapangan. Opsi terakhir **Lainnya / isi manual** mengosongkan field dan pengguna dapat mengetik komoditas yang tidak tersedia.
+
+Tbase dipakai hanya untuk screening thermal time/GDD. Nilai utama mengikuti tabel indikatif FAO56rev 2025/review threshold 2025; beberapa komoditas yang tidak mempunyai nilai crop-specific yang kuat memakai proxy famili/tipe tanaman dan diberi label tersebut. Tbase bukan nilai universal untuk semua varietas.
+
+Daftar utama: Padi 10°C; Jagung 10°C; Kedelai 10°C; Cabai 10°C; Tomat 7°C; Singkong 10°C; Ubi jalar 12°C; Kentang 2°C; Bawang merah 4,5°C (proxy onion/shallot); Kacang tanah 10°C; Kacang hijau 8°C; Kacang panjang 10°C (proxy bean); Kubis 4,5°C; Pakcoy 4,5°C (proxy Brassica/cabbage); Sawi 5°C; Selada 4°C; Brokoli 4,5°C; Kembang kol 4,5°C; Kangkung 10°C (proxy warm-season); Bayam 7°C bila dimaksud amaranth; Wortel 6°C; Mentimun 10°C; Terong 10°C; Melon 10°C; Semangka 10°C; Kale/kailan 4,5°C (proxy Brassica).
+
+Sumber: FAO56rev/review 2025 untuk banyak tanaman; MRCC/OSU dan WSU untuk tabel GDD sayuran; studi mustard untuk Tbase 5°C; studi mungbean menunjukkan nilai genotype-specific sekitar 8,6–9,8°C sehingga aplikasi menggunakan 8°C sebagai nilai model indikatif.
