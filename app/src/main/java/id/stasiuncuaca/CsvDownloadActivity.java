@@ -55,6 +55,11 @@ import java.util.concurrent.Executors;
  */
 public class CsvDownloadActivity extends Activity {
     private static final String PREFS = "thingspeak_config";
+    // Keep export defaults aligned with MainActivity and SettingsActivity. Settings
+    // shows these values before a first save, so export must not interpret that
+    // valid visible default as an empty configuration.
+    private static final String DEFAULT_CHANNEL = "2981880";
+    private static final String DEFAULT_READ_KEY = "P4B56Z7HZM56Q7HJ";
     private static final ZoneId WIB = ZoneId.of("Asia/Jakarta");
     private static final DateTimeFormatter API_FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US);
@@ -165,7 +170,7 @@ public class CsvDownloadActivity extends Activity {
             openMeteoPanel.setVisibility(android.view.View.VISIBLE);
             rangePanel.setVisibility(android.view.View.VISIBLE);
             historyInfo.setText(
-                    "OPEN-METEO HISTORIS: pilih tanggal dan resolusi. Data berasal dari Historical Weather API, bukan rekaman sensor AWS."
+                    "OPEN-METEO HISTORIS: pilih tanggal dan resolusi. Data berasal dari Historical Weather API, bukan rekaman sensor AWS. UV index dan visibility tidak tersedia pada endpoint historis; kolom itu akan kosong."
             );
             statusView.setText("Pilih tanggal dan resolusi, kemudian unduh CSV Open-Meteo.");
             setOpenMeteoResolution(openMeteoHourly);
@@ -272,6 +277,56 @@ public class CsvDownloadActivity extends Activity {
         dialog.show();
     }
 
+    /**
+     * Read string-like values defensively: older builds may have saved a setting
+     * under an alias or as a numeric preference. A visible default in Settings
+     * must also be the effective default used by CSV export.
+     */
+    private String preferenceText(String key) {
+        try {
+            Object value = prefs.getAll().get(key);
+            return value == null ? "" : String.valueOf(value).trim();
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private String firstPreferenceText(String... keys) {
+        for (String key : keys) {
+            String value = preferenceText(key);
+            if (!value.isEmpty()) return value;
+        }
+        return "";
+    }
+
+    private String configuredChannel() {
+        String value = firstPreferenceText("channel", "channel_id", "channelId", "thingspeak_channel_id");
+        if (value.isEmpty()) value = DEFAULT_CHANNEL;
+        // Strip copied spaces without silently guessing or changing the ID digits.
+        return value.replaceAll("\\s+", "");
+    }
+
+    private String configuredReadKey() {
+        String value = firstPreferenceText("read_key", "read_api_key", "readApiKey", "thingspeak_read_key");
+        return value.isEmpty() ? DEFAULT_READ_KEY : value;
+    }
+
+    private String parseOpenMeteoError(String body) {
+        if (body == null || body.trim().isEmpty()) return "";
+        String text = body.trim();
+        try {
+            JSONObject json = new JSONObject(text);
+            String reason = json.optString("reason", "").trim();
+            if (!reason.isEmpty()) return reason;
+            if (json.optBoolean("error", false)) {
+                return "Permintaan ditolak API; periksa parameter atau rentang tanggal.";
+            }
+        } catch (Exception ignored) {
+            // Use the bounded raw response below when it is not JSON.
+        }
+        return text.length() > 240 ? text.substring(0, 240) + "…" : text;
+    }
+
     private void prepareCsv() {
         if (openMeteoMode) {
             prepareOpenMeteoCsv();
@@ -283,13 +338,17 @@ public class CsvDownloadActivity extends Activity {
     private void prepareThingSpeakCsv() {
         if (downloading) return;
 
-        String channel = prefs.getString("channel", "").trim();
-        String key = prefs.getString("read_key", "").trim();
+        String channel = configuredChannel();
+        String key = configuredReadKey();
 
         if (channel.isEmpty()) {
-            statusView.setText(
-                    "Channel ID belum diatur. Buka Pengaturan terlebih dahulu."
-            );
+            // Defensive guard. configuredChannel() normally falls back to the
+            // same default channel used by the dashboard/settings screen.
+            statusView.setText("Channel ID ThingSpeak belum tersedia. Buka Pengaturan, isi Channel ID, lalu Simpan.");
+            return;
+        }
+        if (!channel.matches("\\d+")) {
+            statusView.setText("Channel ID ThingSpeak tidak valid. Gunakan ID numerik saja; periksa Pengaturan.");
             return;
         }
 
@@ -313,7 +372,7 @@ public class CsvDownloadActivity extends Activity {
             // second avoids excluding an entry created in the current second.
             exportEnd = LocalDateTime.now(WIB).plusSeconds(1);
             fileName = "STASIUN-CUACA-DESA-TURUS_SELURUH-HISTORI.csv";
-            statusView.setText("Menyiapkan seluruh histori ThingSpeak...");
+            statusView.setText("Menyiapkan seluruh histori ThingSpeak • Channel ID " + channel + "...");
         } else {
             exportStart = startDate.atStartOfDay();
             // The selected end date is inclusive through 23:59:59 WIB.
@@ -324,11 +383,8 @@ public class CsvDownloadActivity extends Activity {
                     + endDate.format(FILE_FMT)
                     + ".csv";
             statusView.setText(
-                    "Mengambil data "
-                            + startDate
-                            + " sampai "
-                            + endDate
-                            + "..."
+                    "Mengambil data ThingSpeak • Channel ID " + channel + " • "
+                            + startDate + " sampai " + endDate + "..."
             );
         }
 
@@ -485,7 +541,10 @@ public class CsvDownloadActivity extends Activity {
                                           boolean hourly, Writer writer, OpenMeteoStats stats) throws Exception {
         String url;
         if (hourly) {
-            String vars = "temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation,rain,weather_code,surface_pressure,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility,uv_index,shortwave_radiation,vapour_pressure_deficit,et0_fao_evapotranspiration,sunshine_duration,soil_temperature_0_to_7cm,soil_temperature_7_to_28cm,soil_moisture_0_to_7cm,soil_moisture_7_to_28cm";
+            // Historical Weather API does not expose hourly visibility or UV index.
+            // Requesting either unsupported variable rejects the whole request (HTTP 400).
+            // The legacy CSV columns are retained for compatibility and left blank.
+            String vars = "temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation,rain,weather_code,surface_pressure,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,shortwave_radiation,vapour_pressure_deficit,et0_fao_evapotranspiration,sunshine_duration,soil_temperature_0_to_7cm,soil_temperature_7_to_28cm,soil_moisture_0_to_7cm,soil_moisture_7_to_28cm";
             url = "https://archive-api.open-meteo.com/v1/archive?latitude=" + enc(String.format(Locale.US, "%.6f", lat))
                     + "&longitude=" + enc(String.format(Locale.US, "%.6f", lon))
                     + "&start_date=" + start + "&end_date=" + end
@@ -511,7 +570,9 @@ public class CsvDownloadActivity extends Activity {
             int code = c.getResponseCode();
             if (code != HttpURLConnection.HTTP_OK) {
                 String detail = readErrorBody(c);
-                throw new Exception("HTTP " + code + (detail.isEmpty() ? "" : " • " + detail));
+                String explanation = parseOpenMeteoError(detail);
+                throw new Exception("Open-Meteo HTTP " + code
+                        + (explanation.isEmpty() ? "" : " • " + explanation));
             }
             JSONObject root = new JSONObject(readAll(c.getInputStream()));
             double responseLat = root.optDouble("latitude", lat);

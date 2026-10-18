@@ -1,8 +1,17 @@
 package id.stasiuncuaca;
 
 import android.app.Activity;
+import android.Manifest;
 import android.content.Context;
 import android.os.Bundle;
+import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.content.pm.PackageManager;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.text.InputType;
 import android.widget.ArrayAdapter;
 import android.widget.CheckBox;
@@ -22,8 +31,15 @@ public class SettingsActivity extends Activity {
     private EditText title, channel, readKey, aiKey, aiModel, geminiKey, geminiModel, openRouterKey, openRouterModel, crop, lat, lon, elev;
     private Spinner cult, aiProvider;
     private CheckBox aiGoogleSearch;
-    private boolean awaitingGpsReturn = false;
-    private TextView toggleRead, toggleAi;
+    private static final int LOCATION_REQ = 78;
+    private static final long GPS_TIMEOUT_MS = 15000L;
+    private final Handler gpsHandler = new Handler(Looper.getMainLooper());
+    private LocationManager gpsManager;
+    private LocationListener gpsListener;
+    private Location bestLocation;
+    private boolean gpsRequestActive = false;
+    private TextView gpsStatus, toggleRead, toggleAi;
+    private final Runnable gpsTimeout = () -> finishGpsRequest(true);
     private EditText[] fieldName = new EditText[8];
     private EditText[] fieldUnit = new EditText[8];
 
@@ -38,6 +54,7 @@ public class SettingsActivity extends Activity {
         openRouterKey=findViewById(R.id.openRouterKey); openRouterModel=findViewById(R.id.openRouterModel);
         lat=findViewById(R.id.latitude); lon=findViewById(R.id.longitude); elev=findViewById(R.id.elevation);
         cult=findViewById(R.id.cultivation); toggleRead=findViewById(R.id.toggleReadKey); toggleAi=findViewById(R.id.toggleAiKey);
+        gpsStatus=findViewById(R.id.gpsStatus);
         for(int i=0;i<8;i++){
             int n=i+1;
             fieldName[i]=findViewById(getResources().getIdentifier("fieldName"+n,"id",getPackageName()));
@@ -48,12 +65,7 @@ public class SettingsActivity extends Activity {
         ArrayAdapter<String> ad=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,new String[]{"Konvensional / PHT","Organik"});
         ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); cult.setAdapter(ad);
         load();
-        findViewById(R.id.useGps).setOnClickListener(v->{
-            awaitingGpsReturn = true;
-            android.content.Intent i = new android.content.Intent(this, MainActivity.class);
-            i.putExtra("request_fresh_gps", true);
-            startActivity(i);
-        });
+        findViewById(R.id.useGps).setOnClickListener(v -> requestGpsLocation());
         findViewById(R.id.saveSettings).setOnClickListener(v->save());
         findViewById(R.id.cancelSettings).setOnClickListener(v->finish());
         toggleRead.setOnClickListener(v->toggle(readKey,toggleRead));
@@ -62,15 +74,239 @@ public class SettingsActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
-        // MainActivity obtains a fresh GPS fix and persists it. Refresh the visible
-        // fields on return so saving Settings cannot overwrite the new coordinates
-        // with stale latitude/longitude values.
-        if (awaitingGpsReturn && p != null) {
-            lat.setText(f(p.getFloat("latitude", Float.NaN)));
-            lon.setText(f(p.getFloat("longitude", Float.NaN)));
-            awaitingGpsReturn = false;
+        // Coordinates are updated directly here when the user presses GUNAKAN GPS HP.
+        // No navigation to a second MainActivity is required.
+        if (gpsStatus != null && !gpsRequestActive && gpsStatus.getText().toString().trim().isEmpty()) {
+            gpsStatus.setText("Lokasi tersimpan. Tekan GUNAKAN GPS HP untuk memperbarui.");
         }
     }
+
+    @Override protected void onDestroy() {
+        clearGpsRequest();
+        super.onDestroy();
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != LOCATION_REQ) return;
+        boolean granted = false;
+        for (int i = 0; i < permissions.length && i < grantResults.length; i++) {
+            if ((Manifest.permission.ACCESS_FINE_LOCATION.equals(permissions[i])
+                    || Manifest.permission.ACCESS_COARSE_LOCATION.equals(permissions[i]))
+                    && grantResults[i] == PackageManager.PERMISSION_GRANTED) granted = true;
+        }
+        if (granted) requestGpsLocation();
+        else setGpsStatus("Izin lokasi tidak diberikan. Latitude/longitude lama tidak diubah.");
+    }
+
+    private void requestGpsLocation() {
+        if (gpsRequestActive) {
+            Toast.makeText(this, "Sedang memperbarui koordinat; tunggu sebentar.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, LOCATION_REQ);
+            return;
+        }
+        try {
+            gpsManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+            if (gpsManager == null) throw new IllegalStateException("Layanan lokasi Android tidak tersedia");
+            gpsRequestActive = true;
+            bestLocation = null;
+
+            // Immediate path: populate the form using a recent Android location cache while
+            // requesting a new fix in parallel. A temporary lack of new satellite data no
+            // longer leaves this button showing a generic update failure.
+            Location last = bestLastKnownLocation(gpsManager);
+            if (last != null) {
+                bestLocation = new Location(last);
+                storeLocationInForm(last, "Lokasi terakhir Android diisi segera (" + locationAgeLabel(last)
+                        + "); mencari koordinat yang lebih baru…");
+            } else {
+                setGpsStatus("Meminta koordinat baru dari GPS/jaringan HP…");
+            }
+
+            gpsListener = new LocationListener() {
+                @Override public void onLocationChanged(Location location) {
+                    if (location == null || !gpsRequestActive || !validLocation(location)) return;
+                    long age = locationAgeMs(location);
+                    if (age > 120000L) return;
+                    boolean improved = bestLocation == null || isBetterLocation(location, bestLocation);
+                    if (improved) {
+                        bestLocation = new Location(location);
+                        // A valid improving fix is published immediately; no arbitrary 25 m
+                        // cutoff is imposed, so approximate network location still works indoors.
+                        storeLocationInForm(bestLocation, "Koordinat baru dari " + providerLabel(bestLocation)
+                                + accuracyLabel(bestLocation) + ".");
+                    }
+                    if (!location.hasAccuracy() || location.getAccuracy() <= 100f
+                            || LocationManager.GPS_PROVIDER.equals(location.getProvider()) && location.getAccuracy() <= 150f) {
+                        finishGpsRequest(false);
+                    }
+                }
+                @Override public void onProviderEnabled(String provider) {
+                    setGpsStatus("Provider lokasi aktif: " + providerLabel(provider) + ". Menunggu koordinat…");
+                }
+                @Override public void onProviderDisabled(String provider) {}
+                @SuppressWarnings("deprecation")
+                @Override public void onStatusChanged(String provider, int status, android.os.Bundle extras) {}
+            };
+
+            boolean requested = false;
+            for (String provider : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
+                try {
+                    if (gpsManager.isProviderEnabled(provider)) {
+                        gpsManager.requestLocationUpdates(provider, 1000L, 0f, gpsListener, Looper.getMainLooper());
+                        requested = true;
+                    }
+                } catch (SecurityException ignored) {
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+            if (!requested) {
+                if (bestLocation != null) {
+                    finishGpsRequest(true);
+                } else {
+                    clearGpsRequest();
+                    setGpsStatus("Lokasi/GPS HP tidak aktif. Aktifkan layanan Lokasi dan coba lagi; koordinat lama dipertahankan.");
+                    Toast.makeText(this, "Aktifkan Lokasi/GPS pada HP untuk mendapatkan koordinat baru.", Toast.LENGTH_LONG).show();
+                }
+                return;
+            }
+            gpsHandler.removeCallbacks(gpsTimeout);
+            gpsHandler.postDelayed(gpsTimeout, GPS_TIMEOUT_MS);
+        } catch (Exception e) {
+            clearGpsRequest();
+            setGpsStatus("Tidak dapat memulai GPS: " + errorText(e) + ". Koordinat lama dipertahankan.");
+            Toast.makeText(this, "GPS belum dapat dimulai. Periksa izin dan pengaturan Lokasi HP.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private Location bestLastKnownLocation(LocationManager manager) {
+        Location best = null;
+        for (String provider : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER}) {
+            try {
+                Location candidate = manager.getLastKnownLocation(provider);
+                if (candidate != null && validLocation(candidate)
+                        && (best == null || isBetterLocation(candidate, best))) best = new Location(candidate);
+            } catch (SecurityException ignored) {
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        return best;
+    }
+
+    private boolean validLocation(Location location) {
+        if (location == null) return false;
+        double latitude = location.getLatitude(), longitude = location.getLongitude();
+        return Double.isFinite(latitude) && Double.isFinite(longitude)
+                && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
+    }
+
+    private long locationAgeMs(Location location) {
+        if (location == null) return Long.MAX_VALUE;
+        if (Build.VERSION.SDK_INT >= 17 && location.getElapsedRealtimeNanos() > 0L) {
+            long ageNanos = SystemClock.elapsedRealtimeNanos() - location.getElapsedRealtimeNanos();
+            return ageNanos < -5_000_000_000L ? Long.MAX_VALUE : Math.max(0L, ageNanos / 1_000_000L);
+        }
+        long timestamp = location.getTime();
+        if (timestamp <= 0) return Long.MAX_VALUE;
+        long age = System.currentTimeMillis() - timestamp;
+        return age < -5000L ? Long.MAX_VALUE : Math.max(0L, age);
+    }
+
+    private boolean isBetterLocation(Location candidate, Location current) {
+        if (current == null) return true;
+        long candidateAge = locationAgeMs(candidate), currentAge = locationAgeMs(current);
+        // Prefer a fix that is clearly newer when the phone has moved, even if a cached fix
+        // reports a nominally better accuracy than the new network/GPS fix.
+        if (candidateAge != Long.MAX_VALUE && currentAge != Long.MAX_VALUE) {
+            if (candidateAge + 120_000L < currentAge) return true;
+            if (currentAge + 120_000L < candidateAge) return false;
+        }
+        if (candidate.hasAccuracy() && current.hasAccuracy()) {
+            if (candidate.getAccuracy() + 5f < current.getAccuracy()) return true;
+            if (current.getAccuracy() + 5f < candidate.getAccuracy()) return false;
+        } else if (candidate.hasAccuracy() != current.hasAccuracy()) return candidate.hasAccuracy();
+        return candidateAge <= currentAge;
+    }
+
+    private String locationAgeLabel(Location location) {
+        long age = locationAgeMs(location);
+        if (age == Long.MAX_VALUE) return "umur tidak diketahui";
+        if (age < 60_000L) return Math.max(1L, age / 1000L) + " detik lalu";
+        if (age < 3_600_000L) return (age / 60_000L) + " menit lalu";
+        if (age < 86_400_000L) return (age / 3_600_000L) + " jam lalu";
+        return (age / 86_400_000L) + " hari lalu";
+    }
+
+    private void finishGpsRequest(boolean timedOut) {
+        if (!gpsRequestActive) return;
+        Location result = bestLocation == null ? null : new Location(bestLocation);
+        clearGpsRequest();
+        if (result != null) {
+            boolean fresh = locationAgeMs(result) <= 120_000L;
+            if (fresh) {
+                storeLocationInForm(result, "Koordinat baru dari " + providerLabel(result)
+                        + accuracyLabel(result) + (timedOut ? " (fix terbaik yang tersedia)." : "."));
+                Toast.makeText(this, "Latitude/longitude diperbarui.", Toast.LENGTH_SHORT).show();
+            } else {
+                storeLocationInForm(result, "Lokasi terakhir perangkat dipakai sementara (" + locationAgeLabel(result)
+                        + "); Android belum memberi fix baru. Buka Lokasi HP dan coba di area terbuka.");
+                Toast.makeText(this, "Lokasi terakhir perangkat sudah digunakan; belum ada fix baru dari Android.", Toast.LENGTH_LONG).show();
+            }
+        } else {
+            String saved = lat.getText().toString().trim();
+            String savedLon = lon.getText().toString().trim();
+            setGpsStatus(saved.isEmpty() || savedLon.isEmpty()
+                    ? "Android belum mengirim koordinat baru; kolom tetap kosong. Aktifkan Lokasi HP atau coba di area terbuka."
+                    : "Latitude/longitude tersimpan (" + saved + ", " + savedLon
+                        + ") tetap dipertahankan; Android belum mengirim fix baru. Aktifkan Lokasi HP atau coba di area terbuka.");
+        }
+    }
+
+    private void storeLocationInForm(Location location, String message) {
+        if (!validLocation(location)) return;
+        float latitude = (float) location.getLatitude();
+        float longitude = (float) location.getLongitude();
+        lat.setText(String.format(Locale.US, "%.6f", latitude));
+        lon.setText(String.format(Locale.US, "%.6f", longitude));
+        long updatedAt = System.currentTimeMillis();
+        SharedPreferences.Editor editor = p.edit().putFloat("latitude", latitude).putFloat("longitude", longitude)
+                .putLong("location_updated_epoch", updatedAt);
+        if (location.hasAltitude() && Double.isFinite(location.getAltitude())) {
+            elev.setText(String.format(Locale.US, "%.1f", location.getAltitude()));
+            editor.putFloat("elevation", (float) location.getAltitude());
+        }
+        // apply() updates SharedPreferences in memory immediately and writes asynchronously.
+        // The dashboard observes location_updated_epoch on resume and refreshes Open-Meteo,
+        // so this button does not depend on the user pressing the separate Save Settings button.
+        editor.apply();
+        setGpsStatus(message + " Koordinat langsung diterapkan dan disimpan untuk dashboard.");
+    }
+
+    private void clearGpsRequest() {
+        gpsHandler.removeCallbacks(gpsTimeout);
+        gpsRequestActive = false;
+        if (gpsManager != null && gpsListener != null) {
+            try { gpsManager.removeUpdates(gpsListener); } catch (SecurityException ignored) {}
+        }
+        gpsListener = null;
+        gpsManager = null;
+    }
+
+    private String providerLabel(Location location) { return location == null ? "lokasi HP" : providerLabel(location.getProvider()); }
+    private String providerLabel(String provider) {
+        if (LocationManager.GPS_PROVIDER.equals(provider)) return "GPS satelit";
+        if (LocationManager.NETWORK_PROVIDER.equals(provider)) return "jaringan/Wi-Fi";
+        return "lokasi HP";
+    }
+    private String accuracyLabel(Location location) {
+        return location != null && location.hasAccuracy() ? " • akurasi ±" + String.format(Locale.US, "%.0f m", location.getAccuracy()) : "";
+    }
+    private void setGpsStatus(String message) { if (gpsStatus != null) gpsStatus.setText(message); }
+    private String errorText(Exception e) { return e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(); }
 
     private void load(){
         title.setText(p.getString("app_title","STASIUN CUACA"));

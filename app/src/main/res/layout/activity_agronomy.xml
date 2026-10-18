@@ -77,6 +77,28 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/agroFertilizerConvert"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
+            android:text="KONVERSI REKOMENDASI KE PUPUK YANG DIMILIKI"
+            android:background="@drawable/bg_button"
+            android:textColor="@color/navy_950"
+            android:textStyle="bold"/>
+
+        <TextView
+            android:id="@+id/agroDolomiteCalculator"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:text="KALKULATOR KEBUTUHAN DOLOMIT BERDASARKAN pH"
+            android:background="@drawable/bg_button"
+            android:textColor="@color/navy_950"
+            android:textStyle="bold"/>
+
+        <TextView
             android:id="@+id/agroAiButton"
             android:layout_width="match_parent"
             android:layout_height="46dp"

@@ -9,6 +9,8 @@ import android.location.Location;
 import android.location.LocationManager;
 import android.location.LocationListener;
 import android.os.Bundle;
+import android.os.Build;
+import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.GridLayout;
@@ -52,7 +54,7 @@ public class MainActivity extends Activity {
     private TextView weatherStatus, weatherLocation, weatherTemp, weatherFeels, weatherDew, weatherHumidity,
             weatherPressure, weatherCloud, weatherUv, weatherVisibility, weatherWind, weatherWindDir,
             weatherRain, weatherEt0, weatherCondition, weatherSunrise, weatherSunset, weatherSunHours, weatherAlerts,
-            weatherForecast, weatherUpdated, weatherSw, weatherPar, weatherPpfd, weatherPpfdNote;
+            weatherForecast, weatherUpdated, weatherSw, weatherPar, weatherPpfd, weatherPpfdNote, weatherLux;
     private TextView soil, soilStatus, optRisk, overall, finalStatus;
     private GridLayout fieldGrid;
     private TextView[] fieldLabels = new TextView[8];
@@ -62,6 +64,7 @@ public class MainActivity extends Activity {
     private String[] latestValues = new String[8];
     private String latestCreatedAt = "";
     private long lastWeatherEpoch = 0L;
+    private long lastSeenLocationUpdateEpoch = 0L;
     private boolean tsLoading = false;
     private boolean weatherLoading = false;
     private int weatherRequestId = 0;
@@ -90,6 +93,7 @@ public class MainActivity extends Activity {
         super.onCreate(b);
         setContentView(R.layout.activity_main);
         prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        lastSeenLocationUpdateEpoch = prefs.getLong("location_updated_epoch", 0L);
         bindViews();
         buildFieldCards();
 
@@ -119,7 +123,15 @@ public class MainActivity extends Activity {
         updateHeader();
         updateClock();
         loadThingSpeak(false);
-        if (!gpsRequestActive) loadOpenMeteo(false);
+        long locationEpoch = prefs.getLong("location_updated_epoch", 0L);
+        boolean locationChangedElsewhere = locationEpoch > lastSeenLocationUpdateEpoch;
+        if (locationChangedElsewhere) {
+            lastSeenLocationUpdateEpoch = locationEpoch;
+            lastWeatherEpoch = 0L;
+            weatherRequestId++;
+            weatherLoading = false;
+        }
+        if (!gpsRequestActive) loadOpenMeteo(locationChangedElsewhere);
         handler.removeCallbacks(refreshTick);
         handler.postDelayed(refreshTick, TS_REFRESH_MS);
     }
@@ -172,6 +184,7 @@ public class MainActivity extends Activity {
         weatherPar = findViewById(R.id.weatherPar);
         weatherPpfd = findViewById(R.id.weatherPpfd);
         weatherPpfdNote = findViewById(R.id.weatherPpfdNote);
+        weatherLux = findViewById(R.id.weatherLux);
 
         soil = findViewById(R.id.soil);
         soilStatus = findViewById(R.id.soilStatus);
@@ -284,7 +297,7 @@ public class MainActivity extends Activity {
         String u = "https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon
                 + "&current=" + URLEncoder.encode(current, "UTF-8")
                 + "&daily=" + URLEncoder.encode(daily, "UTF-8")
-                + "&timezone=Asia%2FJakarta&forecast_days=7";
+                + "&wind_speed_unit=ms&timezone=Asia%2FJakarta&forecast_days=7";
         JSONObject root = getJson(u);
         JSONObject cur = root.getJSONObject("current");
         JSONObject d = root.getJSONObject("daily");
@@ -337,13 +350,14 @@ public class MainActivity extends Activity {
         weatherCondition.setText("Kondisi: " + wmo(w.code));
         weatherSunrise.setText("Terbit " + shortTime(w.sunrise));
         weatherSunset.setText("Terbenam " + shortTime(w.sunset));
-        weatherSunHours.setText("Lama penyinaran matahari " + fmt(w.sunHours,2) + " jam/hari (Open-Meteo)");
+        weatherSunHours.setText("Sunshine duration (lama penyinaran): " + fmt(w.sunHours,2) + " jam/hari • Open-Meteo");
         weatherAlerts.setText("VPD " + fmt(w.vpd,2) + " kPa • " + AgronomyEngine.classifyVpd(w.vpd) + " • Gust " + fmt(w.gust,1) + " m/s");
         weatherForecast.setText("Prakiraan 7 hari: " + w.forecast);
         weatherUpdated.setText("Pembaruan: " + ZonedDateTime.now(WIB).format(DateTimeFormatter.ofPattern("dd/MM HH:mm:ss", Locale.US)));
         weatherSw.setText("Shortwave " + fmt(w.sw,0) + " W/m²");
         weatherPar.setText("PAR estimasi " + fmt(w.par,0) + " W/m²");
         weatherPpfd.setText("PPFD estimasi " + fmt(w.ppfd,0) + " µmol/m²/s");
+        weatherLux.setText("Lux estimasi " + fmt(w.sw * 120.0,0) + " lux (dari shortwave; bukan pengukuran lux langsung)");
         weatherPpfdNote.setText("PAR = 0,45 × Shortwave; PPFD = PAR × 4,57 µmol/J (estimasi spektral broadband)");
 
         String crop = prefs.getString("crop", "Tanaman pertanian");
@@ -356,6 +370,10 @@ public class MainActivity extends Activity {
         double ece = num(prefs.getString("soil_ece_ds_m", ""));
         double nLow = num(prefs.getString("soil_n_low", ""));
         double nHigh = num(prefs.getString("soil_n_high", ""));
+        if (!NitrogenInference.usesMethodSpecificThresholds(prefs.getString("soil_n_classification_basis", NitrogenInference.BASIS_INFERRED))) {
+            nLow = Double.NaN;
+            nHigh = Double.NaN;
+        }
         AgronomyEngine.CropProfile cp = AgronomyEngine.profile(crop);
         prefs.edit().putString("om_temp",fmt(w.temp,2)).putString("om_rh",fmt(w.rh,2))
                 .putString("om_apparent_temp",fmt(w.apparent,2)).putString("om_dewpoint",fmt(w.dewpoint,2))
@@ -365,17 +383,21 @@ public class MainActivity extends Activity {
                 .putString("om_wind_gust",fmt(w.gust,2)).putString("om_cloud_cover",fmt(w.cloud,0))
                 .putString("om_visibility",fmt(w.visibility,0)).putString("om_uv",fmt(w.uv,1))
                 .putString("om_sun_hours",fmt(w.sunHours,2)).putString("om_radiation",fmt(w.sw,2))
-                .putString("om_par",fmt(w.par,3)).putString("om_ppfd",fmt(w.ppfd,3))
+                .putString("om_par",fmt(w.par,3)).putString("om_ppfd",fmt(w.ppfd,3)).putString("om_lux",fmt(w.sw * 120.0,0))
                 .putString("om_soil_temp",fmt(w.soilTemp,2)).putString("om_soil_moisture",fmt(w.soilMoisture,2))
                 .putString("om_weather",wmo(w.code)).putString("om_forecast_7d",w.forecast).apply();
 
         soil.setText("pH " + fmt(ph,2) + " • N tersedia " + fmt(n,1) + " • P " + fmt(p,1) + " • K " + fmt(k,1) + " mg/kg\nEC " + fmt(ec,0) + " µS/cm • kelembapan " + fmt(moist,1) + " %");
         String nPred = NitrogenInference.estimateTotalN(n);
         String nClass = NitrogenInference.classifyRange(n);
+        String nStatus = AgronomyEngine.hasValidNThresholds(nLow,nHigh)
+                ? "Kelas N tersedia (ambang yang diisi): " + AgronomyEngine.classifyN(n,nLow,nHigh)
+                : "Kelas N-total estimasi (asumsi 2%): " + NitrogenInference.classifyEstimatedTotalN(n);
         soilStatus.setText("pH: " + AgronomyEngine.classifyPH(ph,cp)
-                + "\nN: " + AgronomyEngine.classifyN(n,nLow,nHigh)
-                + "\nN-total prediksi: " + nPred
-                + "\nKelas N-total yang mungkin: " + nClass
+                + "\nN tersedia: " + fmt(n,1) + " mg/kg"
+                + "\n" + nStatus
+                + "\nN-total estimasi: " + nPred
+                + "\nRentang kelas pada sensitivitas 1–3%: " + nClass
                 + "\nP: " + AgronomyEngine.classifyP(p,prefs.getString("soil_test_method",""))
                 + " • K: " + AgronomyEngine.classifyK(k,prefs.getString("soil_test_method",""))
                 + "\nEC sensor: " + AgronomyEngine.classifyEC(ec,cp)
@@ -513,7 +535,7 @@ public class MainActivity extends Activity {
 
     private void requestLocation() {
         if (gpsRequestActive) {
-            Toast.makeText(this, "Sedang mencari koordinat GPS terbaru...", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Sedang mencari koordinat; lokasi yang tersedia tetap ditampilkan.", Toast.LENGTH_SHORT).show();
             return;
         }
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED
@@ -527,24 +549,42 @@ public class MainActivity extends Activity {
             bestFreshLocation = null;
             gpsRequestStartedAtMs = System.currentTimeMillis();
             gpsRequestActive = true;
-            weatherStatus.setText("MENCARI GPS HP TERBARU...");
-            weatherLocation.setText("Menunggu pembacaan lokasi baru dari perangkat (maksimal 20 detik)...");
-            Toast.makeText(this, "Meminta koordinat GPS terbaru dari perangkat...", Toast.LENGTH_SHORT).show();
+
+            // Show the best Android cached location immediately (including an older fix, clearly
+            // labelled with its age), then listen for a newer GPS/network fix. This prevents the
+            // form from appearing empty or "failed" while Android warms up a fresh location.
+            Location cached = bestLastKnownLocation(locationManager);
+            if (cached != null) {
+                bestFreshLocation = new Location(cached);
+                storeLocationAndRefresh(cached, "Lokasi terakhir Android digunakan sementara" + accuracyLabel(cached)
+                        + " • " + locationAgeLabel(cached) + "; mencari fix yang lebih baru...");
+            } else {
+                weatherStatus.setText("MENCARI LOKASI HP...");
+                weatherLocation.setText("Meminta koordinat baru dari GPS satelit/jaringan...");
+            }
+            Toast.makeText(this, "Meminta pembaruan lokasi HP...", Toast.LENGTH_SHORT).show();
+
             gpsListener = new LocationListener() {
                 @Override public void onLocationChanged(Location location) {
-                    if (location == null || !gpsRequestActive) return;
-                    // Ignore cached/stale fixes delivered immediately after registering the listener.
-                    long now = System.currentTimeMillis();
-                    long fixTime = location.getTime();
-                    if (fixTime <= 0L || fixTime < gpsRequestStartedAtMs - 5_000L || now - fixTime > 30_000L) return;
-                    if (bestFreshLocation == null || isBetterLocation(location, bestFreshLocation)) {
-                        bestFreshLocation = new Location(location);
+                    if (location == null || !gpsRequestActive || !validLocation(location)) return;
+                    long ageMs = locationAgeMs(location);
+                    // A provider can report a cached fix right after subscription. Accept recent
+                    // fixes using elapsed-realtime age rather than wall-clock-only timestamp tests.
+                    if (ageMs < 0L || ageMs > 120_000L) return;
+                    boolean improved = bestFreshLocation == null || isBetterLocation(location, bestFreshLocation);
+                    if (improved) bestFreshLocation = new Location(location);
+                    boolean goodGps = LocationManager.GPS_PROVIDER.equals(location.getProvider())
+                            && (!location.hasAccuracy() || location.getAccuracy() <= 150f);
+                    boolean goodNetwork = location.hasAccuracy() && location.getAccuracy() <= 100f;
+                    if (goodGps || goodNetwork || !location.hasAccuracy()) {
+                        // Commit the best fix once, avoiding duplicate weather requests for the
+                        // same callback. A fresh but coarse fix is still shown immediately.
+                        finishGpsRequest();
+                    } else if (improved) {
+                        storeLocationAndRefresh(bestFreshLocation, "Koordinat diperbarui dari "
+                                + providerLabel(bestFreshLocation) + accuracyLabel(bestFreshLocation)
+                                + "; menunggu pembacaan yang lebih akurat...");
                     }
-                    boolean gpsFix = LocationManager.GPS_PROVIDER.equals(location.getProvider());
-                    boolean accurateFix = location.hasAccuracy() && location.getAccuracy() <= 25f;
-                    boolean usableGpsFix = gpsFix && location.hasAccuracy() && location.getAccuracy() <= 50f;
-                    // Prefer a fresh, reasonably accurate GPS fix; otherwise allow an accurate network fix.
-                    if (usableGpsFix || accurateFix) finishGpsRequest();
                 }
                 @Override public void onProviderEnabled(String provider) {}
                 @Override public void onProviderDisabled(String provider) {}
@@ -555,36 +595,121 @@ public class MainActivity extends Activity {
             for (String provider : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
                 try {
                     if (locationManager.isProviderEnabled(provider)) {
-                        locationManager.requestLocationUpdates(provider, 0L, 0f, gpsListener, android.os.Looper.getMainLooper());
+                        locationManager.requestLocationUpdates(provider, 1000L, 0f, gpsListener, android.os.Looper.getMainLooper());
                         requested = true;
                     }
-                } catch (SecurityException ignored) {}
-                  catch (IllegalArgumentException ignored) {}
+                } catch (SecurityException ignored) {
+                } catch (IllegalArgumentException ignored) {
+                }
             }
             if (!requested) {
-                clearGpsRequest();
-                weatherStatus.setText("GPS HP TIDAK AKTIF");
-                weatherLocation.setText("Aktifkan layanan Lokasi/GPS perangkat, lalu tekan GUNAKAN GPS HP lagi.");
-                Toast.makeText(this, "Aktifkan lokasi/GPS HP terlebih dahulu.", Toast.LENGTH_LONG).show();
+                if (bestFreshLocation != null) {
+                    finishGpsRequest();
+                } else {
+                    clearGpsRequest();
+                    weatherStatus.setText("LOKASI HP TIDAK AKTIF");
+                    weatherLocation.setText("Aktifkan layanan Lokasi/GPS. Koordinat lama tidak dihapus.");
+                    Toast.makeText(this, "Aktifkan Lokasi/GPS pada HP untuk mendapatkan koordinat baru.", Toast.LENGTH_LONG).show();
+                }
                 return;
             }
+            handler.removeCallbacks(gpsTimeout);
             handler.postDelayed(gpsTimeout, 20_000L);
         } catch(Exception e) {
             clearGpsRequest();
-            weatherStatus.setText("GPS HP GAGAL");
-            weatherLocation.setText("Tidak dapat meminta lokasi: " + msg(e));
-            Toast.makeText(this, "Gagal meminta lokasi GPS HP.", Toast.LENGTH_SHORT).show();
+            weatherStatus.setText("GPS BELUM SIAP");
+            weatherLocation.setText("Tidak dapat meminta lokasi: " + msg(e) + ". Koordinat lama dipertahankan.");
+            Toast.makeText(this, "GPS belum dapat dimulai. Periksa izin dan pengaturan Lokasi HP.", Toast.LENGTH_LONG).show();
         }
     }
 
+    private Location bestLastKnownLocation(LocationManager manager) {
+        Location best = null;
+        for (String provider : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER}) {
+            try {
+                Location candidate = manager.getLastKnownLocation(provider);
+                if (candidate != null && validLocation(candidate)
+                        && (best == null || isBetterLocation(candidate, best))) best = new Location(candidate);
+            } catch (SecurityException ignored) {
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        return best;
+    }
+
+    private boolean validLocation(Location location) {
+        if (location == null) return false;
+        double lat = location.getLatitude(), lon = location.getLongitude();
+        return Double.isFinite(lat) && Double.isFinite(lon)
+                && lat >= -90.0 && lat <= 90.0 && lon >= -180.0 && lon <= 180.0;
+    }
+
+    private long locationAgeMs(Location location) {
+        if (location == null) return Long.MAX_VALUE;
+        if (Build.VERSION.SDK_INT >= 17 && location.getElapsedRealtimeNanos() > 0L) {
+            long ageNanos = SystemClock.elapsedRealtimeNanos() - location.getElapsedRealtimeNanos();
+            return ageNanos < -5_000_000_000L ? Long.MAX_VALUE : Math.max(0L, ageNanos / 1_000_000L);
+        }
+        long timestamp = location.getTime();
+        if (timestamp <= 0L) return Long.MAX_VALUE;
+        long age = System.currentTimeMillis() - timestamp;
+        return age < -5000L ? Long.MAX_VALUE : Math.max(0L, age);
+    }
+
     private boolean isBetterLocation(Location candidate, Location current) {
+        if (current == null) return true;
+        long candidateAge = locationAgeMs(candidate);
+        long currentAge = locationAgeMs(current);
+        // A fix that is more than two minutes newer should replace an old cached fix even
+        // when its reported accuracy is slightly worse. This is critical when the phone moved.
+        if (candidateAge != Long.MAX_VALUE && currentAge != Long.MAX_VALUE) {
+            if (candidateAge + 120_000L < currentAge) return true;
+            if (currentAge + 120_000L < candidateAge) return false;
+        }
         if (candidate.hasAccuracy() && current.hasAccuracy()) {
             if (candidate.getAccuracy() + 5f < current.getAccuracy()) return true;
             if (current.getAccuracy() + 5f < candidate.getAccuracy()) return false;
         } else if (candidate.hasAccuracy() != current.hasAccuracy()) {
             return candidate.hasAccuracy();
         }
-        return candidate.getTime() >= current.getTime();
+        return candidateAge <= currentAge;
+    }
+
+    private String locationAgeLabel(Location location) {
+        long age = locationAgeMs(location);
+        if (age == Long.MAX_VALUE) return "umur lokasi tidak diketahui";
+        if (age < 60_000L) return "umur lokasi " + Math.max(1L, age / 1000L) + " detik";
+        if (age < 3_600_000L) return "umur lokasi " + (age / 60_000L) + " menit";
+        if (age < 86_400_000L) return "umur lokasi " + (age / 3_600_000L) + " jam";
+        return "umur lokasi " + (age / 86_400_000L) + " hari";
+    }
+
+    private String providerLabel(Location location) {
+        if (location == null) return "lokasi HP";
+        if (LocationManager.GPS_PROVIDER.equals(location.getProvider())) return "GPS satelit";
+        if (LocationManager.NETWORK_PROVIDER.equals(location.getProvider())) return "jaringan/Wi-Fi";
+        return "cache lokasi HP";
+    }
+
+    private String accuracyLabel(Location location) {
+        return location != null && location.hasAccuracy()
+                ? " • akurasi ±" + fmt(location.getAccuracy(), 0) + " m" : "";
+    }
+
+    private void storeLocationAndRefresh(Location location, String statusText) {
+        if (!validLocation(location)) return;
+        float lat = (float) location.getLatitude();
+        float lon = (float) location.getLongitude();
+        long updatedAt = System.currentTimeMillis();
+        prefs.edit().putFloat("latitude", lat).putFloat("longitude", lon)
+                .putLong("location_updated_epoch", updatedAt).apply();
+        lastSeenLocationUpdateEpoch = updatedAt;
+        weatherLocation.setText("GPS " + fmt(lat,6) + ", " + fmt(lon,6) + " • " + statusText);
+        weatherStatus.setText("KOORDINAT GPS TERSEDIA");
+        lastWeatherEpoch = 0L;
+        weatherRequestId++;
+        weatherLoading = false;
+        loadOpenMeteo(true);
     }
 
     private void finishGpsRequest() {
@@ -592,23 +717,28 @@ public class MainActivity extends Activity {
         Location result = bestFreshLocation == null ? null : new Location(bestFreshLocation);
         clearGpsRequest();
         if (result == null) {
-            weatherStatus.setText("GPS HP BELUM MENDAPATKAN FIX BARU");
-            weatherLocation.setText("Tidak ada koordinat baru diterima. Pastikan Lokasi aktif dan coba di area terbuka.");
-            Toast.makeText(this, "Belum mendapat koordinat GPS baru. Coba lagi di area terbuka.", Toast.LENGTH_LONG).show();
+            float savedLat = prefs.getFloat("latitude", Float.NaN);
+            float savedLon = prefs.getFloat("longitude", Float.NaN);
+            if (Float.isFinite(savedLat) && Float.isFinite(savedLon)
+                    && savedLat >= -90f && savedLat <= 90f && savedLon >= -180f && savedLon <= 180f) {
+                weatherStatus.setText("LOKASI TERSIMPAN • BELUM ADA FIX BARU");
+                weatherLocation.setText("GPS " + fmt(savedLat,6) + ", " + fmt(savedLon,6)
+                        + " • koordinat tersimpan tetap digunakan; Android belum memberikan fix baru. Aktifkan Lokasi HP atau coba di area terbuka.");
+            } else {
+                weatherStatus.setText("LOKASI BARU BELUM TERSEDIA");
+                weatherLocation.setText("Android belum mengirim koordinat dan belum ada lokasi tersimpan. Aktifkan Lokasi HP atau coba di area terbuka.");
+            }
             return;
         }
-        float lat = (float) result.getLatitude();
-        float lon = (float) result.getLongitude();
-        prefs.edit().putFloat("latitude", lat).putFloat("longitude", lon).apply();
-        weatherLocation.setText("GPS terbaru " + fmt(lat,6) + ", " + fmt(lon,6)
-                + (result.hasAccuracy() ? " • akurasi ±" + fmt(result.getAccuracy(),0) + " m" : "")
-                + " • memperbarui Open-Meteo...");
-        weatherStatus.setText("KOORDINAT GPS DIPERBARUI");
-        Toast.makeText(this, "Koordinat GPS terbaru diperbarui: " + fmt(lat,5) + ", " + fmt(lon,5), Toast.LENGTH_LONG).show();
-        lastWeatherEpoch = 0L;
-        weatherRequestId++; // abaikan respons cuaca lama yang mungkin memakai koordinat sebelumnya
-        weatherLoading = false;
-        loadOpenMeteo(true);
+        boolean fresh = locationAgeMs(result) <= 120_000L;
+        String status = fresh
+                ? "koordinat baru dari " + providerLabel(result) + accuracyLabel(result)
+                : "lokasi terakhir Android digunakan sementara (" + locationAgeLabel(result) + "); belum ada fix baru";
+        storeLocationAndRefresh(result, status);
+        weatherStatus.setText(fresh ? "KOORDINAT GPS DIPERBARUI" : "LOKASI TERAKHIR DIGUNAKAN");
+        Toast.makeText(this, fresh
+                ? "Koordinat lokasi diperbarui: " + fmt((float)result.getLatitude(),5) + ", " + fmt((float)result.getLongitude(),5)
+                : "Lokasi terakhir perangkat sudah dipakai. Android belum memberi fix baru; coba di tempat terbuka.", Toast.LENGTH_LONG).show();
     }
 
     private void clearGpsRequest() {
@@ -619,19 +749,6 @@ public class MainActivity extends Activity {
         }
         gpsListener = null;
         locationManager = null;
-    }
-
-    @Override public void onRequestPermissionsResult(int req,String[] perms,int[] grants){
-        super.onRequestPermissionsResult(req,perms,grants);
-        if(req==LOCATION_REQ){
-            boolean granted = false;
-            for (int i=0; i<perms.length && i<grants.length; i++) {
-                if ((Manifest.permission.ACCESS_FINE_LOCATION.equals(perms[i]) || Manifest.permission.ACCESS_COARSE_LOCATION.equals(perms[i]))
-                        && grants[i] == PackageManager.PERMISSION_GRANTED) granted = true;
-            }
-            if (granted) requestLocation();
-            else Toast.makeText(this, "Izin lokasi diperlukan untuk memperbarui koordinat GPS.", Toast.LENGTH_LONG).show();
-        }
     }
 
     private String recentOpt(){

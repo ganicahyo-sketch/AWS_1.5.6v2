@@ -14,10 +14,10 @@ Android project lengkap dengan Open-Meteo + Agronomi + Catatan Lapangan.
 ## Fitur
 - Open-Meteo tanpa API key/akun: cuaca saat ini, ET0 FAO, VPD, hujan, radiasi, mata angin.
 - ThingSpeak feed terakhir + ekspor seluruh histori CSV.
-- CWT-7in1: N, P, K tersedia; pH; EC uS/cm; kelembapan; suhu tanah.
-- Catatan Lapangan terpadu: pengamatan, pupuk, OPT, pengendalian, irigasi, pertumbuhan; umur tanaman dapat diinput sebagai HST/hari, minggu, bulan, atau tahun dan dikonversi ke HST.
+- Sensor CWT-7in1 RS485 dan USB Soil Meter 8-in-1: N, P, K tersedia, pH, EC, kelembapan dan suhu tanah; kedua sumber tetap dibedakan.
+- Catatan Lapangan terpadu: pengamatan, pupuk, OPT, pengendalian, irigasi, pertumbuhan; tanggal catatan dan tanam memakai kalender, umur otomatis dihitung dari selisih tanggal dan dapat ditampilkan sebagai HST atau MST.
 - Analisis awal seluruh parameter: pH, N/N-total, P, K, EC/ECe, kelembapan tanah, suhu tanah, OM, CEC/KTK, suhu udara, RH, tekanan, hujan, ET0, angin, UV, visibilitas, Shortwave, PAR energi, PPFD, sunshine, VPD, serta parameter lingkungan lain yang tersedia.
-- Analisis pH, N/P/K, EC, kelembapan, VPD, fase tanaman, kebutuhan hara screening, dan risiko OPT per komoditas yang didukung.
+- Analisis pH, N/P/K, EC, kelembapan, VPD, fase tanaman, kebutuhan hara screening, dan risiko OPT per komoditas yang didukung; kelapa sawit tidak termasuk dalam komoditas aplikasi ini.
 - Mode Konvensional/PHT atau Organik.
 - Arah angin selalu ditampilkan sebagai mata angin; tidak menampilkan derajat.
 
@@ -28,6 +28,8 @@ Workflow CI menggunakan Eclipse Temurin JDK 25; source compatibility Android tet
 File `.github/workflows/build-apk.yml` membuild debug dan release, lalu mengunggah APK sebagai artifact. Jalankan dari tab Actions > Build APK.
 
 ## Catatan ilmiah
+Profil baseline per komoditas dan referensi hasil model dirangkum di `CROP_PROFILES_SAYURAN.md`; sumber teknis lebih lengkap berada di `SCIENTIFIC_SOURCES.md`. Target hasil spesifik varietas harus diverifikasi dari deskripsi resmi dan dimasukkan sesuai satuan/jenis hasil yang sama.
+
 Mesin agronomi membedakan keputusan deterministik, screening berbasis ambang, dan rekomendasi yang memerlukan kalibrasi lokal. Dosis pupuk tidak boleh dianggap sebagai resep mutlak ketika persamaan STCR spesifik tanah/komoditas tidak tersedia.
 
 ## Laporan PDF
@@ -37,7 +39,7 @@ Isi laporan mencakup cuaca Open-Meteo, ET0, VPD, arah angin berbasis mata angin,
 
 ## v1.5.7 agronomi
 - Interpretasi pH berbasis profil komoditas dan kebutuhan kapur berbasis pH-buffer/Al-dd/H-dd/CEC/lab.
-- P/K memakai kategori berbasis metode; N hanya diklasifikasikan bila ambang metode tersedia.
+- N: default klasifikasi memakai estimasi N-total dari N tersedia dengan asumsi utama 2% (sensitivitas 1–3%). Batas N rendah/tinggi hanya dipakai jika pengguna secara eksplisit memilih basis ambang N-spesifik dan kedua batas valid; angka atau metode P/K generik tidak otomatis dipakai untuk N. Inferensi bukan pengganti uji laboratorium. P/K memakai kategori berbasis metode.
 - EC sensor dipisahkan dari ECe; kelembapan memakai FC/PWP/FTSW bila tersedia.
 - Risk screening OPT menyebut nama organisme; bukan diagnosis.
 - Mode konvensional/PHT atau organik.
@@ -68,3 +70,27 @@ Hasil analisis agronomi sekarang dipisah menjadi kartu-kartu per topik di Catata
 ### Perbaikan build USB Soil Meter
 
 Jika membangun proyek ini, `settings.gradle` sudah menyertakan JitPack karena dependensi USB serial `com.github.mik3y:usb-serial-for-android:3.9.0` diambil dari repositori tersebut.
+
+## FIX5 — penyimpanan dan GPS
+Detail perbaikan terbaru serta batas uji ada di `PATCH_NOTES_FIX5_SAVE_GPS_MODEL.md`. Rumus dan alur hitung agronomi dijabarkan di `MODEL_MATEMATIKA_DAN_ALUR_v1.5.7.md`.
+
+
+## FIX6 — penyusunan laporan agronomi
+Laporan cetak/PDF versi lengkap dan ringkas memakai alur bab yang konsisten, ringkasan eksekutif, tabel riwayat, nomor halaman, dan pemenggalan teks lintas halaman. Target tipografi: Arial, judul laporan 14 pt, judul bab/subbab 12 pt, isi 11 pt. Laporan ringkas menampilkan hingga 8 riwayat terbaru; laporan lengkap hingga 30 ditambah bagian AI dan sumber. Rincian implementasi dan batas pengujian ada di `PATCH_NOTES_FIX6_PDF_REPORT.md`.
+
+
+## FIX7 — klasifikasi N tersedia dan estimasi N-total
+Jika basis ambang N-spesifik tidak dipilih atau batas tidak valid, aplikasi mengonversi N tersedia (mg/kg) menjadi N-total estimasi (%) menggunakan `((100/2) × N tersedia) / 10000` (setara `N tersedia / 200`), lalu menentukan kelas N-total. Asumsi 2% adalah screening dengan sensitivitas 1–3%, bukan hasil lab. Lihat `PATCH_NOTES_FIX7_NITROGEN_CLASS_CONVERSION.md`.
+
+
+## FIX8 — audit nitrogen dan kalkulator dolomit
+- Rumus konversi N tersedia ke N-total tetap `N-total (%) = N tersedia (mg/kg)/200` untuk asumsi utama 2%; batas ambang N hanya dipakai jika pengguna memilih basis ambang N-spesifik dan dua ambang valid.
+- Model dosis pupuk diperbaiki agar baseline hara pupuk tidak dibagi lagi dengan faktor pemulihan. Fraksi 0,50/0,30/0,60 hanya mengurangi kredit dari aplikasi pupuk terdahulu sehingga formula tidak menggelembungkan dosis.
+- Kalkulator dolomit menerima pH awal, pH target, luas hektare, tekstur/faktor asumsi dan efektivitas netralisasi dolomit; hasil tersimpan untuk laporan agronomi dan PDF. Faktor bawaan hanya estimasi awal; pH saja tidak cukup untuk kebutuhan kapur definitif. Lihat `PATCH_NOTES_FIX8_NITROGEN_DOLOMITE.md`.
+
+
+## FIX9 — ekspor CSV ThingSpeak dan Open-Meteo
+- Menggunakan fallback Channel ID/API key yang sama dengan dashboard untuk menghindari pesan “Channel ID belum diatur” ketika pengaturan default tampil tetapi belum pernah tersimpan.
+- Mendukung alias key preferensi lama saat migrasi.
+- Memperbaiki ekspor Open-Meteo Historical API karena `visibility` dan `uv_index` tidak tersedia pada endpoint historis; dua kolom tetap ada di CSV namun kosong.
+- Detail: `PATCH_NOTES_FIX9_CSV_EXPORT.md`.

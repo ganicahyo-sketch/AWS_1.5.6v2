@@ -66,7 +66,7 @@ public class PdfReportActivity extends Activity {
         findViewById(R.id.pdfBack).setOnClickListener(v -> finish());
         findViewById(R.id.pdfSave).setOnClickListener(v -> createAndSave());
         findViewById(R.id.pdfPrint).setOnClickListener(v -> createAndPrint());
-        reportInfo.setText("Laporan mencakup data cuaca, tanah CWT-7in1, histori pupuk/OPT/catatan lapangan, analisis agronomi, dan rekomendasi.");
+        reportInfo.setText("Laporan A4 dengan tata letak bertahap, nomor halaman, ringkasan eksekutif, dan tabel riwayat yang dapat berlanjut antarhalaman. Pilih laporan lengkap untuk catatan dan dasar ilmiah lebih rinci, atau laporan ringkas untuk ringkasan dan riwayat terbaru.");
     }
 
     private void createAndSave() {
@@ -97,12 +97,14 @@ public class PdfReportActivity extends Activity {
     @Override protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode != 9001 || resultCode != RESULT_OK || data == null || data.getData() == null || lastPdf == null) return;
-        try (InputStream in = new BufferedInputStream(new FileInputStream(lastPdf));
-             OutputStream out = new BufferedOutputStream(getContentResolver().openOutputStream(data.getData()))) {
-            if (out == null) throw new Exception("Lokasi penyimpanan tidak dapat dibuka");
-            byte[] buf = new byte[32768]; int n;
-            while ((n = in.read(buf)) >= 0) { if (n == 0) continue; out.write(buf, 0, n); }
-            out.flush();
+        try (InputStream in = new BufferedInputStream(new FileInputStream(lastPdf))) {
+            OutputStream raw = getContentResolver().openOutputStream(data.getData());
+            if (raw == null) throw new Exception("Lokasi penyimpanan tidak dapat dibuka");
+            try (OutputStream out = new BufferedOutputStream(raw)) {
+                byte[] buf = new byte[32768]; int n;
+                while ((n = in.read(buf)) >= 0) { if (n == 0) continue; out.write(buf, 0, n); }
+                out.flush();
+            }
             Toast.makeText(this, "PDF tersimpan.", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
             Toast.makeText(this, "Gagal menyimpan PDF: " + safe(e), Toast.LENGTH_LONG).show();
@@ -112,7 +114,7 @@ public class PdfReportActivity extends Activity {
     private PrintAttributes printAttributes() {
         return new PrintAttributes.Builder()
                 .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
-                .setResolution(new PrintAttributes.Resolution("turus", "STASIUN CUACA", 300, 300))
+                .setResolution(new PrintAttributes.Resolution("stasiun-cuaca", "STASIUN CUACA", 300, 300))
                 .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
                 .build();
     }
@@ -120,44 +122,65 @@ public class PdfReportActivity extends Activity {
     private String fileName() {
         String crop = pref("crop", "Tanaman").trim().replaceAll("[^A-Za-z0-9_-]+", "_");
         String date = LocalDate.now(WIB).format(DateTimeFormatter.BASIC_ISO_DATE);
-        return "STASIUN-CUACA-DESA-TURUS_LAPORAN_" + crop + "_" + date + ".pdf";
+        return "STASIUN-CUACA_LAPORAN_AGRONOMI_" + crop + "_" + date + ".pdf";
     }
 
     private File buildPdf(boolean complete) throws Exception {
         android.content.SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
         File dir = new File(getCacheDir(), "reports");
         if (!dir.exists() && !dir.mkdirs()) throw new Exception("Folder laporan gagal dibuat");
-        File out = File.createTempFile("turus_report_", ".pdf", dir);
+        File out = File.createTempFile("stasiun_report_", ".pdf", dir);
 
         PdfDocument doc = new PdfDocument();
         ReportCanvas rc = new ReportCanvas(doc);
-        rc.heading("STASIUN CUACA • GANI CAHYO-UNS");
-        rc.subheading("Laporan " + (complete ? "Lengkap" : "Ringkas") + " - Open-Meteo + Agronomi");
-        rc.meta("Dicetak: " + java.time.ZonedDateTime.now(WIB).format(PRINT_DATE) + " WIB");
-        rc.meta("Komoditas: " + pref("crop", "Tanaman pertanian") + " | Budidaya: " + pref("farm_cultivation_mode", "Konvensional / PHT"));
-        rc.meta("Luas: " + pref("farm_area_ha", "--") + " ha | HST: " + pref("farm_hst", "--") + " | Fase: " + phaseText());
+        rc.brand("STASIUN CUACA • GANI CAHYO-UNS");
+        rc.heading("LAPORAN AGRONOMI");
+        rc.subheading("Edisi " + (complete ? "lengkap" : "ringkas") + " • Cuaca, tanah, dan rekomendasi budidaya");
+        rc.meta("Tanggal laporan: " + java.time.ZonedDateTime.now(WIB).format(PRINT_DATE) + " WIB");
+        rc.meta("Komoditas: " + pref("crop", "Tanaman pertanian") + " | Sistem budidaya: " + pref("farm_cultivation_mode", "Konvensional / PHT"));
+        rc.meta("Luas lahan: " + pref("farm_area_ha", "--") + " ha | Umur: " + pref("farm_hst", "--") + " | Fase: " + phaseText());
         rc.line();
 
+        addExecutiveSummary(rc, p);
         addCurrentWeather(rc, p);
         addSoil(rc, p);
         addAgronomyAnalysis(rc, p);
+        addOptRisk(rc, p);
+        addRecommendations(rc, p);
+        addHistory(rc, p, complete);
         if (complete) {
-            addOptRisk(rc, p);
-            addRecommendations(rc, p);
-            addHistory(rc, p);
             addAi(rc, p);
             addSources(rc);
-        } else {
-            addRecommendations(rc, p);
-            addHistory(rc, p);
         }
 
         rc.finish(out);
         return out;
     }
 
+    private void addExecutiveSummary(ReportCanvas rc, android.content.SharedPreferences p) {
+        String crop = pref("crop", "Tanaman pertanian");
+        AgronomyEngine.CropProfile cp = AgronomyEngine.profile(crop);
+        double ph = num(pref("soil_ph", ""));
+        double n = num(pref("soil_n", ""));
+        double pp = num(pref("soil_p", ""));
+        double k = num(pref("soil_k", ""));
+        double nLow = num(pref("soil_n_low", ""));
+        double nHigh = num(pref("soil_n_high", ""));
+        if (!NitrogenInference.usesMethodSpecificThresholds(pref("soil_n_classification_basis", NitrogenInference.BASIS_INFERRED))) { nLow = Double.NaN; nHigh = Double.NaN; }
+        double vpd = num(pref("om_vpd", ""));
+        rc.section("RINGKASAN EKSEKUTIF");
+        rc.kv("Komoditas dan fase", crop + " • " + phaseText());
+        rc.kv("Indikator cuaca", "Suhu " + pref("om_temp", "--") + " °C; RH " + pref("om_rh", "--") + " %; VPD " + pref("om_vpd", "--") + " kPa (" + AgronomyEngine.classifyVpd(vpd) + "); hujan " + pref("om_rain", "--") + " mm/hari; ET0 " + pref("om_et0", "--") + " mm/hari.");
+        String nSummary = AgronomyEngine.hasValidNThresholds(nLow,nHigh)
+                ? "N tersedia " + show(n) + " mg/kg (kelas menurut ambang yang diisi: " + AgronomyEngine.classifyN(n,nLow,nHigh) + ")"
+                : "N tersedia " + show(n) + " mg/kg (kelas N-total estimasi asumsi 2%: " + NitrogenInference.classifyEstimatedTotalN(n) + ")";
+        rc.kv("Kondisi tanah", "pH " + show(ph) + " (" + AgronomyEngine.classifyPH(ph, cp) + "); " + nSummary + "; P " + show(pp) + " mg/kg (" + AgronomyEngine.classifyP(pp, pref("soil_test_method", "Metode tidak diketahui")) + "); K " + show(k) + " mg/kg (" + AgronomyEngine.classifyK(k, pref("soil_test_method", "Metode tidak diketahui")) + ").");
+        rc.text("Ringkasan ini adalah pemeriksaan awal berbasis data yang tersimpan. Ikuti rekomendasi terperinci pada bab berikutnya dan konfirmasi kondisi yang memerlukan pemeriksaan lapangan atau analisis laboratorium.");
+        rc.line();
+    }
+
     private void addCurrentWeather(ReportCanvas rc, android.content.SharedPreferences p) {
-        rc.section("1. DATA CUACA TERKINI + FORECAST");
+        rc.section("1. DATA CUACA TERKINI DAN PRAKIRAAN");
         rc.kv("Suhu udara", pref("om_temp","--")+" °C");
         rc.kv("Suhu terasa", pref("om_apparent_temp","--")+" °C");
         rc.kv("Titik embun", pref("om_dewpoint","--")+" °C");
@@ -182,19 +205,27 @@ public class PdfReportActivity extends Activity {
     private void addSoil(ReportCanvas rc, android.content.SharedPreferences p) {
         String crop=pref("crop","Tanaman pertanian"); AgronomyEngine.CropProfile cp=AgronomyEngine.profile(crop);
         double ph=num(pref("soil_ph","")),n=num(pref("soil_n","")),pp=num(pref("soil_p","")),k=num(pref("soil_k","")),nLow=num(pref("soil_n_low","")),nHigh=num(pref("soil_n_high",""));
+        if (!NitrogenInference.usesMethodSpecificThresholds(pref("soil_n_classification_basis", NitrogenInference.BASIS_INFERRED))) { nLow=Double.NaN; nHigh=Double.NaN; }
         double ec=num(pref("soil_ec_us_cm","")),ece=num(pref("soil_ece_ds_m","")),moist=num(pref("soil_moisture_pct",""));
         double depth=num(pref("soil_depth_cm","20")),bd=num(pref("soil_bulk_density_g_cm3","1.30")),fc=num(pref("soil_fc_pct","")),pwp=num(pref("soil_pwp_pct",""));
         double phBuf=num(pref("soil_ph_buffer","")),al=num(pref("soil_al_dd","")),hd=num(pref("soil_h_dd","")),cec=num(pref("soil_cec","")),om=num(pref("soil_om_pct","")),lime=num(pref("soil_lime_requirement_kg_ha",""));
         String method=pref("soil_test_method","Metode tidak diketahui");
-        rc.section("2. TANAH CWT-7IN1 + LABORATORIUM");
+        rc.section("2. KONDISI TANAH DAN HASIL PENGUKURAN");
         rc.kv("Sumber sensor",pref("soil_source","CWT-7IN1 RS485 / USB"));
         rc.kv("Metode N/P/K",method);
         rc.kv("pH",show(ph)+" -> "+AgronomyEngine.classifyPH(ph,cp));
         rc.kv("Tindakan pH",AgronomyEngine.limeAdvice(ph,cp,pref("farm_cultivation_mode","Konvensional / PHT"),phBuf,al,hd,cec,om,lime));
+        rc.kv("Kalkulator dolomit (estimasi pH-only)", pref("limecalc_summary", "Belum dihitung; gunakan kalkulator dolomit pada Analisis Agronomi."));
         rc.kv("pH-buffer / Al-dd / H-dd / CEC",show(phBuf)+" / "+show(al)+" / "+show(hd)+" / "+show(cec));
         rc.kv("Bahan organik",show(om)+" %");
-        rc.kv("N tersedia",show(n)+" mg/kg -> "+AgronomyEngine.classifyN(n,nLow,nHigh));
-        rc.kv("N-total prediksi",NitrogenInference.estimateTotalN(n));
+        rc.kv("N tersedia",show(n)+" mg/kg");
+        rc.kv("Basis klasifikasi N",pref("soil_n_classification_basis", NitrogenInference.BASIS_INFERRED));
+        if(AgronomyEngine.hasValidNThresholds(nLow,nHigh))
+            rc.kv("Kelas N tersedia",AgronomyEngine.classifyN(n,nLow,nHigh)+" (ambang metode yang diisi pengguna)");
+        else
+            rc.kv("Kelas N-total estimasi",NitrogenInference.classifyEstimatedTotalN(n)+" (asumsi utama 2%)");
+        rc.kv("N-total estimasi",NitrogenInference.estimateTotalN(n));
+        rc.kv("Rentang kelas sensitivitas 1–3%",NitrogenInference.classifyRange(n));
         rc.kv("P tersedia",show(pp)+" mg/kg -> "+AgronomyEngine.classifyP(pp,method));
         rc.kv("K tersedia",show(k)+" mg/kg -> "+AgronomyEngine.classifyK(k,method));
         rc.kv("EC sensor",show(ec)+" µS/cm -> "+AgronomyEngine.classifyEC(ec,cp)+" (input utama; ECe lab opsional)");
@@ -203,8 +234,8 @@ public class PdfReportActivity extends Activity {
         rc.kv("FC / PWP",show(fc)+" / "+show(pwp)+" % volume");
         rc.kv("Status air tanah",AgronomyEngine.soilWaterAssessment(moist,fc,pwp,depth,num(pref("om_et0","")),crop));
         rc.kv("Lapisan / bulk density",show(depth)+" cm / "+show(bd)+" g/cm³");
-        rc.kv("Stok N / P / K",show(AgronomyEngine.soilStockKgHa(n,bd,depth))+" / "+show(AgronomyEngine.soilStockKgHa(pp,bd,depth))+" / "+show(AgronomyEngine.soilStockKgHa(k,bd,depth))+" kg/ha");
-        rc.text("Stok tanah adalah massa unsur pada lapisan yang dihitung; stok bukan sama dengan serapan/tersedia langsung tanaman. EC sensor lapang dipakai sebagai input utama; ECe laboratorium bersifat opsional.");
+        rc.kv("Stok teoritis input N-tersedia / P / K",show(AgronomyEngine.soilStockKgHa(n,bd,depth))+" / "+show(AgronomyEngine.soilStockKgHa(pp,bd,depth))+" / "+show(AgronomyEngine.soilStockKgHa(k,bd,depth))+" kg/ha");
+        rc.text("Stok adalah konversi teoritis dari konsentrasi input. Jika input N merupakan N tersedia, hasilnya bukan N-total terukur dan tidak digunakan sebagai kredit pupuk. Stok juga bukan serapan langsung tanaman. EC sensor lapang dipakai sebagai input utama; ECe laboratorium bersifat opsional.");
         rc.line();
     }
 
@@ -216,6 +247,7 @@ public class PdfReportActivity extends Activity {
         if (saved.trim().isEmpty()) {
             double n = num(pref("soil_n", "")), pp = num(pref("soil_p", "")), k = num(pref("soil_k", ""));
             double nLow = num(pref("soil_n_low", "")), nHigh = num(pref("soil_n_high", ""));
+            if (!NitrogenInference.usesMethodSpecificThresholds(pref("soil_n_classification_basis", NitrogenInference.BASIS_INFERRED))) { nLow = Double.NaN; nHigh = Double.NaN; }
             String method = pref("soil_test_method", "Metode tidak diketahui");
             String crop = pref("crop", "Tanaman pertanian"); int hst = (int)Math.round(num(pref("farm_hst", "-1")));
             rc.text("Belum ada analisis tersimpan. Ringkasan otomatis: fase " + AgronomyEngine.phase(hst, crop) + "; N " + AgronomyEngine.classifyN(n,nLow,nHigh) + "; P " + AgronomyEngine.classifyP(pp,method) + "; K " + AgronomyEngine.classifyK(k,method) + "; VPD " + AgronomyEngine.classifyVpd(num(pref("om_vpd", ""))) + ".");
@@ -229,7 +261,12 @@ public class PdfReportActivity extends Activity {
                     rc.gap(4f);
                     continue;
                 }
-                if (firstLine || line.matches("^[0-9]+\\. .*")) rc.subheading(line);
+                boolean numberedHeading = line.matches("^[0-9]+\\. .*");
+                boolean allCapsHeading = line.length() <= 72
+                        && line.equals(line.toUpperCase(Locale.ROOT))
+                        && line.matches(".*[A-Z].*")
+                        && !line.startsWith("-") && !line.startsWith("•");
+                if (firstLine || numberedHeading || allCapsHeading) rc.subheading(line);
                 else rc.text(line);
                 firstLine = false;
             }
@@ -238,7 +275,7 @@ public class PdfReportActivity extends Activity {
     }
 
     private void addOptRisk(ReportCanvas rc, android.content.SharedPreferences p) {
-        rc.section("4. PREDIKSI POTENSI SERANGAN OPT");
+        rc.section("4. RISIKO HAMA DAN PENYAKIT (OPT)");
         String crop = pref("crop", "Tanaman pertanian");
         double t = num(pref("om_temp", "")), rh = num(pref("om_rh", "")), rain = num(pref("om_rain", "")), wind = num(pref("om_wind_speed", ""));
         rc.text(AgronomyEngine.optRisk(crop, t, rh, rain, wind, recentOpt(p, crop)));
@@ -246,8 +283,8 @@ public class PdfReportActivity extends Activity {
         rc.line();
     }
 
-    private void addHistory(ReportCanvas rc, android.content.SharedPreferences p) {
-        rc.section("5. HISTORI TERPADU");
+    private void addHistory(ReportCanvas rc, android.content.SharedPreferences p, boolean complete) {
+        rc.section("6. RIWAYAT KEGIATAN LAPANGAN");
         List<HistoryItem> items = new ArrayList<>();
         collect(items, p.getString("field_notes_v153", "[]"), "LAPANG", "observation", "action");
         collect(items, p.getString("fert_history", "[]"), "PUPUK", "product", "note");
@@ -256,15 +293,20 @@ public class PdfReportActivity extends Activity {
         if (items.isEmpty()) {
             rc.text("Belum ada histori tersimpan.");
         } else {
-            rc.tableHeader(new String[]{"Tanggal", "Jenis", "Kegiatan / OPT", "Detail"}, new float[]{78, 58, 175, 204});
-            for (int i = 0; i < Math.min(30, items.size()); i++) {
+            rc.tableHeader(new String[]{"Tanggal", "Jenis", "Kegiatan / OPT", "Detail"}, new float[]{70, 55, 145, 245});
+            int historyLimit = complete ? 30 : 8;
+            for (int i = 0; i < Math.min(historyLimit, items.size()); i++) {
                 HistoryItem h = items.get(i);
                 rc.tableRow(new String[]{
                         cleanCell(h.date),
                         cleanCell(h.type),
                         cleanCell(h.main),
                         cleanCell(joinDetail(h.second, h.extra))
-                }, new float[]{78, 58, 175, 204});
+                }, new float[]{70, 55, 145, 245});
+            }
+            rc.endTable();
+            if (!complete && items.size() > historyLimit) {
+                rc.text("Laporan ringkas menampilkan " + historyLimit + " catatan terbaru dari " + items.size() + " catatan tersimpan. Gunakan laporan lengkap untuk melihat lebih banyak riwayat.");
             }
         }
         rc.line();
@@ -280,7 +322,10 @@ public class PdfReportActivity extends Activity {
 
     private String cleanCell(String s) {
         if (s == null) return "";
-        return s.replace('\"', '\'').replace("\n", " ").replace("\r", " ").trim();
+        String value = s.replace('\"', '\'').replace("\n", " ").replace("\r", " ").trim();
+        // Keep unusually long notes from creating a single table row taller than a printed page.
+        if (value.length() > 280) value = value.substring(0, 277).trim() + "…";
+        return value;
     }
 
     private void collect(List<HistoryItem> out, String json, String type, String mainKey, String secondKey) {
@@ -300,7 +345,7 @@ public class PdfReportActivity extends Activity {
     }
 
     private void addRecommendations(ReportCanvas rc, android.content.SharedPreferences p) {
-        rc.section("6. REKOMENDASI TEKNIS");
+        rc.section("5. REKOMENDASI TEKNIS");
         String crop=pref("crop","Tanaman pertanian"); AgronomyEngine.CropProfile cp=AgronomyEngine.profile(crop); String mode=pref("farm_cultivation_mode","Konvensional / PHT");
         double ph=num(pref("soil_ph","")),ec=num(pref("soil_ec_us_cm","")),ece=num(pref("soil_ece_ds_m","")),m=num(pref("soil_moisture_pct",""));
         double vpd=num(pref("om_vpd","")),rain=num(pref("om_rain","")),et0=num(pref("om_et0","")); int hst=(int)Math.round(num(pref("farm_hst","-1")));
@@ -323,13 +368,13 @@ public class PdfReportActivity extends Activity {
     private void addAi(ReportCanvas rc, android.content.SharedPreferences p) {
         String ai = pref("last_ai_advice", "");
         if (ai.trim().isEmpty()) return;
-        rc.section("7. REKOMENDASI AI TERAKHIR");
+        rc.section("7. CATATAN REKOMENDASI AI TERAKHIR");
         rc.text(ai);
         rc.line();
     }
 
     private void addSources(ReportCanvas rc) {
-        rc.section("8. DASAR ILMIAH / CATATAN KETERBATASAN");
+        rc.section("8. DASAR ILMIAH DAN BATASAN INTERPRETASI");
         rc.text("- FAO-56 Penman-Monteith untuk ET0 dan kerangka Kc/ETc.");
         rc.text("- Pendekatan status hara tanah / pemupukan spesifik lokasi; persamaan STCR yang presisi memerlukan kalibrasi tanah-komoditas-setempat.");
         rc.text("- PHT/IPM dan ambang ekonomi: keputusan pengendalian mengikuti hasil monitoring, bukan cuaca saja.");
@@ -385,73 +430,319 @@ public class PdfReportActivity extends Activity {
     }
 
     private static final class ReportCanvas {
-        private static final int W=595,H=842,LEFT=40,RIGHT=40,TOP=42,BOTTOM=42;
-        private final PdfDocument doc; private PdfDocument.Page page; private Canvas c; private Paint title,head,body,paragraph,small,line; private float y;
-        private String[] lastTableHeader; private float[] lastTableWidths;
-        ReportCanvas(PdfDocument doc){this.doc=doc; title=p(20,true);head=p(14,true);body=p(10,false);paragraph=p(11.5f,false);small=p(9,false);line=p(1,false);newPage();}
-        private Paint p(float size,boolean bold){Paint x=new Paint(Paint.ANTI_ALIAS_FLAG);x.setColor(0xFF16232D);x.setTextSize(size);x.setTypeface(bold?Typeface.create(Typeface.DEFAULT,Typeface.BOLD):Typeface.DEFAULT);return x;}
-        private void newPage(){if(page!=null)doc.finishPage(page);page=doc.startPage(new PdfDocument.PageInfo.Builder(W,H,doc.getPages().size()+1).create());c=page.getCanvas();y=TOP;if(lastTableHeader!=null)tableHeaderInternal(lastTableHeader,lastTableWidths);}
-        private void need(float h){if(y+h>BOTTOM){newPage();y=TOP;}}
-        void heading(String s){need(34);c.drawText(s,LEFT,y,title);y+=26;}
-        void subheading(String s){need(28);c.drawText(s,LEFT,y,head);y+=22;}
-        void meta(String s){need(16);wrap(s,small,16);}
-        void section(String s){need(25);y+=8;c.drawText(s,LEFT,y,head);y+=17;}
-        void line(){need(12);c.drawLine(LEFT,y,W-RIGHT,y,line);y+=9;}
-        void gap(float h){need(h);y+=h;}
-        void kv(String k,String v){need(17);c.drawText(k+":",LEFT,y,body);wrap("  "+v,body,17,145);}
-        void text(String s){wrap(s,paragraph,19);}
-        void tableHeader(String[] cells, float[] widths){
-            lastTableHeader=cells.clone(); lastTableWidths=widths.clone();
-            tableHeaderInternal(cells,widths);
+        private static final int W = 595, H = 842, LEFT = 40, RIGHT = 40, TOP = 38, BOTTOM = 42;
+        private final PdfDocument doc;
+        private PdfDocument.Page page;
+        private Canvas c;
+        private Paint title, head, body, label, brandPaint, rule, sectionFill, accentFill;
+        private Paint tableHeaderFill, tableHeaderText, tableGrid, rowFillA, rowFillB;
+        private float y;
+        private String[] lastTableHeader;
+        private float[] lastTableWidths;
+        private String pendingSection;
+        private boolean inTable;
+        private int rowIndex;
+
+        ReportCanvas(PdfDocument doc) {
+            this.doc = doc;
+            title = p(14f, true, 0xFF17324D);
+            head = p(12f, true, 0xFF17324D);
+            body = p(11f, false, 0xFF202B35);
+            label = p(11f, true, 0xFF243746);
+            brandPaint = p(9f, true, 0xFF167D78);
+            rule = stroke(0xFFCBD5DF, 0.8f);
+            sectionFill = fill(0xFFEAF1F6);
+            accentFill = fill(0xFF167D78);
+            tableHeaderFill = fill(0xFF17324D);
+            tableHeaderText = p(11f, true, 0xFFFFFFFF);
+            tableGrid = stroke(0xFFD3DCE4, 0.65f);
+            rowFillA = fill(0xFFFFFFFF);
+            rowFillB = fill(0xFFF5F8FA);
+            newPage();
         }
-        private void tableHeaderInternal(String[] cells, float[] widths){
-            need(28);
-            float x=LEFT;
-            Paint header=p(8.5f,true);
-            c.drawRect(LEFT,y-11,W-RIGHT,y+7,header);
-            Paint textPaint=p(8.5f,true); textPaint.setColor(0xFFFFFFFF);
-            for(int i=0;i<cells.length;i++){String v=cells[i]==null?"":cells[i];c.drawText(v,x+4,y+2,textPaint);x+=widths[i];}
-            y+=18;
-            c.drawLine(LEFT,y,W-RIGHT,y,line);
+
+        private Paint p(float size, boolean bold, int color) {
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
+            paint.setColor(color);
+            paint.setTextSize(size);
+            // Ask for Arial explicitly. Android substitutes its closest sans-serif face if Arial is absent.
+            paint.setTypeface(Typeface.create("Arial", bold ? Typeface.BOLD : Typeface.NORMAL));
+            return paint;
         }
-        void tableRow(String[] cells, float[] widths){
-            String[][] lines=new String[cells.length][];
-            int max=1;
-            for(int i=0;i<cells.length;i++){lines[i]=wrapLines(cells[i],body,widths[i]-8);max=Math.max(max,lines[i].length);}
-            float rowH=Math.max(18,max*11+7);
-            need(rowH+2);
-            float top=y-11,bottom=y+rowH-11;
-            c.drawRect(LEFT,top,W-RIGHT,bottom,line);
-            float x=LEFT;
-            for(int i=0;i<cells.length;i++){for(int j=0;j<lines[i].length;j++)c.drawText(lines[i][j],x+4,y+j*11,body);x+=widths[i];c.drawLine(x,top,x,bottom,line);}
-            y=bottom+7;
+
+        private Paint fill(int color) {
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            paint.setColor(color);
+            paint.setStyle(Paint.Style.FILL);
+            return paint;
         }
-        private String[] wrapLines(String s,Paint paint,float max){
-            if(s==null||s.trim().isEmpty()) return new String[]{""};
-            List<String> result=new ArrayList<>();
-            String[] paragraphs=s.split("\n",-1);
-            for(String para:paragraphs){String cur="";for(String w:para.trim().split("\\s+")){String nxt=cur.isEmpty()?w:cur+" "+w;if(paint.measureText(nxt)>max&&!cur.isEmpty()){result.add(cur);cur=w;}else cur=nxt;}if(!cur.isEmpty())result.add(cur);}
-            return result.isEmpty()?new String[]{""}:result.toArray(new String[0]);
+
+        private Paint stroke(int color, float width) {
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            paint.setColor(color);
+            paint.setStrokeWidth(width);
+            paint.setStyle(Paint.Style.STROKE);
+            return paint;
         }
-        private void wrap(String s,Paint paint,float lh){wrap(s,paint,lh,LEFT);}
-        private void wrap(String s,Paint paint,float lh,float x){
-            if(s==null)return;
-            String[] paragraphs=s.split("\\n",-1);
-            float max=W-RIGHT-x;
-            for(int pi=0;pi<paragraphs.length;pi++){
-                String t=paragraphs[pi].trim();
-                if(t.isEmpty()){y+=Math.max(4f,lh*0.40f);continue;}
-                String[] words=t.split("\\s+");String cur="";
-                for(String w:words){
-                    String nxt=cur.isEmpty()?w:cur+" "+w;
-                    if(paint.measureText(nxt)>max&&!cur.isEmpty()){
-                        need(lh);c.drawText(cur,x,y,paint);y+=lh;cur=w;
-                    }else cur=nxt;
+
+        private void newPage() {
+            if (page != null) finishCurrentPage();
+            page = doc.startPage(new PdfDocument.PageInfo.Builder(W, H, doc.getPages().size() + 1).create());
+            c = page.getCanvas();
+            y = TOP + 12f;
+            if (inTable && lastTableHeader != null) drawTableHeaderInternal();
+        }
+
+        private void finishCurrentPage() {
+            if (page == null) return;
+            float footerRuleY = H - BOTTOM + 7f;
+            c.drawLine(LEFT, footerRuleY, W - RIGHT, footerRuleY, rule);
+            Paint footer = p(8f, false, 0xFF657583);
+            c.drawText("STASIUN CUACA • LAPORAN AGRONOMI", LEFT, H - 16f, footer);
+            String pageLabel = "Halaman " + (doc.getPages().size() + 1);
+            c.drawText(pageLabel, W - RIGHT - footer.measureText(pageLabel), H - 16f, footer);
+            doc.finishPage(page);
+            page = null;
+        }
+
+        // y is the next text baseline; this is intentionally measured against page height,
+        // not against the bottom-margin value. The old comparison created a new page on almost
+        // every draw call, leaving a single line or item per page.
+        private void need(float height) {
+            if (y + height > H - BOTTOM) newPage();
+        }
+
+        void brand(String text) {
+            need(15f);
+            c.drawText(text, LEFT, y, brandPaint);
+            y += 15f;
+        }
+
+        void heading(String text) {
+            need(22f);
+            c.drawText(text, LEFT, y, title);
+            y += 21f;
+        }
+
+        void subheading(String text) {
+            String[] lines = wrapLines(text == null ? "" : text, head, W - LEFT - RIGHT);
+            float lineHeight = 17f;
+            flushPendingSection(lines.length * lineHeight);
+            need(Math.max(34f, lines.length * lineHeight + 6f));
+            for (String lineText : lines) {
+                need(lineHeight);
+                c.drawText(lineText, LEFT, y, head);
+                y += lineHeight;
+            }
+            y += 2f;
+        }
+
+        void meta(String text) {
+            wrap(text, body, 15f, LEFT);
+        }
+
+        void section(String text) {
+            if (pendingSection != null) flushPendingSection(15f);
+            pendingSection = text == null ? "" : text;
+        }
+
+        private void flushPendingSection(float upcomingContentHeight) {
+            if (pendingSection == null) return;
+            float contentReserve = Math.min(90f, Math.max(15f, upcomingContentHeight));
+            need(30f + contentReserve);
+            y += 6f;
+            float top = y - 11f;
+            c.drawRect(LEFT, top, W - RIGHT, y + 7f, sectionFill);
+            c.drawRect(LEFT, top, LEFT + 3f, y + 7f, accentFill);
+            c.drawText(pendingSection, LEFT + 9f, y + 3f, head);
+            y += 24f;
+            pendingSection = null;
+        }
+
+        void line() {
+            flushPendingSection(14f);
+            need(14f);
+            c.drawLine(LEFT, y, W - RIGHT, y, rule);
+            y += 13f;
+        }
+
+        void gap(float height) {
+            if (height <= 0f || pendingSection != null) return;
+            need(height);
+            y += height;
+        }
+
+        void kv(String key, String value) {
+            String safeKey = key == null ? "" : key.trim();
+            String safeValue = value == null ? "--" : value.trim();
+            float valueX = LEFT + 157f;
+            float keyWidth = valueX - LEFT - 12f;
+            float valueWidth = W - RIGHT - valueX;
+            String[] keyLines = wrapLines(safeKey, label, keyWidth);
+            String[] valueLines = wrapLines(safeValue, body, valueWidth);
+            int rows = Math.max(keyLines.length, valueLines.length);
+            float lineHeight = 14f;
+            float rowHeight = rows * lineHeight + 3f;
+            flushPendingSection(rowHeight); 
+            need(rowHeight);
+            for (int i = 0; i < rows; i++) {
+                if (i < keyLines.length) c.drawText(keyLines[i], LEFT, y + i * lineHeight, label);
+                if (i < valueLines.length) c.drawText(valueLines[i], valueX, y + i * lineHeight, body);
+            }
+            y += rowHeight;
+        }
+
+        void text(String text) {
+            if (pendingSection != null) {
+                float firstParagraphHeight = 15f;
+                if (text != null) {
+                    for (String paragraph : text.replace('\r', ' ').split("\\n", -1)) {
+                        if (!paragraph.trim().isEmpty()) {
+                            firstParagraphHeight = Math.min(90f, wrapLines(paragraph, body, W - LEFT - RIGHT).length * 15f);
+                            break;
+                        }
+                    }
                 }
-                if(!cur.isEmpty()){need(lh);c.drawText(cur,x,y,paint);y+=lh;}
-                if(pi<paragraphs.length-1)y+=2f;
+                flushPendingSection(firstParagraphHeight);
+            }
+            wrap(text, body, 15f, LEFT);
+            y += 2f;
+        }
+
+        void tableHeader(String[] cells, float[] widths) {
+            // Reserve the heading, table header, and a full first row together to avoid an orphaned header.
+            flushPendingSection(220f);
+            // Make room before enabling table continuation, avoiding a duplicated first header.
+            need(28f);
+            lastTableHeader = cells.clone();
+            lastTableWidths = widths.clone();
+            inTable = true;
+            rowIndex = 0;
+            drawTableHeaderInternal();
+        }
+
+        private void drawTableHeaderInternal() {
+            float total = 0f;
+            for (float width : lastTableWidths) total += width;
+            float tableRight = Math.min(W - RIGHT, LEFT + total);
+            c.drawRect(LEFT, y - 10f, tableRight, y + 10f, tableHeaderFill);
+            float x = LEFT;
+            for (int i = 0; i < lastTableHeader.length; i++) {
+                String value = lastTableHeader[i] == null ? "" : lastTableHeader[i];
+                String[] lines = wrapLines(value, tableHeaderText, Math.max(20f, lastTableWidths[i] - 8f));
+                // Most headings are short; if one wraps, render it cleanly across the header height.
+                c.drawText(lines[0], x + 4f, y + 3f, tableHeaderText);
+                x += lastTableWidths[i];
+                if (i < lastTableHeader.length - 1) c.drawLine(x, y - 10f, x, y + 10f, tableGrid);
+            }
+            c.drawRect(LEFT, y - 10f, tableRight, y + 10f, tableGrid);
+            y += 23f;
+        }
+
+        void tableRow(String[] cells, float[] widths) {
+            String[][] wrapped = new String[cells.length][];
+            int maxLines = 1;
+            for (int i = 0; i < cells.length; i++) {
+                wrapped[i] = wrapLines(cells[i], body, Math.max(24f, widths[i] - 8f));
+                maxLines = Math.max(maxLines, wrapped[i].length);
+            }
+            float lineHeight = 14f;
+            float rowHeight = maxLines * lineHeight + 7f;
+            need(rowHeight + 1f);
+            float top = y - 10f;
+            float bottom = top + rowHeight;
+            float total = 0f;
+            for (float width : widths) total += width;
+            float tableRight = Math.min(W - RIGHT, LEFT + total);
+            c.drawRect(LEFT, top, tableRight, bottom, (rowIndex % 2 == 0) ? rowFillA : rowFillB);
+            float x = LEFT;
+            for (int i = 0; i < cells.length; i++) {
+                for (int j = 0; j < wrapped[i].length; j++) {
+                    c.drawText(wrapped[i][j], x + 4f, y + j * lineHeight + 1f, body);
+                }
+                x += widths[i];
+                if (i < cells.length - 1) c.drawLine(x, top, x, bottom, tableGrid);
+            }
+            c.drawRect(LEFT, top, tableRight, bottom, tableGrid);
+            c.drawLine(LEFT, bottom, tableRight, bottom, tableGrid);
+            y = bottom + 5f;
+            rowIndex++;
+        }
+
+        void endTable() {
+            inTable = false;
+            lastTableHeader = null;
+            lastTableWidths = null;
+            rowIndex = 0;
+        }
+
+        private String[] wrapLines(String input, Paint paint, float maxWidth) {
+            if (input == null || input.trim().isEmpty()) return new String[]{""};
+            float safeWidth = Math.max(24f, maxWidth);
+            List<String> output = new ArrayList<>();
+            String[] paragraphs = input.replace('\r', ' ').split("\\n", -1);
+            for (String paragraph : paragraphs) {
+                String trimmed = paragraph.trim();
+                if (trimmed.isEmpty()) {
+                    output.add("");
+                    continue;
+                }
+                String current = "";
+                for (String word : trimmed.split("\\s+")) {
+                    // Break unusually long tokens (e.g. URLs or serialized weather fields) so they
+                    // cannot run beyond the page edge.
+                    if (paint.measureText(word) > safeWidth) {
+                        if (!current.isEmpty()) { output.add(current); current = ""; }
+                        String part = "";
+                        for (int i = 0; i < word.length(); i++) {
+                            String next = part + word.charAt(i);
+                            if (!part.isEmpty() && paint.measureText(next) > safeWidth) {
+                                output.add(part);
+                                part = String.valueOf(word.charAt(i));
+                            } else part = next;
+                        }
+                        current = part;
+                        continue;
+                    }
+                    String next = current.isEmpty() ? word : current + " " + word;
+                    if (!current.isEmpty() && paint.measureText(next) > safeWidth) {
+                        output.add(current);
+                        current = word;
+                    } else current = next;
+                }
+                if (!current.isEmpty()) output.add(current);
+            }
+            return output.isEmpty() ? new String[]{""} : output.toArray(new String[0]);
+        }
+
+        private void wrap(String input, Paint paint, float lineHeight, float x) {
+            if (input == null) return;
+            String[] paragraphs = input.replace('\r', ' ').split("\\n", -1);
+            float maxWidth = W - RIGHT - x;
+            for (int paragraphIndex = 0; paragraphIndex < paragraphs.length; paragraphIndex++) {
+                String paragraph = paragraphs[paragraphIndex].trim();
+                if (paragraph.isEmpty()) {
+                    y += Math.max(4f, lineHeight * 0.35f);
+                    continue;
+                }
+                String[] lines = wrapLines(paragraph, paint, maxWidth);
+                for (String lineText : lines) {
+                    need(lineHeight);
+                    c.drawText(lineText, x, y, paint);
+                    y += lineHeight;
+                }
+                if (paragraphIndex < paragraphs.length - 1) y += 3f;
             }
         }
-        void finish(File out)throws Exception{if(page!=null)doc.finishPage(page);try(FileOutputStream f=new FileOutputStream(out)){doc.writeTo(f);}doc.close();}
+
+        void finish(File output) throws Exception {
+            flushPendingSection(15f);
+            if (page != null) finishCurrentPage();
+            try (FileOutputStream stream = new FileOutputStream(output)) {
+                doc.writeTo(stream);
+            } finally {
+                doc.close();
+            }
+        }
     }
 }

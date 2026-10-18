@@ -57,6 +57,8 @@ public class AgronomyActivity extends Activity {
         findViewById(R.id.agroFieldNotes).setOnClickListener(v->startActivity(new Intent(this,FieldNotesActivity.class)));
         findViewById(R.id.agroPdf).setOnClickListener(v->startActivity(new Intent(this,PdfReportActivity.class)));
         findViewById(R.id.agroAiButton).setOnClickListener(v->requestAi());
+        findViewById(R.id.agroFertilizerConvert).setOnClickListener(v -> FertilizerConverterDialog.show(this, prefs));
+        findViewById(R.id.agroDolomiteCalculator).setOnClickListener(v -> DolomiteCalculatorDialog.show(this, prefs, this::render));
         findViewById(R.id.agroNotes).setOnClickListener(v->showNotes());
         render();
     }
@@ -70,6 +72,7 @@ public class AgronomyActivity extends Activity {
         String method=prefs.getString("soil_test_method","Metode tidak diketahui");
         double ph=num(prefs.getString("soil_ph","")),n=num(prefs.getString("soil_n","")),p=num(prefs.getString("soil_p","")),k=num(prefs.getString("soil_k",""));
         double nLow=num(prefs.getString("soil_n_low","")),nHigh=num(prefs.getString("soil_n_high",""));
+        if (!NitrogenInference.usesMethodSpecificThresholds(prefs.getString("soil_n_classification_basis", NitrogenInference.BASIS_INFERRED))) { nLow=Double.NaN; nHigh=Double.NaN; }
         double ec=num(prefs.getString("soil_ec_us_cm","")),ece=num(prefs.getString("soil_ece_ds_m","")),moist=num(prefs.getString("soil_moisture_pct",""));
         double bd=num(prefs.getString("soil_bulk_density_g_cm3","1.30")),depth=num(prefs.getString("soil_depth_cm","20")),fc=num(prefs.getString("soil_fc_pct","")),pwp=num(prefs.getString("soil_pwp_pct",""));
         double phBuf=num(prefs.getString("soil_ph_buffer","")),al=num(prefs.getString("soil_al_dd","")),hd=num(prefs.getString("soil_h_dd","")),cec=num(prefs.getString("soil_cec","")),om=num(prefs.getString("soil_om_pct","")),lime=num(prefs.getString("soil_lime_requirement_kg_ha",""));
@@ -80,13 +83,33 @@ public class AgronomyActivity extends Activity {
         double parEnergy=num(prefs.getString("om_par","")),ppfd=num(prefs.getString("om_ppfd","")),sunshine=num(prefs.getString("om_sun_hours",""));
         StringBuilder s=new StringBuilder();
         s.append("ANALISIS AGRONOMI TERPADU v1.5.7\n\n");
-        s.append("KOMODITAS: ").append(crop).append("\nMODE: ").append(mode).append("\nHST: ").append(hst<0?"--":hst).append("\nFASE: ").append(AgronomyEngine.phase(hst,crop)).append("\nLUAS: ").append(pref("farm_area_ha","--")).append(" ha\nTARGET HASIL: ").append(pref("farm_target_yield_t_ha","--")).append(" t/ha\n\n");
+        if (crop.toLowerCase(Locale.US).contains("sawit") || crop.toLowerCase(Locale.US).contains("oil palm")) {
+            report.setText("Kelapa sawit tidak termasuk komoditas STASIUN CUACA v1.5.7. Pilih komoditas tanaman lain pada Catatan Lapangan.");
+            report.setVisibility(View.VISIBLE); reportCards.setVisibility(View.GONE); return;
+        }
+        String areaM2 = pref("farm_area_m2", "");
+        if (areaM2.isEmpty()) { double ha=num(pref("farm_area_ha", "")); areaM2=Double.isFinite(ha)?show(ha*10000):"--"; }
+        String yieldKg = pref("farm_target_yield_kg", "");
+        s.append("KOMODITAS: ").append(crop).append("\n");
+        String variety = prefs.getString("farm_variety", "").trim();
+        if (!variety.isEmpty()) s.append("VARIETAS/GALUR/KLON: ").append(variety).append("\n");
+        String manualPhase = prefs.getString("farm_phase_manual", "").trim();
+        String effectivePhase = manualPhase.isEmpty() ? AgronomyEngine.phase(hst,crop) : manualPhase + " (manual)";
+        s.append("MODE: ").append(mode).append("\nHST: ").append(hst<0?"--":hst).append("\nFASE: ").append(effectivePhase).append("\nLUAS LAHAN: ").append(areaM2).append(" m²\nTARGET PRODUKSI TOTAL: ").append(yieldKg.isEmpty()?"opsional / belum diisi":yieldKg+" kg").append("\n\n");
         s.append("1. TANAH\n");
         s.append("pH ").append(show(ph)).append(" -> ").append(AgronomyEngine.classifyPH(ph,cp)).append("\n");
+        s.append("Basis klasifikasi N: ").append(prefs.getString("soil_n_classification_basis", NitrogenInference.BASIS_INFERRED)).append("\n");
+        if (prefs.getBoolean("limecalc_has_result", false))
+            s.append("KALKULATOR DOLOMIT (estimasi, bukan hasil uji kapur): ").append(prefs.getString("limecalc_summary", "Belum dihitung.")).append("\n");
         s.append("Metode N/P/K: ").append(method).append("\n");
-        s.append("N tersedia ").append(show(n)).append(" mg/kg -> ").append(AgronomyEngine.classifyN(n,nLow,nHigh)).append("\n");
-        s.append("N-total diprediksi dari N tersedia: ").append(NitrogenInference.estimateTotalN(n)).append("\n");
-        s.append("Kelas N-total yang mungkin: ").append(NitrogenInference.classifyRange(n)).append("\n");
+        s.append("N tersedia: ").append(show(n)).append(" mg/kg\n");
+        if (AgronomyEngine.hasValidNThresholds(nLow,nHigh)) {
+            s.append("Kelas N tersedia berdasarkan ambang metode yang diisi: ").append(AgronomyEngine.classifyN(n,nLow,nHigh)).append("\n");
+        } else {
+            s.append("Kelas N dari N-total estimasi (asumsi utama 2%): ").append(NitrogenInference.classifyEstimatedTotalN(n)).append("\n");
+        }
+        s.append("N-total estimasi: ").append(NitrogenInference.estimateTotalN(n)).append("\n");
+        s.append("Rentang kelas pada sensitivitas asumsi rasio 1–3%: ").append(NitrogenInference.classifyRange(n)).append("\n");
         s.append("P tersedia ").append(show(p)).append(" mg/kg -> ").append(AgronomyEngine.classifyP(p,method)).append("\n");
         s.append("K tersedia ").append(show(k)).append(" mg/kg -> ").append(AgronomyEngine.classifyK(k,method)).append("\n");
         s.append("EC sensor ").append(show(ec)).append(" µS/cm -> ").append(AgronomyEngine.classifyEC(ec,cp)).append("\n");
@@ -96,8 +119,8 @@ public class AgronomyActivity extends Activity {
         s.append("Kelembapan tanah ").append(show(moist)).append(" % -> ").append(AgronomyEngine.classifyMoisture(moist)).append("\n");
         s.append("FC/PWP: ").append(show(fc)).append(" / ").append(show(pwp)).append(" % volume -> ").append(AgronomyEngine.soilWaterAssessment(moist,fc,pwp,depth,et0,crop)).append("\n");
         if(Double.isFinite(depth)&&Double.isFinite(bd)){
-            s.append("Stok lapisan ").append(show(depth)).append(" cm; BD ").append(show(bd)).append(" g/cm³: N ").append(show(AgronomyEngine.soilStockKgHa(n,bd,depth))).append("; P ").append(show(AgronomyEngine.soilStockKgHa(p,bd,depth))).append("; K ").append(show(AgronomyEngine.soilStockKgHa(k,bd,depth))).append(" kg/ha.\n");
-            s.append("Stok = konsentrasi (mg/kg) × BD (g/cm³) × kedalaman (cm) × 0,10 kg/ha; stok ≠ serapan langsung tanaman.\n");
+            s.append("Stok teoritis lapisan ").append(show(depth)).append(" cm; BD ").append(show(bd)).append(" g/cm³: N-tersedia input ").append(show(AgronomyEngine.soilStockKgHa(n,bd,depth))).append("; P input ").append(show(AgronomyEngine.soilStockKgHa(p,bd,depth))).append("; K input ").append(show(AgronomyEngine.soilStockKgHa(k,bd,depth))).append(" kg/ha.\n");
+            s.append("Ini konversi konsentrasi input menjadi stok lapisan teoritis, bukan stok N-total terukur, serapan tanaman, atau kredit pupuk langsung.\n");
         }
         s.append("\n2. ANALISIS RENTANG SEMUA PARAMETER\n");
         s.append(AgronomyEngine.comprehensiveRangeAnalysis(
@@ -108,12 +131,15 @@ public class AgronomyActivity extends Activity {
         s.append("\n\n3. NPK & PREDIKSI KEBUTUHAN FASE\n");
         double target=num(pref("farm_target_yield_t_ha",""));
         double[] credit=fertCredit(crop);
-        double nn=AgronomyEngine.nutrientNeed(n,"N",crop,hst,credit[0],target,method,depth,bd,nLow,nHigh);
-        double pp=AgronomyEngine.nutrientNeed(p,"P",crop,hst,credit[1],target,method,depth,bd,nLow,nHigh);
-        double kk=AgronomyEngine.nutrientNeed(k,"K",crop,hst,credit[2],target,method,depth,bd,nLow,nHigh);
+        double nn=AgronomyEngine.nutrientNeed(n,"N",crop,hst,credit[0],target,method,depth,bd,nLow,nHigh,manualPhase);
+        double pp=AgronomyEngine.nutrientNeed(p,"P",crop,hst,credit[1],target,method,depth,bd,nLow,nHigh,manualPhase);
+        double kk=AgronomyEngine.nutrientNeed(k,"K",crop,hst,credit[2],target,method,depth,bd,nLow,nHigh,manualPhase);
+        prefs.edit().putString("last_need_n_kg_ha", Double.isFinite(nn)?String.format(Locale.US,"%.3f",nn):"")
+                .putString("last_need_p2o5_kg_ha", Double.isFinite(pp)?String.format(Locale.US,"%.3f",pp):"")
+                .putString("last_need_k2o_kg_ha", Double.isFinite(kk)?String.format(Locale.US,"%.3f",kk):"").apply();
         s.append("N skrining fase: ").append(show(nn)).append(" kg N/ha\nP2O5 skrining fase: ").append(show(pp)).append(" kg P2O5/ha\nK2O skrining fase: ").append(show(kk)).append(" kg K2O/ha\n");
         s.append("Rumus skrining: ").append(AgronomyEngine.nutrientFormulaText()).append("\n");
-        s.append("INDIKATOR & BATAS: kelas P/K merupakan screening sesuai pilihan metode; ambang N hanya diterapkan jika batas rendah/tinggi diisi sesuai hasil laboratorium. Tanpa ambang N, kebutuhan memakai baseline komoditas/fase tanpa menganggap N tanah cukup. Angka pupuk adalah estimasi awal, bukan rekomendasi laboratorium atau STCR/PUTS terkalibrasi.\n");
+        s.append("INDIKATOR & BATAS: kelas P/K merupakan screening sesuai pilihan metode. Untuk N, ambang rendah/tinggi khusus metode yang valid dipakai bila tersedia; jika kosong atau generik, kelas N-total ditaksir dari N tersedia dengan asumsi utama 2% (sensitivitas 1–3%) sehingga dukungan N tanah tidak otomatis dianggap nol. Jika N tersedia tidak ada, dukungan tanah N belum dapat diperkirakan. Angka pupuk adalah estimasi awal, bukan rekomendasi laboratorium atau STCR/PUTS terkalibrasi.\n");
         if ("Komoditas umum".equals(cp.name)) s.append("PERHATIAN: komoditas belum memiliki profil spesifik di aplikasi; kebutuhan musim memakai baseline umum dan ketidakpastian tinggi. Verifikasi dengan rekomendasi penyuluh/laboratorium setempat.\n");
         s.append("PENTING: bukan QUEFTS/STCR penuh. Gunakan persamaan STCR/PUTS lokal bila tersedia.\n");
         s.append("\n4. CUACA, VPD, AIR & EKOLOGI\n");
@@ -129,8 +155,6 @@ public class AgronomyActivity extends Activity {
         s.append(AgronomyEngine.optRisk(crop,temp,rh,rain,num(pref("om_wind_speed","")),recent("opt_history",6),hst)).append("\n");
         s.append("\n6. REKOMENDASI TEKNIS\n");
         addRecommendations(s,crop,mode,ph,ec,ece,moist,fc,pwp,vpd,temp,rh,rain,et0,hst,method);
-        String palmAdvice = PalmOilAdvisor.build(crop,hst,n,p,k,ec,ph,moist,rain,rh);
-        if (!palmAdvice.isEmpty()) s.append("\n7. DATABASE & REKOMENDASI KHUSUS KELAPA SAWIT\n").append(palmAdvice).append("\n");
         s.append("\n8. CATATAN ILMIAH\n").append(AgronomyEngine.evidenceBrief()).append("\n");
         // Histori terpadu disimpan untuk laporan cetak/PDF, tetapi tidak ditampilkan pada layar analisis utama.
         String compact = compactReport(s.toString());
@@ -167,11 +191,11 @@ public class AgronomyActivity extends Activity {
                 "3) Hubungkan parameter dan tentukan faktor pembatas utama.\n"+
                 "4) Baru susun rekomendasi teknis berdasarkan bukti dan fase tanaman.\n\n"+
                 "STOK HARA TANAH\n"+
-                "Stok unsur pada lapisan tanah dihitung sebagai pendekatan massa tanah: konsentrasi (mg/kg) × bulk density (g/cm³) × kedalaman (cm) × 0,10 = kg/ha. Nilai ini adalah stok teoritis pada lapisan, bukan serapan atau ketersediaan langsung tanaman.\n\n"+
+                "Stok unsur pada lapisan tanah dihitung sebagai pendekatan massa tanah: konsentrasi input (mg/kg) × bulk density (g/cm³) × kedalaman (cm) × 0,10 = kg/ha. Bila input N adalah N tersedia, hasilnya hanya stok teoritis berdasarkan N tersedia, bukan N-total terukur, bukan serapan, dan tidak dipakai sebagai kredit pupuk.\n\n"+
                 "KEBUTUHAN HARA / SKRINING\n"+
-                "Kebutuhan fase memakai kebutuhan musim komoditas × fraksi fase × skala target hasil × faktor dukungan soil-test, kemudian dikoreksi efisiensi pemulihan dan kredit pupuk. Ini model skrining/STCR-style, bukan QUEFTS atau STCR yang terkalibrasi lokal. Gunakan PUTS/STCR lokal bila tersedia.\n\n"+
+                "Rumus saat ini: baseline dosis hara pupuk musim × fraksi fase × skala target hasil × (1 − dukungan kelas tanah), lalu dikurangi kredit konservatif dari pupuk terdahulu × fraksi ketersediaan asumsi. Baseline profil sudah berupa dosis hara pupuk kg/ha sehingga tidak dibagi lagi dengan efisiensi pemulihan; itu akan menggandakan/menaikkan dosis secara tidak tepat. Faktor dukungan dan fraksi kredit tetap asumsi screening, bukan model QUEFTS/STCR terkalibrasi lokal. Gunakan rekomendasi PUTS/STCR spesifik lokasi bila tersedia.\n\n"+
                 "pH & KAPUR\n"+
-                "pH rendah tidak boleh langsung diubah menjadi dosis dolomit hanya dari pH. Kebutuhan pengapuran lebih kuat bila tersedia pH-buffer, Al-dd/H-dd, CEC/KTK, bahan organik, atau kebutuhan kapur laboratorium.\n\n"+
+                "Kalkulator dolomit memakai pendekatan asumsi yang bisa diedit: ΔpH × faktor CaCO₃-ekuivalen (t/ha/unit pH), dibagi efektivitas netralisasi produk, lalu dikalikan luas lahan untuk total kg. Faktor bawaan: mineral ringan 1,0; mineral sedang 2,0; liat/berat 4,0; gambut 5,0 t/ha/unit pH. Ini estimasi kasar, bukan dosis laboratorium; pH-buffer, Al-dd/H-dd, CEC/KTK, bahan organik dan kedalaman olah lebih tepat untuk menetapkan kebutuhan kapur.\n\n"+
                 "EC vs ECe\n"+
                 "EC sensor adalah parameter lapangan dalam µS/cm; hubungan satuan: µS/cm ÷ 1000 = dS/m. ECe laboratorium tidak boleh dipaksakan dari satu faktor konversi universal karena bergantung metode, ekstraksi, kadar air, suhu, tekstur dan kondisi tanah.\n\n"+
                 "AIR TANAH\n"+
@@ -475,8 +499,8 @@ public class AgronomyActivity extends Activity {
     private String agronomyPrompt(String ctx,String lit){
         return "Anda adalah agronom pendamping petani Indonesia. Berikan keputusan dan rekomendasi tindakan berbasis data. Wajib bagian: RINGKASAN KONDISI; FAKTOR PEMBATAS; REKOMENDASI 0-24 JAM; REKOMENDASI 1-7 HARI; PEMUPUKAN; AIR; PREDIKSI POTENSI OPT; TINDAKAN PHT/OPT; PRIORITAS TINDAKAN; DATA YANG PERLU DIUKUR. " +
         "Untuk OPT, cari OPT relevan berdasarkan komoditas, fase, lokasi Indonesia, cuaca dan gejala; utamakan sumber resmi pemerintah/universitas, extension, jurnal dan organisasi pertanian. Sebut nama umum/ilmiah bila dapat diverifikasi, potensi risiko, alasan, gejala yang perlu diperiksa dan sumber. Ini skrining risiko, bukan diagnosis; jangan mengarang dosis pestisida. " +
-        "Untuk kelapa sawit, gunakan data TBM/TM dan umur; prioritaskan panduan resmi PPKS/IOPRI bila tersedia. Dosis resmi memerlukan analisis daun/tanah, umur, populasi, jenis tanah, hasil dan riwayat pupuk. Sensor USB NPK/EC/pH hanya skrining, bukan data lab. Jangan mengarang dosis resmi, jangan konversi sensor mg/kg menjadi dosis pupuk tanpa metode tervalidasi. Bedakan EC dari ECe; jangan hitung kapur hanya dari pH. Jika data kurang, berikan estimasi/skenario yang jelas berlabel dan nyatakan ketidakpastian. " +
-        "Gunakan bahasa Indonesia mudah dipahami petani. Pisahkan fakta terukur, screening model dan rekomendasi. Akhiri dengan prioritas tindakan konkret.\n\nDATA DAN ANALISIS AWAL:\n"+ctx+"\n\nHASIL PUSTAKA OPENALEX:\n"+lit+"\n\nJika pencarian web aktif, gunakan untuk verifikasi OPT, rekomendasi resmi PPKS/IOPRI dan sumber teknis; berikan URL sumber untuk klaim penting.";
+        "Gunakan data tanah, umur/fase tanaman, sasaran produksi, riwayat pupuk, jenis tanah dan air; jangan menyamakan N/P/K sensor langsung dengan dosis pupuk tanpa metode tervalidasi. Bedakan EC dari ECe; jangan hitung kapur hanya dari pH. Jika data kurang, berikan estimasi/skenario yang jelas berlabel dan nyatakan ketidakpastian. " +
+        "Gunakan bahasa Indonesia mudah dipahami petani. Jika varietas/galur/klon dan target produksi tersedia, prioritaskan mencari deskripsi varietas yang dapat diverifikasi dan jadikan target sebagai skenario, bukan bukti pasti. Pisahkan fakta terukur, screening model dan rekomendasi. Akhiri dengan prioritas tindakan konkret.\n\nDATA DAN ANALISIS AWAL:\n"+ctx+"\n\nHASIL PUSTAKA OPENALEX:\n"+lit+"\n\nJika pencarian web aktif, gunakan untuk memverifikasi SOP pemupukan dan budidaya sesuai komoditas, varietas, wilayah, status hara tanah, target produksi dan fase tanaman. Utamakan sumber resmi Kementerian Pertanian/BRMP, penyuluh atau universitas, publikasi varietas, jurnal, pedoman budidaya dan SOP spesifik lokasi. Cantumkan URL sumber untuk klaim penting; bedakan hasil percobaan varietas dari target kebun dan jangan menganggapnya sebagai jaminan hasil.";
     }
     private String callAi(String provider,String key,String model,String ctx,String lit,boolean webSearch)throws Exception{
         String prompt=agronomyPrompt(ctx,lit);

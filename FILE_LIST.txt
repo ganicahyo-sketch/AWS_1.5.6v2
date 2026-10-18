@@ -1,51 +1,60 @@
-.github/workflows/build-apk.yml	2675
-.gitignore	97
-AGRONOMY_NOTES.md	969
-LOCAL_BUILD.md	443
-PATCH_NOTES.md	13383
-PATCH_NOTES_MULTI_AI_GOOGLE_SEARCH.md	891
-PATCH_NOTES_NPK_AUDIT_v1.5.7.md	3006
-PATCH_NOTES_NPK_USB_AI_GPS_SAVE_FIX.md	1318
-PATCH_NOTES_RELEASE_LINT_FIX.md	1017
-PPFD_SOURCES.md	1485
-README.md	6014
-SCIENTIFIC_SOURCES.md	7320
-SECURITY_NOTES.md	494
-app/build.gradle	820
-app/proguard-rules.pro	53
-app/src/main/AndroidManifest.xml	1387
-app/src/main/java/id/stasiuncuaca/AgronomyActivity.java	44379
-app/src/main/java/id/stasiuncuaca/AgronomyEngine.java	46487
-app/src/main/java/id/stasiuncuaca/AgronomyEvidence.java	2996
-app/src/main/java/id/stasiuncuaca/CsvDownloadActivity.java	44050
-app/src/main/java/id/stasiuncuaca/FieldNotesActivity.java	113733
-app/src/main/java/id/stasiuncuaca/LightConversion.java	649
-app/src/main/java/id/stasiuncuaca/MainActivity.java	36750
-app/src/main/java/id/stasiuncuaca/NitrogenInference.java	1433
-app/src/main/java/id/stasiuncuaca/PalmOilAdvisor.java	6533
-app/src/main/java/id/stasiuncuaca/PdfReportActivity.java	28219
-app/src/main/java/id/stasiuncuaca/SettingsActivity.java	8624
-app/src/main/java/id/stasiuncuaca/UsbSoilMeter.java	11970
-app/src/main/res/drawable/bg_button.xml	182
-app/src/main/res/drawable/bg_chip.xml	185
-app/src/main/res/drawable/bg_edit.xml	238
-app/src/main/res/drawable/bg_panel.xml	236
-app/src/main/res/drawable/bg_root.xml	154
-app/src/main/res/drawable/ic_launcher_background.xml	133
-app/src/main/res/drawable/ic_launcher_foreground.xml	500
-app/src/main/res/layout/activity_agronomy.xml	4866
-app/src/main/res/layout/activity_csv_download.xml	10042
-app/src/main/res/layout/activity_field_notes.xml	39035
-app/src/main/res/layout/activity_main.xml	17190
-app/src/main/res/layout/activity_pdf_report.xml	2389
-app/src/main/res/layout/activity_settings.xml	19027
-app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml	271
-app/src/main/res/values/colors.xml	696
-app/src/main/res/values/strings.xml	76
-app/src/main/res/values/themes.xml	533
-build.gradle	73
-gradle/wrapper/gradle-wrapper.properties	195
-gradle.properties	107
-gradlew	909
-gradlew.bat	863
-settings.gradle	466
+./.github/workflows/build-apk.yml
+./.gitignore
+./AGRONOMY_NOTES.md
+./CROP_PROFILES_SAYURAN.md
+./LOCAL_BUILD.md
+./MODEL_MATEMATIKA_DAN_ALUR_v1.5.7.md
+./PATCH_NOTES.md
+./PATCH_NOTES_FIX4_FIELD_NOTES_WEATHER_FERTILIZER.md
+./PATCH_NOTES_FIX5_SAVE_GPS_MODEL.md
+./PATCH_NOTES_FIX6_PDF_REPORT.md
+./PATCH_NOTES_FIX7_NITROGEN_CLASS_CONVERSION.md
+./PATCH_NOTES_FIX7_N_CLASS_INFERENCE.md
+./PATCH_NOTES_FIX8_NITROGEN_DOLOMITE.md
+./PATCH_NOTES_FIX9_CSV_EXPORT.md
+./PATCH_NOTES_MULTI_AI_GOOGLE_SEARCH.md
+./PATCH_NOTES_NPK_AUDIT_v1.5.7.md
+./PATCH_NOTES_NPK_USB_AI_GPS_SAVE_FIX.md
+./PPFD_SOURCES.md
+./README.md
+./SCIENTIFIC_SOURCES.md
+./SECURITY_NOTES.md
+./app/build.gradle
+./app/proguard-rules.pro
+./app/src/main/AndroidManifest.xml
+./app/src/main/java/id/stasiuncuaca/AgronomyActivity.java
+./app/src/main/java/id/stasiuncuaca/AgronomyEngine.java
+./app/src/main/java/id/stasiuncuaca/AgronomyEvidence.java
+./app/src/main/java/id/stasiuncuaca/CsvDownloadActivity.java
+./app/src/main/java/id/stasiuncuaca/DolomiteCalculatorDialog.java
+./app/src/main/java/id/stasiuncuaca/FertilizerConverterDialog.java
+./app/src/main/java/id/stasiuncuaca/FieldNotesActivity.java
+./app/src/main/java/id/stasiuncuaca/LightConversion.java
+./app/src/main/java/id/stasiuncuaca/MainActivity.java
+./app/src/main/java/id/stasiuncuaca/NitrogenInference.java
+./app/src/main/java/id/stasiuncuaca/PdfReportActivity.java
+./app/src/main/java/id/stasiuncuaca/SettingsActivity.java
+./app/src/main/java/id/stasiuncuaca/UsbSoilMeter.java
+./app/src/main/res/drawable/bg_button.xml
+./app/src/main/res/drawable/bg_chip.xml
+./app/src/main/res/drawable/bg_edit.xml
+./app/src/main/res/drawable/bg_panel.xml
+./app/src/main/res/drawable/bg_root.xml
+./app/src/main/res/drawable/ic_launcher_background.xml
+./app/src/main/res/drawable/ic_launcher_foreground.xml
+./app/src/main/res/layout/activity_agronomy.xml
+./app/src/main/res/layout/activity_csv_download.xml
+./app/src/main/res/layout/activity_field_notes.xml
+./app/src/main/res/layout/activity_main.xml
+./app/src/main/res/layout/activity_pdf_report.xml
+./app/src/main/res/layout/activity_settings.xml
+./app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+./app/src/main/res/values/colors.xml
+./app/src/main/res/values/strings.xml
+./app/src/main/res/values/themes.xml
+./build.gradle
+./gradle.properties
+./gradle/wrapper/gradle-wrapper.properties
+./gradlew
+./gradlew.bat
+./settings.gradle

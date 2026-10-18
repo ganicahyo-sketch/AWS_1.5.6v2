@@ -12,10 +12,10 @@ import java.util.Locale;
  * - EC sensor tidak disamakan mentah-mentah dengan ECe laboratorium. Nilai
  *   dS/m hanya screening untuk risiko salinitas dan harus dikonfirmasi bila
  *   mendekati ambang kritis.
- * - Model dosis menggunakan baseline kebutuhan musim + kontribusi soil-test +
- *   efisiensi pemupukan + kredit riwayat. Ini STCR-style, bukan persamaan STCR
- *   spesifik satu komoditas. Persamaan spesifik harus menggantikan koefisien
- *   jika tersedia dari penelitian/lokasi.
+ * - Model dosis menggunakan baseline rekomendasi hara pupuk musim (kg N/P2O5/K2O per ha),
+ *   pembagian fraksi fase, pengurang screening dari kelas tanah, dan kredit konservatif
+ *   dari pupuk sebelumnya. Baseline tersebut sudah berupa dosis pupuk; jangan dibagi lagi
+ *   dengan efisiensi pemulihan. Ini model screening, bukan STCR spesifik lokasi.
  */
 public final class AgronomyEngine {
     private AgronomyEngine() {}
@@ -29,7 +29,7 @@ public final class AgronomyEngine {
         public final double nMin, nMax;
         public final double pMin, pMax;
         public final double kMin, kMax;
-        /** Seasonal nutrient baselines in kg/ha: N as N, P as P2O5, K as K2O. Screening defaults only. */
+        /** Seasonal fertilizer-nutrient recommendation baselines in kg/ha: N as N, P as P2O5, K as K2O. Screening defaults only; not crop uptake figures. */
         public final double seasonalN, seasonalP, seasonalK;
         public final double tBase;
         public final String source;
@@ -79,10 +79,42 @@ public final class AgronomyEngine {
             return new CropProfile("Ubi jalar",120,5.5,6.8,20,30,1.5,20,40,8,15,80,140,60,30,30,12,src);
         if (c.contains("kentang") || c.contains("potato"))
             return new CropProfile("Kentang",100,5.0,6.5,15,25,1.7,20,40,10,20,100,180,105,70,35,7,src);
-        if (c.contains("bawang merah") || c.contains("shallot") || c.contains("onion"))
-            return new CropProfile("Bawang",90,5.5,6.8,15,30,1.2,20,40,10,20,80,160,100,55,35,8,src);
-        if (c.contains("kelapa sawit") || c.contains("sawit") || c.contains("oil palm"))
-            return new CropProfile("Kelapa sawit",3650,4.0,7.0,25,32,2.5,20,40,8,15,100,180,120,60,180,15,src);
+        if (c.contains("bawang") || c.contains("shallot") || c.contains("onion"))
+            return new CropProfile("Bawang merah",90,5.5,6.8,15,30,1.2,20,40,10,20,80,160,100,55,35,8,src);
+        if (c.contains("kacang tanah") || c.contains("groundnut"))
+            return new CropProfile("Kacang tanah",100,5.0,7.0,20,32,2.0,15,35,8,15,60,120,25,40,10,10, "FAO Indonesia; angka acuan umum, validasi lokasi.");
+        if (c.contains("kacang hijau") || c.contains("mungbean"))
+            return new CropProfile("Kacang hijau",65,5.0,7.0,22,32,2.0,15,35,8,15,60,120,25,35,8,10, "FAO Indonesia; angka acuan umum, validasi lokasi.");
+        if (c.contains("kacang panjang") || c.contains("long bean"))
+            return new CropProfile("Kacang panjang",65,5.5,7.0,20,32,1.7,15,35,8,15,60,130,50,50,20,10, "FAO Indonesia; angka acuan umum, validasi lokasi.");
+        if (c.contains("kubis") || c.equals("kol") || c.contains("cabbage"))
+            return new CropProfile("Kubis",100,5.5,6.8,15,25,1.7,20,40,10,20,80,150,90,60,20,7, "FAO Indonesia; baseline screening umum, cek SOP lokal.");
+        if (c.contains("pakcoy") || c.contains("pokcoy") || c.contains("pak choi") || c.contains("bok choy"))
+            return new CropProfile("Pakcoy",45,5.5,6.8,18,28,1.5,20,40,8,15,70,130,90,40,80,5, "Baseline screening sayuran Brassica; verifikasi varietas, hasil uji tanah dan SOP lokal.");
+        if (c.contains("sawi") || c.contains("mustard green") || c.contains("caisim") || c.contains("caisin") || c.contains("choy sum"))
+            return new CropProfile("Sawi",45,5.5,7.0,18,30,1.5,20,40,8,15,70,130,95,40,10,10, "FAO Indonesia; baseline screening umum, cek SOP lokal.");
+        if (c.contains("selada") || c.contains("lettuce"))
+            return new CropProfile("Selada",55,5.5,6.8,12,24,1.5,20,40,8,15,80,140,100,60,90,5, "Baseline screening sayuran daun; verifikasi berdasarkan varietas dan SOP setempat.");
+        if (c.contains("brokoli") || c.contains("broccoli"))
+            return new CropProfile("Brokoli",85,5.5,7.0,15,24,1.7,20,40,10,20,80,150,110,70,80,7, "Baseline screening Brassica; verifikasi berdasarkan varietas dan SOP setempat.");
+        if (c.contains("kembang kol") || c.contains("cauliflower"))
+            return new CropProfile("Kembang kol",85,5.5,7.0,15,24,1.7,20,40,10,20,80,150,110,70,80,7, "Baseline screening Brassica; verifikasi berdasarkan varietas dan SOP setempat.");
+        if (c.contains("kangkung") || c.contains("water spinach"))
+            return new CropProfile("Kangkung",35,5.0,7.0,20,32,1.7,15,35,8,15,60,120,80,35,30,12, "Baseline screening sayuran daun; verifikasi berdasarkan SOP lokal.");
+        if (c.contains("bayam") || c.contains("amaranth"))
+            return new CropProfile("Bayam",35,5.5,7.0,20,32,1.7,15,35,8,15,60,120,80,35,30,12, "Baseline screening sayuran daun; verifikasi berdasarkan SOP lokal.");
+        if (c.contains("wortel") || c.contains("carrot"))
+            return new CropProfile("Wortel",100,5.5,7.0,15,25,1.7,15,35,8,15,80,150,85,50,90,7, "Baseline screening umbi; verifikasi berdasarkan SOP lokal.");
+        if (c.contains("timun") || c.contains("mentimun") || c.contains("cucumber"))
+            return new CropProfile("Mentimun",70,5.5,7.0,20,30,1.7,20,40,10,20,80,160,100,55,100,10, "Baseline screening Cucurbitaceae; verifikasi berdasarkan SOP lokal.");
+        if (c.contains("terong") || c.contains("eggplant"))
+            return new CropProfile("Terong",120,5.5,7.0,22,32,1.7,20,40,10,20,80,160,100,70,100,12, "Baseline screening sayuran buah; verifikasi berdasarkan SOP lokal.");
+        if (c.contains("melon"))
+            return new CropProfile("Melon",90,5.5,7.0,22,32,1.7,20,40,10,20,90,170,100,70,120,12, "Baseline screening Cucurbitaceae; verifikasi berdasarkan SOP lokal.");
+        if (c.contains("semangka") || c.contains("watermelon"))
+            return new CropProfile("Semangka",90,5.5,7.0,22,32,1.7,20,40,10,20,90,170,100,60,100,12, "Baseline screening Cucurbitaceae; verifikasi berdasarkan SOP lokal.");
+        if (c.contains("kale") || c.contains("kailan"))
+            return new CropProfile("Kale / kailan",65,5.5,7.0,15,26,1.7,20,40,10,20,80,150,95,55,60,7, "Baseline screening Brassica; verifikasi berdasarkan varietas dan SOP lokal.");
         return new CropProfile("Komoditas umum",120,5.5,7.0,18,32,2.0,20,40,8,15,80,140,80,40,30,10,src);
     }
 
@@ -96,19 +128,30 @@ public final class AgronomyEngine {
         if (c.contains("singkong") || c.contains("cassava")) return "Singkong";
         if (c.contains("ubi jalar") || c.contains("sweet potato")) return "Ubi jalar";
         if (c.contains("kentang") || c.contains("potato")) return "Kentang";
-        if (c.contains("bawang merah") || c.contains("shallot") || c.contains("onion")) return "Bawang";
-        if (c.contains("kelapa sawit") || c.contains("sawit") || c.contains("oil palm")) return "Kelapa sawit";
+        if (c.contains("bawang") || c.contains("shallot") || c.contains("onion")) return "Bawang merah";
+        if (c.contains("kacang tanah") || c.contains("groundnut")) return "Kacang tanah";
+        if (c.contains("kacang hijau") || c.contains("mungbean")) return "Kacang hijau";
+        if (c.contains("kacang panjang") || c.contains("long bean")) return "Kacang panjang";
+        if (c.contains("kubis") || c.equals("kol") || c.contains("cabbage")) return "Kubis";
+        if (c.contains("pakcoy") || c.contains("pokcoy") || c.contains("pak choi") || c.contains("bok choy")) return "Pakcoy";
+        if (c.contains("sawi") || c.contains("mustard green") || c.contains("caisim") || c.contains("caisin") || c.contains("choy sum")) return "Sawi";
+        if (c.contains("selada") || c.contains("lettuce")) return "Selada";
+        if (c.contains("brokoli") || c.contains("broccoli")) return "Brokoli";
+        if (c.contains("kembang kol") || c.contains("cauliflower")) return "Kembang kol";
+        if (c.contains("kangkung") || c.contains("water spinach")) return "Kangkung";
+        if (c.contains("bayam") || c.contains("amaranth") || c.contains("spinach")) return "Bayam";
+        if (c.contains("wortel") || c.contains("carrot")) return "Wortel";
+        if (c.contains("timun") || c.contains("mentimun") || c.contains("cucumber")) return "Mentimun";
+        if (c.contains("terong") || c.contains("eggplant")) return "Terong";
+        if (c.contains("melon")) return "Melon";
+        if (c.contains("semangka") || c.contains("watermelon")) return "Semangka";
+        if (c.contains("kale") || c.contains("kailan")) return "Kale / kailan";
         return crop == null || crop.trim().isEmpty() ? "Komoditas umum" : crop.trim();
     }
 
     public static String phase(int hst, String crop) {
         CropProfile p = profile(crop);
         if (hst < 0) return "Belum tanam / HST belum valid";
-        if (p.name.equals("Kelapa sawit")) {
-            if (hst < 365) return "TBM awal / pembentukan vegetatif";
-            if (hst < 1095) return "TBM lanjut / vegetatif";
-            return "TM / produksi";
-        }
         if (hst <= Math.max(20, (int)(p.cycleDays * 0.18))) return "Perkecambahan / establishment";
         if (hst <= Math.max(35, (int)(p.cycleDays * 0.45))) return "Vegetatif";
         if (hst <= Math.max(60, (int)(p.cycleDays * 0.68))) return "Pembungaan / reproduktif";
@@ -126,14 +169,31 @@ public final class AgronomyEngine {
         return 0.25;
     }
 
+    /**
+     * Whether both user-entered available-N thresholds are usable and non-generic.
+     * A zero lower bound is treated as an unconfigured threshold, not a soil-N baseline.
+     */
+    public static boolean hasValidNThresholds(double low, double high) {
+        return Double.isFinite(low) && Double.isFinite(high) && low > 0.0 && high > low;
+    }
+
+    /** Indicates whether the class comes from explicit mg/kg cutoffs or inferred total N. */
+    public static String nClassificationBasis(double low, double high) {
+        return hasValidNThresholds(low, high)
+                ? "ambang N tersedia yang diisi pengguna (mg/kg)"
+                : "N-total estimasi dari N tersedia dengan asumsi utama 2%";
+    }
+
     public static String classifyN(double value) {
-        if (Double.isNaN(value)) return "Tidak ada data";
-        return "Metode/ambang N belum diketahui";
+        if (!Double.isFinite(value) || value < 0.0) return "Tidak ada data";
+        return NitrogenInference.classifyEstimatedTotalN(value);
     }
 
     public static String classifyN(double value, double low, double high) {
-        if (Double.isNaN(value)) return "Tidak ada data";
-        if (!Double.isFinite(low) || !Double.isFinite(high) || low < 0 || high <= low) return classifyN(value);
+        if (!Double.isFinite(value) || value < 0.0) return "Tidak ada data";
+        // Only valid method-specific available-N cutoffs take precedence. Empty, zero,
+        // reversed, or missing cutoffs fall back to N-total inference rather than zero soil credit.
+        if (!hasValidNThresholds(low, high)) return NitrogenInference.classifyAvailableNAsTotalN(value);
         if (value < low) return "Rendah";
         if (value <= high) return "Sedang";
         return "Tinggi";
@@ -466,7 +526,17 @@ public final class AgronomyEngine {
         StringBuilder s = new StringBuilder();
         s.append("ANALISIS AWAL — SEMUA PARAMETER (rentang/status dulu)\n");
         if (Double.isFinite(ph)) s.append("pH: ").append(fmt2(ph)).append(" → ").append(classifyPH(ph, cp)).append("\n");
-        if (Double.isFinite(n)) s.append("N tersedia: ").append(fmt2(n)).append(" mg/kg → ").append(classifyN(n,nLow,nHigh)).append("; N-total estimasi → ").append(NitrogenInference.classifyRange(n)).append("\n");
+        if (Double.isFinite(n) && n >= 0.0) {
+            s.append("N tersedia: ").append(fmt2(n)).append(" mg/kg");
+            if (hasValidNThresholds(nLow, nHigh)) {
+                s.append(" → kelas ").append(classifyN(n,nLow,nHigh)).append(" berdasarkan ambang N tersedia yang diisi pengguna.\n");
+            } else {
+                s.append(" → N-total estimasi ").append(String.format(Locale.US, "%.3f", NitrogenInference.estimateTotalNPercent(n)))
+                        .append("%; kelas N-total ").append(NitrogenInference.classifyEstimatedTotalN(n))
+                        .append(" (asumsi utama 2%).\n");
+                s.append("Rentang kelas pada sensitivitas asumsi N tersedia 1–3%: ").append(NitrogenInference.classifyRange(n)).append(".\n");
+            }
+        }
         if (Double.isFinite(p)) s.append("P: ").append(fmt2(p)).append(" mg/kg → ").append(classifyP(p, soilMethod)).append("\n");
         if (Double.isFinite(k)) s.append("K: ").append(fmt2(k)).append(" mg/kg → ").append(classifyK(k, soilMethod)).append("\n");
         if (Double.isFinite(ecUsCm)) s.append("EC sensor: ").append(fmt2(ecUsCm)).append(" µS/cm → ").append(classifyEC(ecUsCm, cp)).append("\n");
@@ -623,12 +693,21 @@ public final class AgronomyEngine {
      * Screening kebutuhan hara per fase. P dan K pada keluaran dinyatakan sebagai
      * P2O5 dan K2O (satuan konvensi label pupuk), sedangkan hasil uji tanah mg/kg
      * hanya dipakai untuk kelas screening sesuai metode yang dipilih.
-     * Ambang N harus diisi sesuai metode/lab; tanpa ambang N tidak ada pengurangan
-     * kebutuhan berdasarkan N tanah. Ini mencegah klasifikasi N palsu.
+     * Ambang N spesifik metode/lab yang valid diutamakan. Jika tidak tersedia atau generik,
+     * kelas N-total diinferensikan dari N tersedia (asumsi utama 2%) agar dukungan tanah tidak
+     * otomatis dianggap 0%. Bila N tersedia sendiri tidak ada/invalid, dukungan N tanah tetap 0.
      */
     public static double nutrientNeed(double soilValue, String nutrient, String crop, int hst,
             double recentCreditKgHa, double yieldTargetTPerHa, String method, double depthCm,
             double bulkDensityGcm3, double nLow, double nHigh) {
+        return nutrientNeed(soilValue, nutrient, crop, hst, recentCreditKgHa, yieldTargetTPerHa,
+                method, depthCm, bulkDensityGcm3, nLow, nHigh, "");
+    }
+
+    /** Optional manual phase override; unknown labels fall back to the age-derived crop phase. */
+    public static double nutrientNeed(double soilValue, String nutrient, String crop, int hst,
+            double recentCreditKgHa, double yieldTargetTPerHa, String method, double depthCm,
+            double bulkDensityGcm3, double nLow, double nHigh, String phaseOverride) {
         CropProfile p=profile(crop);
         String nutrientKey = nutrient == null ? "N" : nutrient.trim().toUpperCase(Locale.US);
         if (!nutrientKey.equals("N") && !nutrientKey.equals("P") && !nutrientKey.equals("K")) return 0;
@@ -636,14 +715,18 @@ public final class AgronomyEngine {
         double yieldScale=1.0;
         if (Double.isFinite(yieldTargetTPerHa) && yieldTargetTPerHa>0)
             yieldScale=Math.max(0.5,Math.min(1.8,yieldTargetTPerHa/Math.max(0.1,defaultYield(p))));
-        double stageNeed=seasonal*stageFraction(hst,crop)*yieldScale;
+        double fraction = stageFractionFromLabel(phaseOverride, hst, crop);
+        double stageNeed=seasonal*fraction*yieldScale;
         String cls;
         if (nutrientKey.equals("N")) cls=classifyN(soilValue,nLow,nHigh);
         else if (nutrientKey.equals("P")) cls=classifyP(soilValue,method);
         else cls=classifyK(soilValue,method);
 
-        // Screening credit from soil-test class. Class labels may contain method notes.
-        // Missing/unknown results give zero soil credit rather than a fabricated class.
+        // Screening credit from soil-test class. N thresholds are used only after the
+        // caller explicitly selects the N-specific laboratory thresholds. Otherwise N class
+        // is inferred from measured available N using the 2% central assumption.
+        // Missing N input is not interpreted as a measured soil N concentration: it receives
+        // no soil credit, while the baseline fertilizer rate is retained and uncertainty noted.
         double support=0.0;
         if (cls != null) {
             if (cls.startsWith("Sangat Rendah")) support=0.0;
@@ -652,29 +735,59 @@ public final class AgronomyEngine {
             else if (cls.startsWith("Tinggi")) support=0.80;
             else if (cls.startsWith("Sangat Tinggi")) support=0.90;
         }
-        double grossRequirement=stageNeed*(1.0-support);
-        double recovery=nutrientKey.equals("N")?0.50:(nutrientKey.equals("P")?0.30:0.60);
-        // Fertilizer history is nominal nutrient (N, P2O5, K2O). Credit only its
-        // estimated recovered fraction, consistently with the same recovery factor.
-        double recoveredCredit=Math.max(0,Double.isFinite(recentCreditKgHa)?recentCreditKgHa:0)*recovery;
-        double remainingAvailable=Math.max(0,grossRequirement-recoveredCredit);
-        return remainingAvailable/Math.max(0.1,recovery);
+        double recommendedFertilizerNeed=stageNeed*(1.0-support);
+        double creditFraction=nutrientKey.equals("N")?0.50:(nutrientKey.equals("P")?0.30:0.60);
+        // seasonalN/P/K baselines are already in kg of fertilizer nutrient per hectare,
+        // not crop uptake demand. Therefore do not divide them by a recovery efficiency
+        // (that was inflating recommendations). Discount only historical fertilizer credits.
+        double recoveredCredit=Math.max(0,Double.isFinite(recentCreditKgHa)?recentCreditKgHa:0)*creditFraction;
+        return Math.max(0.0,recommendedFertilizerNeed-recoveredCredit);
     }
     public static String nutrientFormulaText() {
-        return "Estimasi pupuk fase (kg/ha) ≈ max(0, kebutuhan fase setelah dukungan soil-test − kredit hara pupuk terdahulu × efisiensi pemulihan) ÷ efisiensi pemulihan. P/K keluaran sebagai P2O5/K2O sesuai label pupuk; kelas tanah hanya screening sesuai metode ekstraksi. N hanya diklasifikasikan jika ambang N rendah/tinggi diisi sesuai lab. Stok tanah = konsentrasi × BD × kedalaman × 0,10 kg/ha; stok bukan serapan langsung. Model ini estimasi screening, bukan QUEFTS atau STCR terkalibrasi.";
+        return "Estimasi dosis hara pupuk per fase (kg/ha) = max(0, baseline dosis musim × fraksi fase × skala target hasil × (1 − faktor dukungan kelas tanah) − kredit pupuk sebelumnya × fraksi ketersediaan asumsi). Baseline N/P/K pada profil aplikasi sudah berupa dosis hara pupuk kg/ha; jangan dibagi lagi dengan efisiensi pemulihan. Fraksi kredit riwayat sementara: N 0,50; P2O5 0,30; K2O 0,60, sebagai asumsi screening yang harus dikalibrasi lokal. P/K keluaran sebagai P2O5/K2O sesuai label pupuk. Untuk N, ambang N tersedia khusus metode hanya digunakan bila pengguna memilih basis ambang khusus dan kedua batas valid; jika kosong/generik, N-total (%) = N tersedia (mg/kg) / 200 dengan asumsi utama N tersedia = 2% N-total (sensitivitas 1–3%). Kelas N-total screening: <0,10% sangat rendah; 0,10–0,20% rendah; >0,20–0,50% sedang; >0,50–0,75% tinggi; >0,75% sangat tinggi. Kelas inferensi bukan hasil pengukuran N-total laboratorium. Stok tanah = konsentrasi × BD × kedalaman × 0,10 kg/ha; stok bukan serapan langsung. Model bukan QUEFTS/STCR terkalibrasi.";
+    }
+
+    private static double stageFractionFromLabel(String phaseOverride, int hst, String crop) {
+        if (phaseOverride == null || phaseOverride.trim().isEmpty()) return stageFraction(hst, crop);
+        String p = norm(phaseOverride);
+        if (p.contains("establishment") || p.contains("perkecambahan") || p.contains("semai") || p.contains("bibit") || p.equals("tanam")) return 0.15;
+        if (p.contains("vegetatif") || p.contains("pertumbuhan daun") || p.contains("pertumbuhan batang")) return 0.30;
+        if (p.contains("reproduktif") || p.contains("pembungaan") || p.contains("berbunga") || p.contains("generatif") || p.contains("pembentukan buah") || p.contains("fruit set")) return 0.35;
+        if (p.contains("pengisian") || p.contains("pemasakan") || p.contains("matang") || p.contains("panen") || p.contains("ripening")) return 0.20;
+        return stageFraction(hst, crop);
+    }
+
+    /** Reference yield used to scale modelled nutrient needs when a farmer supplies a target yield.
+     * This is a crop-level screening benchmark, not a certified named-variety yield claim.
+     */
+    public static double referenceYieldTPerHa(String crop) {
+        return defaultYield(profile(crop));
     }
 
     private static double defaultYield(CropProfile p) {
         if (p.name.equals("Padi")) return 6;
         if (p.name.equals("Jagung")) return 7;
         if (p.name.equals("Kedelai")) return 2.5;
+        if (p.name.equals("Kacang tanah")) return 2.0;
+        if (p.name.equals("Kacang hijau")) return 1.5;
+        if (p.name.equals("Kacang panjang")) return 12;
         if (p.name.equals("Tomat")) return 40;
         if (p.name.equals("Cabai")) return 8;
         if (p.name.equals("Singkong")) return 25;
         if (p.name.equals("Ubi jalar")) return 15;
         if (p.name.equals("Kentang")) return 20;
-        if (p.name.equals("Bawang")) return 12;
-        if (p.name.equals("Kelapa sawit")) return 20;
+        if (p.name.equals("Bawang merah")) return 12;
+        if (p.name.equals("Kubis")) return 35;
+        if (p.name.equals("Sawi")) return 20;
+        if (p.name.equals("Pakcoy")) return 25;
+        if (p.name.equals("Selada")) return 25;
+        if (p.name.equals("Brokoli") || p.name.equals("Kembang kol")) return 20;
+        if (p.name.equals("Kangkung") || p.name.equals("Bayam")) return 15;
+        if (p.name.equals("Wortel")) return 30;
+        if (p.name.equals("Mentimun")) return 35;
+        if (p.name.equals("Terong")) return 30;
+        if (p.name.equals("Melon") || p.name.equals("Semangka")) return 30;
+        if (p.name.equals("Kale / kailan")) return 20;
         return 5;
     }
 
@@ -762,4 +875,31 @@ public final class AgronomyEngine {
     private static String norm(String s) {
         return s == null ? "" : s.toLowerCase(Locale.US).trim();
     }
+
+    /**
+     * pH-only dolomite screening calculation. The factor is an editable field assumption in
+     * tonnes CaCO3-equivalent per hectare per pH unit for the selected soil texture and topsoil
+     * depth. Product dose is corrected for effective neutralizing value (ECCE/ENP, percent).
+     * This is not a laboratory lime requirement; buffer acidity/Al-dd and incorporation depth
+     * can change the real requirement substantially.
+     */
+    public static double estimateDolomiteTonHa(double initialPh, double targetPh,
+            double caCo3EquivalentTonHaPerPh, double effectiveNeutralizingValuePct) {
+        if (!Double.isFinite(initialPh) || !Double.isFinite(targetPh)
+                || !Double.isFinite(caCo3EquivalentTonHaPerPh)
+                || !Double.isFinite(effectiveNeutralizingValuePct)
+                || initialPh < 0 || initialPh > 14 || targetPh < 0 || targetPh > 14
+                || caCo3EquivalentTonHaPerPh <= 0
+                || effectiveNeutralizingValuePct <= 0 || effectiveNeutralizingValuePct > 100) return Double.NaN;
+        double deltaPh = targetPh - initialPh;
+        if (deltaPh <= 0) return 0.0;
+        return (deltaPh * caCo3EquivalentTonHaPerPh) / (effectiveNeutralizingValuePct / 100.0);
+    }
+
+    public static double estimateDolomiteKgTotal(double dolomiteTonHa, double areaHa) {
+        if (!Double.isFinite(dolomiteTonHa) || !Double.isFinite(areaHa)
+                || dolomiteTonHa < 0 || areaHa < 0) return Double.NaN;
+        return dolomiteTonHa * areaHa * 1000.0;
+    }
+
 }

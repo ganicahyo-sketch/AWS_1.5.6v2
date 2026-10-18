@@ -80,15 +80,6 @@ Prediksi OPT bukan diagnosis. Verifikasi dengan gejala, populasi, luas serangan,
 - Tabel otomatis membungkus teks dan mengulang header ketika berganti halaman.
 - Histori tetap dimasukkan pada laporan ringkas maupun lengkap karena Print/Save adalah tempat tampilnya histori.
 
-## Tambahan database kelapa sawit
-- Menambahkan `PalmOilAdvisor` sebagai lapisan basis pengetahuan spesifik kelapa sawit, TBM awal/TBM lanjut/TM.
-- Membaca N tersedia, P tersedia, K tersedia (mg/kg), EC sensor (µS/cm), pH, kelembapan, hujan dan RH dari input yang sudah ada.
-- Memberi prioritas pemeriksaan hara dan tindakan teknis kebun tanpa menyamakan pembacaan sensor murah dengan analisis laboratorium.
-- AI prompt meminta pencarian web wajib untuk sumber resmi PPKS/IOPRI dan OPT; melarang mengarang dosis resmi atau konversi langsung NPK sensor menjadi kg pupuk/pokok.
-- Menambahkan sumber resmi PPKS/IOPRI dan catatan keterbatasan sensor ke `SCIENTIFIC_SOURCES.md`.
-- Dosis final tetap memerlukan data tambahan (analisis daun/tanah, umur, jumlah pokok/ha, jenis tanah, produktivitas dan riwayat pemupukan), selaras dengan cakupan layanan rekomendasi PPKS.
-
-
 ## Patch lama penyinaran + refresh GPS perangkat
 - Dashboard Open-Meteo kini menampilkan `sunshine_duration` sebagai lama penyinaran matahari dalam jam/hari; nilainya tetap disimpan di `om_sun_hours` dan dipakai analisis agronomi.
 - CSV Open-Meteo hourly menyertakan `sunshine_hours` (durasi per jam, dikonversi dari detik); CSV daily menyertakan `sunshine_hours` dan `daylight_hours` (dua besaran berbeda).
@@ -136,3 +127,55 @@ Prediksi OPT bukan diagnosis. Verifikasi dengan gejala, populasi, luas serangan,
 - Perubahan ini memperbaiki resolusi dependensi `com.github.mik3y:usb-serial-for-android:3.9.0` yang menyebabkan task `:app:processDebugNavigationResources` gagal di GitHub Actions run 38205864030.
 - Versi dependensi dan kode USB Soil Meter tidak diubah. Fitur lain tetap dipertahankan.
 - Build setelah patch perlu dikonfirmasi melalui GitHub Actions setelah ZIP diunggah.
+
+## FIX5 — penyimpanan Catatan Lapangan dan tombol GPS HP
+- Penulisan riwayat menggunakan SharedPreferences sebagai kompatibilitas utama, dan file JSON internal sebagai recovery mirror best-effort. Salinan cadangan yang gagal ditulis tidak membatalkan catatan yang sudah berhasil tersimpan. Verifikasi memakai ID unik mencegah laporan sukses/gagal keliru serta duplikasi saat retry.
+- Tombol GPS mengisi cache Android yang valid segera sambil meminta fix GPS/jaringan terbaru. Cache lebih tua tidak diam-diam dianggap fix baru; umur cache ditampilkan. Fix yang jelas lebih baru dapat menggantikan cache walau akurasi nominal sedikit lebih rendah.
+- Koordinat dari Pengaturan langsung diterapkan ke preferences agar dashboard memuat ulang Open-Meteo tanpa perlu navigasi kembali untuk mengirim hasil.
+- Tambahan `MODEL_MATEMATIKA_DAN_ALUR_v1.5.7.md` menjelaskan rumus model, alur data, konversi target hasil kg/m² lahan, estimasi hara per fase, kontribusi screening tanah, efisiensi pemulihan, kredit pemupukan dan konverter produk.
+- Build Android penuh tetap harus dikonfirmasi melalui GitHub Actions; perangkat fisik diperlukan untuk mengonfirmasi fix GPS baru dan persistensi catatan pada Android.
+
+
+## FIX6 — format laporan PDF/cetak
+- Memperbaiki logika pagination yang menyebabkan hampir setiap elemen membuat halaman baru: konten sekarang dibandingkan terhadap tinggi halaman dikurangi margin bawah.
+- Menata laporan lengkap dan ringkas dengan ringkasan eksekutif, susunan bab yang konsisten, tipografi Arial (dengan fallback font sistem di perangkat yang tidak menyediakan Arial), judul utama 14 pt, judul bab/subbab 12 pt, isi/tabel 11 pt, margin A4, footer nomor halaman, dan tabel riwayat berbaris selang-seling.
+- Paragraf terlipat sesuai lebar halaman; header tabel diulang hanya saat tabel berlanjut; judul bab disimpan bersama konten awalnya untuk mengurangi judul yang terpisah di akhir halaman.
+- Laporan ringkas berisi maksimal 8 riwayat terbaru. Laporan lengkap berisi maksimal 30 riwayat dan bagian AI/sumber ilmiah. Data aplikasi tidak diubah; pemotongan catatan panjang hanya pada sel tabel PDF.
+- Penanganan stream saat menyimpan PDF diperkuat. Build APK penuh belum dapat dibuktikan di lingkungan ini karena Gradle wrapper tidak dapat mengunduh Gradle; lihat `PATCH_NOTES_FIX6_PDF_REPORT.md`.
+
+
+## FIX7 — inferensi kelas N dari N tersedia
+- Bila ambang N tersedia spesifik metode kosong/tidak valid/generik, N tersedia (mg/kg) dikonversi ke perkiraan N-total menggunakan asumsi utama 2%: N-total (%) = N tersedia/200.
+- Sensitivitas 1–3% dilaporkan terpisah; kelas utama menggunakan 2%. Lima kelas N-total sekarang menjadi dasar screening N ketika ambang yang sesuai tidak tersedia.
+- Kelas hasil inferensi diteruskan ke faktor dukungan tanah dalam `nutrientNeed`, sehingga data N tersedia yang valid tidak otomatis mendapat dukungan tanah 0 hanya karena ambang tidak diisi. Bila N tersedia hilang/tidak valid, model tidak mengarang kredit tanah.
+- Ambang metode-spesifik yang valid tetap mengambil prioritas. Dasbor, analisis agronomi, catatan lapangan, analisis rentang, PDF dan dokumen rumus menjelaskan asal klasifikasi serta batasannya.
+
+
+## FIX7 — klasifikasi N tersedia → N-total
+- Konversi ditulis eksplisit: N-total (%) = ((100/2) × N tersedia mg/kg) / 10000 = N tersedia / 200.
+- Jika ambang metode tidak lengkap/generik, kelas N dihitung dari N-total estimasi, bukan menganggap batas kosong sebagai pengukuran N nol.
+- Jalur klasifikasi disatukan untuk mengurangi perbedaan antara analisis, kebutuhan pupuk, dan laporan.
+- Uji javac dan enam contoh konversi/kelas lulus; build Android penuh masih perlu konfirmasi GitHub Actions.
+
+
+## FIX8 — audit nitrogen, rumus dosis pupuk, dan kalkulator dolomit
+- Rumus `N-total (%) = N tersedia (mg/kg)/200` tetap dipakai sebagai estimasi utama 2%; klasifikasi berdasarkan ambang low/high hanya aktif setelah pengguna memilih basis ambang N-spesifik/lab dan keduanya valid. Ambang generik metode P/K tidak lagi diam-diam dipakai untuk klasifikasi N.
+- Model dosis pupuk dibenahi: baseline profil sudah berupa dosis hara pupuk kg/ha, sehingga tidak lagi dibagi dengan efisiensi pemulihan. Kredit riwayat 90 hari dikurangi secara konservatif berdasarkan fraksi ketersediaan asumsi N 50%, P2O5 30%, K2O 60%.
+- Ditambahkan kalkulator dolomit berbasis pH awal/target, luas hektare, tekstur/faktor CaCO3-equivalent, dan efektivitas netralisasi dolomit. Formula dan hasil tersimpan muncul di analisis agronomi serta PDF. Faktor preset adalah asumsi editable, bukan pengganti uji buffer/Al-dd/CEC atau kebutuhan kapur laboratorium.
+- Bukti teknis: penelitian fraksi N di tanah pertanian Jawa melaporkan rata-rata N anorganik ekstrak 1,3% dari N-total (https://www.tandfonline.com/doi/full/10.1080/00380768.2014.891925); FAO menyatakan kebutuhan kapur tidak dapat ditentukan tepat dari pH saja (https://www.fao.org/4/a0443e/a0443e03.pdf).
+
+
+## FIX8 — Audit nitrogen dan kalkulator dolomit pH
+- Memastikan konversi estimasi `N-total (%) = N tersedia (mg/kg) / 200` hanya dinyatakan benar di bawah asumsi `N tersedia = 2% N-total`; interval sensitivitas 1–3% tetap ditampilkan. Ambang N tersedia dari metode hanya aktif ketika pengguna memilih basis metode/lab spesifik dan kedua batas valid.
+- Menyamakan jalur klasifikasi N di Catatan Lapangan, dashboard, Analisis Agronomi, laporan PDF, dan dosis hara. Nilai ambang kosong/generik tidak lagi dianggap kandungan N nol.
+- Memperbaiki persamaan dosis fase: baseline profil sudah berupa rekomendasi dosis hara pupuk (kg/ha), sehingga tidak dibagi lagi dengan efisiensi pemulihan. Pupuk sebelumnya hanya memberi kredit melalui fraksi ketersediaan asumsi (N 0,50; P₂O₅ 0,30; K₂O 0,60). Koefisien tetap screening yang harus divalidasi lokal.
+- Menjelaskan bahwa konversi stok tanah dari nilai N yang dimasukkan adalah stok teoritis berbasis konsentrasi input; untuk N tersedia, itu bukan N-total dan bukan kredit pupuk.
+- Menyediakan kalkulator dolomit berdasarkan pH awal/target, luas hektare, faktor asumsi editable menurut tekstur, dan efektivitas netralisasi produk. Menampilkan dosis t/ha, kg/ha dan total kg; semua hasil ditandai estimasi, bukan kebutuhan kapur laboratorium.
+- Pemeriksaan ilmiah: pH tunggal tidak cukup untuk menghitung kebutuhan kapur dengan presisi karena daya sangga/kemasaman cadangan bervariasi; prioritaskan pH-buffer, Al-dd/CEC, kedalaman olah dan rekomendasi laboratorium. Rujukan: FAO `https://www.fao.org/4/a0443e/a0443e03.pdf`, FAO `https://www.fao.org/4/x5872e/x5872e0a.htm`, dan studi fraksi N pada tanah pertanian Jawa `https://www.tandfonline.com/doi/full/10.1080/00380768.2014.891925`.
+
+
+## FIX9 — perbaikan ekspor CSV ThingSpeak dan Open-Meteo
+- Ekspor CSV ThingSpeak sekarang membaca Channel ID dan Read API Key dengan fallback yang sama seperti dashboard/Pengaturan, termasuk kunci preferensi lama. ID yang dipakai terlihat di status proses; ID kosong pada preferensi tidak lagi menjadi kegagalan palsu jika aplikasi memiliki default.
+- Memperbaiki permintaan Open-Meteo Historical API dengan menghapus parameter `visibility` dan `uv_index` yang tidak disediakan endpoint arsip. Kolom CSV lama tetap tersedia namun kosong untuk dua variabel tersebut, dengan pemberitahuan di layar.
+- Pesan error Open-Meteo kini menampilkan `reason` dari JSON respons bila tersedia.
+- Sumber: Open-Meteo Historical Weather API (https://open-meteo.com/en/docs/historical-weather-api) dan ThingSpeak Read Data API (https://www.mathworks.com/help/thingspeak/readdata.html).
