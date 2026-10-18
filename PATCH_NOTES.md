@@ -194,3 +194,7 @@ Prediksi OPT bukan diagnosis. Verifikasi dengan gejala, populasi, luas serangan,
 ## FIX12 — Ikon aplikasi
 - Memasang logo kedua sebagai ikon launcher STASIUN CUACA v1.5.7.
 - Menyediakan adaptive icon dan density-specific fallback PNG; mengatur ikon launcher di manifest.
+
+
+## FIX14 — Tbase otomatis
+Field Tbase (°C) kini otomatis terisi saat komoditas database dipilih pada Pengaturan atau Catatan Lapangan. Komoditas manual tetap bisa mengisi Tbase sendiri; Tbase disimpan bersama kunci tanaman dan ditampilkan sebagai basis GDD/thermal time.

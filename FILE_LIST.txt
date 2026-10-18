@@ -1,7 +1,6 @@
 ./.github/workflows/build-apk.yml
 ./.gitignore
 ./AGRONOMY_NOTES.md
-./APP_LOGO_PREVIEW.png
 ./CROP_PROFILES_SAYURAN.md
 ./LOCAL_BUILD.md
 ./MODEL_MATEMATIKA_DAN_ALUR_v1.5.7.md
@@ -9,6 +8,8 @@
 ./PATCH_NOTES_FIX10_BUILD_39154602530.md
 ./PATCH_NOTES_FIX11_RELEASE_LINT_COLORS.md
 ./PATCH_NOTES_FIX12_APP_LOGO.md
+./PATCH_NOTES_FIX13_CROP_DATABASE_TBASE.md
+./PATCH_NOTES_FIX14_TBASE_AUTOFILL.md
 ./PATCH_NOTES_FIX4_FIELD_NOTES_WEATHER_FERTILIZER.md
 ./PATCH_NOTES_FIX5_SAVE_GPS_MODEL.md
 ./PATCH_NOTES_FIX6_PDF_REPORT.md
@@ -29,6 +30,7 @@
 ./app/src/main/java/id/stasiuncuaca/AgronomyActivity.java
 ./app/src/main/java/id/stasiuncuaca/AgronomyEngine.java
 ./app/src/main/java/id/stasiuncuaca/AgronomyEvidence.java
+./app/src/main/java/id/stasiuncuaca/CropDatabase.java
 ./app/src/main/java/id/stasiuncuaca/CsvDownloadActivity.java
 ./app/src/main/java/id/stasiuncuaca/DolomiteCalculatorDialog.java
 ./app/src/main/java/id/stasiuncuaca/FertilizerConverterDialog.java
@@ -39,6 +41,7 @@
 ./app/src/main/java/id/stasiuncuaca/PdfReportActivity.java
 ./app/src/main/java/id/stasiuncuaca/SettingsActivity.java
 ./app/src/main/java/id/stasiuncuaca/UsbSoilMeter.java
+./app/src/main/res/drawable-nodpi/ic_launcher_art.png
 ./app/src/main/res/drawable/bg_button.xml
 ./app/src/main/res/drawable/bg_chip.xml
 ./app/src/main/res/drawable/bg_edit.xml
@@ -46,7 +49,6 @@
 ./app/src/main/res/drawable/bg_root.xml
 ./app/src/main/res/drawable/ic_launcher_background.xml
 ./app/src/main/res/drawable/ic_launcher_foreground.xml
-./app/src/main/res/drawable-nodpi/ic_launcher_art.png
 ./app/src/main/res/layout/activity_agronomy.xml
 ./app/src/main/res/layout/activity_csv_download.xml
 ./app/src/main/res/layout/activity_field_notes.xml
@@ -65,13 +67,14 @@
 ./app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
 ./app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 ./app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
+./app/src/main/res/values-night/colors.xml
 ./app/src/main/res/values/colors.xml
 ./app/src/main/res/values/strings.xml
 ./app/src/main/res/values/themes.xml
-./app/src/main/res/values-night/colors.xml
 ./build.gradle
-./gradle/wrapper/gradle-wrapper.properties
 ./gradle.properties
+./gradle/wrapper/gradle-wrapper.properties
 ./gradlew
 ./gradlew.bat
+./patch.py
 ./settings.gradle

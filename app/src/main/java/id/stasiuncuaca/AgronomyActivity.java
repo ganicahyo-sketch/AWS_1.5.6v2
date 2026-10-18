@@ -144,7 +144,9 @@ public class AgronomyActivity extends Activity {
         s.append("PENTING: bukan QUEFTS/STCR penuh. Gunakan persamaan STCR/PUTS lokal bila tersedia.\n");
         s.append("\n4. CUACA, VPD, AIR & EKOLOGI\n");
         s.append("Suhu ").append(show(temp)).append(" °C -> ").append(AgronomyEngine.temperatureStatus(temp,crop)).append("; kisaran profil ").append(show(cp.tempMin)).append("–").append(show(cp.tempMax)).append(" °C\n");
-        s.append("Tbase/GDD: ").append(show(cp.tBase)).append(" °C • ").append(CropDatabase.tBaseBasis(crop)).append("\n");
+        double selectedTbase = resolveTBase(crop, cp.tBase);
+        String tbaseBasis = CropDatabase.tBaseSourceLabel(crop, selectedTbase);
+        s.append("Tbase/GDD: ").append(show(selectedTbase)).append(" °C • ").append(tbaseBasis).append("\n");
         s.append("RH ").append(show(rh)).append(" %; hujan ").append(show(rain)).append(" mm/hari; ET0 ").append(show(et0)).append(" mm/hari\n");
         s.append("VPD ").append(show(vpd)).append(" kPa -> ").append(AgronomyEngine.classifyVpd(vpd)).append("\n");
         s.append(AgronomyEngine.vpdCombinedStatus(vpd,moist,fc,pwp,depth,et0,crop)).append("\n");
@@ -162,6 +164,21 @@ public class AgronomyActivity extends Activity {
         report.setText(compact);
         renderAgronomyReportCards(compact);
         prefs.edit().putString("last_agronomy_analysis",compact).apply();
+    }
+
+    private double resolveTBase(String crop, double profileTbase) {
+        String savedCrop = pref("farm_tbase_crop", "");
+        String savedText = pref("farm_tbase_c", "");
+        if (!savedText.trim().isEmpty() && savedCrop.equals(CropDatabase.key(crop))) {
+            try {
+                double value = Double.parseDouble(savedText.trim().replace(',', '.'));
+                if (Double.isFinite(value) && value >= -20 && value <= 60) return value;
+            } catch (NumberFormatException ignored) { }
+        }
+        double databaseValue = CropDatabase.tBase(crop);
+        if (Double.isFinite(databaseValue)) return databaseValue;
+        // Do not invent a generic Tbase for free-text crops with no supported database value.
+        return CropDatabase.isKnown(crop) && Double.isFinite(profileTbase) ? profileTbase : Double.NaN;
     }
 
     private String compactReport(String text){

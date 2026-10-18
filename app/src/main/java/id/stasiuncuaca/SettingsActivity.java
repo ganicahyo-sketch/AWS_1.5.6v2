@@ -30,8 +30,9 @@ public class SettingsActivity extends Activity {
     private static final String DEFAULT_READ_KEY = "P4B56Z7HZM56Q7HJ";
     private static final String DEFAULT_AI_KEY = "";
     private android.content.SharedPreferences p;
-    private EditText title, channel, readKey, aiKey, aiModel, geminiKey, geminiModel, openRouterKey, openRouterModel, lat, lon, elev;
+    private EditText title, channel, readKey, aiKey, aiModel, geminiKey, geminiModel, openRouterKey, openRouterModel, lat, lon, elev, tBase;
     private AutoCompleteTextView crop;
+    private TextView tBaseStatus;
     private Spinner cult, aiProvider;
     private CheckBox aiGoogleSearch;
     private static final int LOCATION_REQ = 78;
@@ -52,14 +53,26 @@ public class SettingsActivity extends Activity {
         p = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         title=findViewById(R.id.appTitle); channel=findViewById(R.id.channel); readKey=findViewById(R.id.readKey);
         aiKey=findViewById(R.id.aiKey); aiModel=findViewById(R.id.aiModel); crop=findViewById(R.id.crop);
+        tBase=findViewById(R.id.tBase); tBaseStatus=findViewById(R.id.tBaseStatus);
         ArrayAdapter<String> cropAdapter=new ArrayAdapter<>(this,android.R.layout.simple_dropdown_item_1line,CropDatabase.CROPS);
         crop.setAdapter(cropAdapter); crop.setThreshold(0);
         crop.setOnItemClickListener((parent,view,position,id)->{
             String selected=String.valueOf(parent.getItemAtPosition(position));
-            if(CropDatabase.isManual(selected)){ crop.setText(""); crop.setHint("Ketik nama komoditas manual"); crop.requestFocus(); }
-            else { crop.setText(AgronomyEngine.normalizeCrop(selected)); crop.setSelection(crop.length()); }
+            if(CropDatabase.isManual(selected)){
+                crop.setText(""); crop.setHint("Ketik nama komoditas manual"); crop.requestFocus();
+                tBase.setText("");
+                tBaseStatus.setText("Komoditas manual: isi Tbase sendiri jika nilainya diketahui.");
+                p.edit().remove("farm_tbase_c").remove("farm_tbase_crop").apply();
+            } else {
+                String canonical=CropDatabase.canonicalName(selected);
+                crop.setHint("Komoditas/tanaman");
+                crop.setText(canonical == null ? selected : canonical); crop.setSelection(crop.length());
+                applyTBaseForCrop(canonical == null ? selected : canonical, true);
+            }
         });
         crop.setOnClickListener(v->crop.showDropDown());
+        crop.setOnFocusChangeListener((v,hasFocus)->{ if(!hasFocus) applyTBaseForCrop(crop.getText().toString().trim(), false); });
+        tBase.setOnFocusChangeListener((v,hasFocus)->{ if(!hasFocus) persistTBaseForCurrentCrop(); });
         aiProvider=findViewById(R.id.aiProvider); aiGoogleSearch=findViewById(R.id.aiGoogleSearch);
         geminiKey=findViewById(R.id.geminiKey); geminiModel=findViewById(R.id.geminiModel);
         openRouterKey=findViewById(R.id.openRouterKey); openRouterModel=findViewById(R.id.openRouterModel);
@@ -333,6 +346,7 @@ public class SettingsActivity extends Activity {
         String provider=p.getString("ai_provider","OpenAI"); aiProvider.setSelection(provider.equalsIgnoreCase("Google Gemini")?1:(provider.equalsIgnoreCase("OpenRouter")?2:0));
         aiGoogleSearch.setChecked(p.getBoolean("ai_google_search",true));
         crop.setText(p.getString("crop","Tanaman pertanian"));
+        loadTBaseForCrop(crop.getText().toString().trim());
         lat.setText(f(p.getFloat("latitude",Float.NaN))); lon.setText(f(p.getFloat("longitude",Float.NaN))); elev.setText(f(p.getFloat("elevation",Float.NaN)));
         cult.setSelection(p.getString("farm_cultivation_mode","Konvensional / PHT").toLowerCase(Locale.US).contains("organik")?1:0);
         for(int i=0;i<8;i++){
@@ -346,7 +360,13 @@ public class SettingsActivity extends Activity {
     private void save(){
         String tv=title.getText().toString().trim(); if(tv.isEmpty())tv="STASIUN CUACA";
         String cv=crop.getText().toString().trim(); if(cv.isEmpty())cv="Tanaman pertanian";
+        if (tBase.getText().toString().trim().isEmpty() && Double.isFinite(CropDatabase.tBase(cv))) {
+            tBase.setText(String.format(Locale.US, "%.1f", CropDatabase.tBase(cv)));
+        }
+        String tb = tBase.getText().toString().trim();
         float la=numOptional(lat.getText().toString()), lo=numOptional(lon.getText().toString()), el=numOptional(elev.getText().toString());
+        float tbValue = numOptional(tb);
+        if(!Float.isNaN(tbValue) && (tbValue < -20f || tbValue > 60f)){ tBase.setError("Tbase harus antara -20 sampai 60 °C"); return; }
         if(!Float.isNaN(la)&&(la<-90||la>90)){lat.setError("Latitude -90..90");return;}
         if(!Float.isNaN(lo)&&(lo<-180||lo>180)){lon.setError("Longitude -180..180");return;}
         android.content.SharedPreferences.Editor e=p.edit().putString("app_title",tv).putString("channel",channel.getText().toString().trim().isEmpty()?DEFAULT_CHANNEL:channel.getText().toString().trim())
@@ -356,6 +376,8 @@ public class SettingsActivity extends Activity {
                 .putString("gemini_api_key",geminiKey.getText().toString().trim()).putString("gemini_model",geminiModel.getText().toString().trim().isEmpty()?"gemini-2.5-flash":geminiModel.getText().toString().trim())
                 .putString("openrouter_api_key",openRouterKey.getText().toString().trim()).putString("openrouter_model",openRouterModel.getText().toString().trim().isEmpty()?"google/gemini-2.5-flash":openRouterModel.getText().toString().trim())
                 .putString("crop",cv).putString("farm_cultivation_mode",cult.getSelectedItem().toString());
+        if(!Float.isNaN(tbValue)) e.putString("farm_tbase_c", String.format(Locale.US, "%.2f", tbValue)).putString("farm_tbase_crop", CropDatabase.key(cv));
+        else e.remove("farm_tbase_c").remove("farm_tbase_crop");
         if(!Float.isNaN(la))e.putFloat("latitude",la); else e.remove("latitude");
         if(!Float.isNaN(lo))e.putFloat("longitude",lo); else e.remove("longitude");
         if(!Float.isNaN(el))e.putFloat("elevation",el); else e.remove("elevation");
@@ -364,6 +386,72 @@ public class SettingsActivity extends Activity {
             e.putString("field_unit_"+(i+1),fieldUnit[i].getText().toString().trim());
         }
         e.apply(); Toast.makeText(this,"Pengaturan tersimpan.",Toast.LENGTH_SHORT).show(); finish();
+    }
+
+    private void loadTBaseForCrop(String cropName) {
+        String saved = p.getString("farm_tbase_c", p.getString("crop_tbase_c", "")).trim();
+        String savedCrop = p.getString("farm_tbase_crop", p.getString("crop_tbase_crop", "")).trim();
+        String currentKey = CropDatabase.key(cropName);
+        float value = numOptional(saved);
+        if (!saved.isEmpty() && Float.isFinite(value) && value >= -20f && value <= 60f
+                && !currentKey.isEmpty() && currentKey.equals(savedCrop)) {
+            tBase.setText(saved);
+            tBaseStatus.setText("Tbase tersimpan untuk komoditas ini; dapat disesuaikan manual.");
+            return;
+        }
+        applyTBaseForCrop(cropName, false);
+    }
+
+    private void applyTBaseForCrop(String cropName, boolean fromDatabaseSelection) {
+        String canonical = CropDatabase.canonicalName(cropName);
+        String currentKey = CropDatabase.key(cropName);
+        String savedKey = p.getString("farm_tbase_crop", "");
+        if (canonical != null) {
+            double base = CropDatabase.tBase(canonical);
+            if (Double.isFinite(base)) {
+                if (fromDatabaseSelection || !currentKey.equals(savedKey) || tBase.getText().toString().trim().isEmpty()) {
+                    String formatted = String.format(Locale.US, "%.1f", base);
+                    tBase.setText(formatted);
+                    p.edit().putString("farm_tbase_c", formatted).putString("farm_tbase_crop", currentKey).apply();
+                }
+                double currentValue = numOptional(tBase.getText().toString());
+                tBaseStatus.setText(CropDatabase.matchesDatabaseTBase(canonical, currentValue)
+                        ? "Tbase otomatis dari database: " + CropDatabase.tBaseBasis(canonical) + " Nilai dapat diedit."
+                        : "Tbase manual/override tersimpan. Nilai database acuan: " + String.format(Locale.US, "%.1f °C", base) + ".");
+                return;
+            }
+        }
+        if (fromDatabaseSelection || (!currentKey.isEmpty() && !currentKey.equals(savedKey))) {
+            tBase.setText("");
+            p.edit().remove("farm_tbase_c").remove("farm_tbase_crop").apply();
+        }
+        tBaseStatus.setText("Komoditas tidak memiliki Tbase di database: isi sendiri bila nilai varietas/metode diketahui.");
+    }
+
+    private void persistTBaseForCurrentCrop() {
+        String cropName = crop.getText().toString().trim();
+        String valueText = tBase.getText().toString().trim();
+        float value = numOptional(valueText);
+        if (valueText.isEmpty()) {
+            double databaseValue = CropDatabase.tBase(cropName);
+            if (Double.isFinite(databaseValue)) {
+                String formatted = String.format(Locale.US, "%.1f", databaseValue);
+                tBase.setText(formatted);
+                p.edit().putString("farm_tbase_c", formatted).putString("farm_tbase_crop", CropDatabase.key(cropName)).apply();
+                tBaseStatus.setText("Tbase otomatis dikembalikan ke nilai database: " + formatted + " °C.");
+            } else {
+                p.edit().remove("farm_tbase_c").remove("farm_tbase_crop").apply();
+                tBaseStatus.setText("Komoditas manual: isi Tbase sendiri jika nilainya diketahui.");
+            }
+            return;
+        }
+        if (!Float.isFinite(value) || value < -20f || value > 60f) {
+            tBase.setError("Tbase harus antara -20 sampai 60 °C");
+            return;
+        }
+        p.edit().putString("farm_tbase_c", String.format(Locale.US, "%.2f", value))
+                .putString("farm_tbase_crop", CropDatabase.key(cropName)).apply();
+        tBaseStatus.setText("Tbase " + String.format(Locale.US, "%.2f °C", value) + " tersimpan untuk komoditas ini.");
     }
 
     private float numOptional(String s){try{String t=s==null?"":s.trim();return t.isEmpty()?Float.NaN:Float.parseFloat(t.replace(',','.'));}catch(Exception ex){return Float.NaN;}}

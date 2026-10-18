@@ -24,19 +24,30 @@ public final class CropDatabase {
         return crop != null && MANUAL.equalsIgnoreCase(crop.trim());
     }
 
-    public static boolean isKnown(String crop) {
-        if (crop == null) return false;
-        String n = normalize(crop);
+    /** Returns the canonical database name, including known English/Indonesian aliases. */
+    public static String canonicalName(String crop) {
+        if (crop == null || crop.trim().isEmpty() || isManual(crop)) return null;
+        String normalized = normalize(AgronomyEngine.normalizeCrop(crop));
         for (String item : CROPS) {
             if (MANUAL.equals(item)) continue;
-            if (normalize(item).equals(n)) return true;
+            if (normalize(item).equals(normalized)) return item;
         }
-        return false;
+        return null;
+    }
+
+    public static boolean isKnown(String crop) {
+        return canonicalName(crop) != null;
+    }
+
+    /** Stable preference key for tying a Tbase value to the crop it belongs to. */
+    public static String key(String crop) {
+        String canonical = canonicalName(crop);
+        return normalize(canonical == null ? crop : canonical);
     }
 
     public static String normalize(String crop) {
         if (crop == null) return "";
-        return crop.toLowerCase(Locale.US).replace((char)160, ' ').replaceAll("\s+", " ").trim();
+        return crop.toLowerCase(Locale.US).replace((char)160, ' ').replaceAll("\\s+", " ").trim();
     }
 
     /**
@@ -72,6 +83,20 @@ public final class CropDatabase {
         if (c.contains("semangka") || c.contains("watermelon")) return 10.0;
         if (c.contains("kale") || c.contains("kailan")) return 4.5; // Brassica/cabbage proxy
         return Double.NaN;
+    }
+
+    public static boolean matchesDatabaseTBase(String crop, double value) {
+        double databaseValue = tBase(crop);
+        return Double.isFinite(databaseValue) && Double.isFinite(value)
+                && Math.abs(databaseValue - value) < 0.051;
+    }
+
+    public static String tBaseSourceLabel(String crop, double value) {
+        if (!Double.isFinite(value)) return "Tbase belum tersedia";
+        if (matchesDatabaseTBase(crop, value)) return "Database: " + tBaseBasis(crop);
+        return isKnown(crop)
+                ? "Tbase disesuaikan manual; basis default: " + tBaseBasis(crop)
+                : "Tbase input manual; verifikasi varietas dan lokasi";
     }
 
     public static String tBaseBasis(String crop) {

@@ -71,14 +71,14 @@ public class FieldNotesActivity extends Activity {
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US);
     private SharedPreferences prefs;
 
-    private EditText date, time, variety, plantDate, hst, area, observation, action, targetYield, phaseManual;
+    private EditText date, time, tBase, variety, plantDate, hst, area, observation, action, targetYield, phaseManual;
     private AutoCompleteTextView crop;
     private EditText soilPh, soilMoisture, soilTemp, soilEc, soilN, soilP, soilK, soilDepth, soilBulkDensity, soilFc, soilPwp, soilPhBuffer, soilAlDd, soilHDd, soilCec, soilOm, soilEce, soilLimeReq, soilNLow, soilNHigh;
     private Spinner soilTestMethod, ageUnit, dataSource, bulkDensityPreset;
     private String previousAgeUnit = "HST / hari";
     private EditText airTemp, airRh, pressure, rain24, et0, lux, par, sunHours, windSpeed;
     private Spinner noteType, severity, soilSource, windDirection, cultivation, soilNThresholdBasis;
-    private TextView autoPhase, analysisView, timelineView, soilSummaryView, dataSourceStatus, usbSoilStatus;
+    private TextView autoPhase, analysisView, timelineView, soilSummaryView, dataSourceStatus, usbSoilStatus, tBaseStatus;
     private LinearLayout analysisCards;
     private UsbSoilMeter usbSoilMeter;
     private final ExecutorService net = Executors.newSingleThreadExecutor();
@@ -128,6 +128,8 @@ public class FieldNotesActivity extends Activity {
         date = findViewById(R.id.fnDate);
         time = findViewById(R.id.fnTime);
         crop = findViewById(R.id.fnCrop);
+        tBase = findViewById(R.id.fnTbase);
+        tBaseStatus = findViewById(R.id.fnTbaseStatus);
         ArrayAdapter<String> cropAdapter = new ArrayAdapter<>(this, android.R.layout.simple_dropdown_item_1line, CropDatabase.CROPS);
         crop.setAdapter(cropAdapter);
         crop.setThreshold(0);
@@ -136,14 +138,24 @@ public class FieldNotesActivity extends Activity {
             if (CropDatabase.isManual(selected)) {
                 crop.setText("");
                 crop.setHint("Ketik nama komoditas manual");
+                tBase.setText("");
+                tBaseStatus.setText("Komoditas manual: isi Tbase sendiri jika nilainya diketahui.");
+                prefs.edit().remove("farm_tbase_c").remove("farm_tbase_crop").apply();
                 crop.requestFocus();
             } else {
-                crop.setText(AgronomyEngine.normalizeCrop(selected));
+                String canonical = CropDatabase.canonicalName(selected);
+                crop.setHint("Tanaman/komoditas");
+                crop.setText(canonical == null ? AgronomyEngine.normalizeCrop(selected) : canonical);
                 crop.setSelection(crop.length());
+                applyTBaseForCrop(canonical == null ? selected : canonical, true);
                 updateAutoPhase();
             }
         });
         crop.setOnClickListener(v -> crop.showDropDown());
+        crop.setOnFocusChangeListener((v, hasFocus) -> {
+            if (!hasFocus) { applyTBaseForCrop(crop.getText().toString().trim(), false); updateAutoPhase(); }
+        });
+        tBase.setOnFocusChangeListener((v, hasFocus) -> { if (!hasFocus) persistTBaseForCurrentCrop(); });
         variety = findViewById(R.id.fnVariety);
         plantDate = findViewById(R.id.fnPlantDate);
         hst = findViewById(R.id.fnHst);
@@ -242,6 +254,7 @@ public class FieldNotesActivity extends Activity {
         time.setText(now.format(DateTimeFormatter.ofPattern("HH:mm", Locale.US)));
         phaseManual.setText(prefs.getString("farm_phase_manual", ""));
         crop.setText(prefs.getString("crop", ""));
+        loadTBaseForCrop(crop.getText().toString().trim());
         variety.setText(prefs.getString("farm_variety", ""));
         String areaM2 = prefs.getString("farm_area_m2", "");
         if (areaM2.isEmpty()) {
@@ -469,10 +482,81 @@ public class FieldNotesActivity extends Activity {
         updateAutoPhase();
     }
 
+    private void loadTBaseForCrop(String cropName) {
+        String saved = prefs.getString("farm_tbase_c", prefs.getString("crop_tbase_c", "")).trim();
+        String savedCrop = prefs.getString("farm_tbase_crop", prefs.getString("crop_tbase_crop", "")).trim();
+        String currentKey = CropDatabase.key(cropName);
+        double value = num(saved);
+        if (!saved.isEmpty() && Double.isFinite(value) && value >= -20 && value <= 60
+                && !currentKey.isEmpty() && currentKey.equals(savedCrop)) {
+            tBase.setText(saved);
+            tBaseStatus.setText("Tbase tersimpan untuk komoditas ini; dapat diedit manual.");
+            return;
+        }
+        applyTBaseForCrop(cropName, false);
+    }
+
+    private void applyTBaseForCrop(String cropName, boolean fromDatabaseSelection) {
+        String canonical = CropDatabase.canonicalName(cropName);
+        String currentKey = CropDatabase.key(cropName);
+        String savedKey = prefs.getString("farm_tbase_crop", "");
+        if (canonical != null) {
+            double base = CropDatabase.tBase(canonical);
+            if (Double.isFinite(base)) {
+                if (fromDatabaseSelection || !currentKey.equals(savedKey) || tBase.getText().toString().trim().isEmpty()) {
+                    String formatted = String.format(Locale.US, "%.1f", base);
+                    tBase.setText(formatted);
+                    prefs.edit().putString("farm_tbase_c", formatted).putString("farm_tbase_crop", currentKey).apply();
+                }
+                double currentValue = num(tBase.getText().toString());
+                tBaseStatus.setText(CropDatabase.matchesDatabaseTBase(canonical, currentValue)
+                        ? "Tbase otomatis dari database: " + CropDatabase.tBaseBasis(canonical) + " Nilai dapat diedit."
+                        : "Tbase manual/override. Nilai database acuan: " + String.format(Locale.US, "%.1f °C", base) + ".");
+                return;
+            }
+        }
+        if (fromDatabaseSelection || (!currentKey.isEmpty() && !currentKey.equals(savedKey))) {
+            tBase.setText("");
+            prefs.edit().remove("farm_tbase_c").remove("farm_tbase_crop").apply();
+        }
+        tBaseStatus.setText("Komoditas tidak memiliki Tbase di database: isi sendiri bila nilai varietas/metode diketahui.");
+    }
+
+    private void persistTBaseForCurrentCrop() {
+        String cropName = crop.getText().toString().trim();
+        String valueText = tBase.getText().toString().trim();
+        double value = num(valueText);
+        if (valueText.isEmpty()) {
+            double databaseValue = CropDatabase.tBase(cropName);
+            if (Double.isFinite(databaseValue)) {
+                String formatted = String.format(Locale.US, "%.1f", databaseValue);
+                tBase.setText(formatted);
+                prefs.edit().putString("farm_tbase_c", formatted).putString("farm_tbase_crop", CropDatabase.key(cropName)).apply();
+                tBaseStatus.setText("Tbase otomatis dikembalikan ke nilai database: " + formatted + " °C.");
+            } else {
+                prefs.edit().remove("farm_tbase_c").remove("farm_tbase_crop").apply();
+                tBaseStatus.setText("Komoditas manual: isi Tbase sendiri jika nilainya diketahui.");
+            }
+            return;
+        }
+        if (!Double.isFinite(value) || value < -20 || value > 60) {
+            tBase.setError("Tbase harus antara -20 sampai 60 °C");
+            return;
+        }
+        prefs.edit().putString("farm_tbase_c", String.format(Locale.US, "%.2f", value))
+                .putString("farm_tbase_crop", CropDatabase.key(cropName)).apply();
+        tBaseStatus.setText("Tbase " + String.format(Locale.US, "%.2f °C", value) + " tersimpan untuk komoditas ini.");
+    }
+
     private void updateAutoPhase() {
         if (crop == null || autoPhase == null || hst == null) return;
         String c = crop.getText().toString().trim();
         int days = currentHst();
+        double base = num(tBase == null ? "" : tBase.getText().toString());
+        if (tBaseStatus != null && Double.isFinite(base)) {
+            tBaseStatus.setText("Tbase aktif untuk GDD: " + String.format(Locale.US, "%.1f °C", base)
+                    + " • " + CropDatabase.tBaseSourceLabel(c, base));
+        }
         if (days >= 0) {
             String phase = AgronomyEngine.phase(days, c);
             String unit = ageUnit == null ? "HST / hari" : String.valueOf(ageUnit.getSelectedItem());
@@ -575,6 +659,9 @@ public class FieldNotesActivity extends Activity {
         String c = crop.getText().toString().trim();
         if (c.isEmpty()) { crop.setError("Tanaman wajib diisi"); crop.requestFocus(); return; }
         if (isExcludedPalm(c)) { crop.setError("Kelapa sawit tidak termasuk komoditas STASIUN CUACA v1.5.7"); crop.requestFocus(); return; }
+        if (tBase.getText().toString().trim().isEmpty() && Double.isFinite(CropDatabase.tBase(c))) {
+            applyTBaseForCrop(c, false);
+        }
         if (!validDate(date.getText().toString().trim())) { date.setError("Gunakan YYYY-MM-DD"); date.requestFocus(); return; }
         if (!plantDate.getText().toString().trim().isEmpty() && !validDate(plantDate.getText().toString().trim())) {
             plantDate.setError("Gunakan YYYY-MM-DD"); return;
@@ -590,6 +677,9 @@ public class FieldNotesActivity extends Activity {
             o.put("date", date.getText().toString().trim());
             o.put("time", time.getText().toString().trim());
             o.put("crop", c);
+            double noteTbase = num(tBase.getText().toString());
+            o.put("tBaseC", Double.isFinite(noteTbase) ? noteTbase : JSONObject.NULL);
+            o.put("tBaseSource", CropDatabase.tBaseSourceLabel(c, noteTbase));
             o.put("variety", variety.getText().toString().trim());
             o.put("cultivation", selectedText(cultivation, "Konvensional / PHT"));
             o.put("plantingDate", plantDate.getText().toString().trim());
@@ -651,6 +741,8 @@ public class FieldNotesActivity extends Activity {
             try {
                 prefs.edit()
                     .putString("crop", c)
+                    .putString("farm_tbase_c", tBase.getText().toString().trim())
+                    .putString("farm_tbase_crop", CropDatabase.key(c))
                     .putString("farm_variety", variety.getText().toString().trim())
                     .putString("farm_area_m2", area.getText().toString().trim())
                     .putString("farm_area_ha", Double.isFinite(areaM2()) ? String.format(Locale.US, "%.8f", areaM2() / 10000.0) : "")
@@ -1622,7 +1714,10 @@ public class FieldNotesActivity extends Activity {
             } else {
                 s.append("Target produksi petak: ").append(show(targetYieldKg())).append(" kg pada luas ").append(show(areaM2())).append(" m²; target model setara ").append(show(targetYieldValue)).append(" t/ha.\n");
             }
-            s.append("Fase: ").append(agePhase()).append(" (HST ").append(days >= 0 ? days : "-").append(")\n\n");
+            s.append("Fase: ").append(agePhase()).append(" (HST ").append(days >= 0 ? days : "-").append(")\n");
+            double selectedTbase = num(tBase.getText().toString());
+            s.append("Tbase untuk GDD: ").append(Double.isFinite(selectedTbase) ? show(selectedTbase) + " °C" : "belum diisi")
+                    .append(" • ").append(CropDatabase.tBaseSourceLabel(c, selectedTbase)).append("\n\n");
             appendDataQualityAndProvenance(s, c, days, ph, ec, moist, n, pp, k, targetYieldValue,
                     depth, bd, at, rh, rain, e0, prefs);
 
@@ -1735,7 +1830,7 @@ public class FieldNotesActivity extends Activity {
 
     /** Recompute recommendations from the current form without replacing user/sensor values with estimates. */
     private void attachAutomaticRecalculation() {
-        EditText[] watched = {crop, variety, date, plantDate, hst, phaseManual, area, targetYield, soilPh, soilMoisture, soilTemp,
+        EditText[] watched = {crop, tBase, variety, date, plantDate, hst, phaseManual, area, targetYield, soilPh, soilMoisture, soilTemp,
                 soilEc, soilN, soilP, soilK, soilDepth, soilBulkDensity, soilFc, soilPwp,
                 soilPhBuffer, soilAlDd, soilHDd, soilCec, soilOm, soilEce, soilLimeReq,
                 soilNLow, soilNHigh, airTemp, airRh, pressure, rain24, et0, lux, par, sunHours, windSpeed};

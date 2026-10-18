@@ -105,3 +105,7 @@ Run GitHub Actions `39155582051` berhasil membangun debug tetapi release gagal d
 ## FIX12 — Ikon aplikasi
 
 Ikon launcher sekarang memakai logo kedua pilihan pengguna. Aset tersedia sebagai adaptive icon Android 8+ dan fallback PNG untuk lima kepadatan layar. Lihat `APP_LOGO_PREVIEW.png` dan `PATCH_NOTES_FIX12_APP_LOGO.md`.
+
+
+## FIX14 — Tbase otomatis
+Field Tbase (°C) kini otomatis terisi saat komoditas database dipilih pada Pengaturan atau Catatan Lapangan. Komoditas manual tetap bisa mengisi Tbase sendiri; Tbase disimpan bersama kunci tanaman dan ditampilkan sebagai basis GDD/thermal time.
