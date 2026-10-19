@@ -80,7 +80,7 @@ public class FieldNotesActivity extends Activity {
     private String previousDataSource = "";
     private EditText airTemp, airRh, pressure, rain24, et0, lux, par, sunHours, windSpeed;
     private Spinner noteType, severity, soilSource, windDirection, cultivation, soilNThresholdBasis;
-    private TextView autoPhase, analysisView, timelineView, soilSummaryView, dataSourceStatus, usbSoilStatus, tBaseStatus;
+    private TextView autoPhase, analysisView, timelineView, soilSummaryView, dataSourceStatus, usbSoilStatus, tBaseStatus, macroWeatherSummary;
     private LinearLayout analysisCards;
     private UsbSoilMeter usbSoilMeter;
     private final ExecutorService net = Executors.newSingleThreadExecutor();
@@ -1534,6 +1534,12 @@ public class FieldNotesActivity extends Activity {
     }
 
     /** Reorders the same calculated results into short, clearly separated sections for farmers. */
+    /** Formats numeric weather values safely; unavailable values render as --. */
+    private String fmt(double value, int decimals) {
+        return Double.isFinite(value) ? String.format(Locale.US, "%." + decimals + "f", value).trim() : "--";
+    }
+
+
     private String formatFarmerFriendlyAnalysis(String raw) {
         if (raw == null || raw.trim().isEmpty()) return "Analisis belum tersedia. Lengkapi data kebun lalu tekan ANALISIS AGRONOMI SEKARANG.";
         String[] head = raw.split("\\n", 4);

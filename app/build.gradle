@@ -1,7 +1,7 @@
 plugins { id 'com.android.application' }
 
 android {
-    namespace 'id.stasiuncuaca'
+    namespace = 'id.stasiuncuaca'
     compileSdk 36
 
     defaultConfig {
@@ -14,11 +14,11 @@ android {
 
     buildTypes {
         debug {
-            minifyEnabled false
+            minifyEnabled = false
         }
         release {
-            minifyEnabled false
-            shrinkResources false
+            minifyEnabled = false
+            shrinkResources = false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
