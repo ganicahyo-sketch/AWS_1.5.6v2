@@ -329,6 +329,17 @@
                     android:textColor="@color/text_muted"
                     android:textSize="13sp"/>
                 <TextView
+                    android:id="@+id/fnMacroWeatherSummary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="7dp"
+                    android:padding="10dp"
+                    android:background="@drawable/bg_chip"
+                    android:text="Ringkasan cuaca makro: pilih sumber lalu tekan AMBIL DATA TERBARU. Kelembapan tanah makro dipisahkan dari input sensor/petak."
+                    android:textColor="@color/text_main"
+                    android:textSize="13sp"
+                    android:lineSpacingExtra="2dp"/>
+                <TextView
                     android:id="@+id/fnAutoFill"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
@@ -724,17 +735,19 @@
                 android:background="@drawable/bg_button"/>
 
             <LinearLayout
+                android:id="@+id/fnAnalysisPanel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:orientation="vertical"
                 android:background="@drawable/bg_panel"
-                android:padding="14dp">
+                android:padding="14dp"
+                android:visibility="gone">
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="5. HASIL MESIN ANALISIS"
+                    android:text="HASIL ANALISIS AGRONOMI"
                     android:textColor="@color/cyan"
                     android:textStyle="bold"
                     android:textSize="15sp"/>

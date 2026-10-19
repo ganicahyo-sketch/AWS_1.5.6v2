@@ -61,7 +61,7 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:gravity="center"
-                android:text="OPEN-METEO"
+                android:text="CUACA MAKRO"
                 android:textColor="@color/text_muted"
                 android:textStyle="bold"
                 android:textSize="14sp"/>
@@ -101,10 +101,35 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="PROVIDER CUACA MAKRO"
+                android:textColor="@color/cyan"
+                android:textStyle="bold"
+                android:textSize="14sp" />
+
+            <Spinner
+                android:id="@+id/historyWeatherProvider"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="5dp" />
+
+            <TextView
+                android:id="@+id/historyWeatherProviderInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:text="Ikuti provider di Pengaturan."
+                android:textColor="@color/text_muted"
+                android:textSize="13sp" />
+
+
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="RESOLUSI OPEN-METEO"
+                    android:text="RESOLUSI CUACA MAKRO"
                     android:textColor="@color/text_muted"
                     android:textSize="14sp"/>
 

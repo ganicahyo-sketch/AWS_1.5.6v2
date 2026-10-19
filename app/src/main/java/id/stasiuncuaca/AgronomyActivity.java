@@ -96,8 +96,9 @@ public class AgronomyActivity extends Activity {
         String manualPhase = prefs.getString("farm_phase_manual", "").trim();
         String effectivePhase = manualPhase.isEmpty() ? AgronomyEngine.phase(hst,crop) : manualPhase + " (manual)";
         s.append("MODE: ").append(mode).append("\nHST: ").append(hst<0?"--":hst).append("\nFASE: ").append(effectivePhase).append("\nLUAS LAHAN: ").append(areaM2).append(" m²\nTARGET PRODUKSI TOTAL: ").append(yieldKg.isEmpty()?"opsional / belum diisi":yieldKg+" kg").append("\n\n");
-        s.append("1. TANAH\n");
-        s.append("pH ").append(show(ph)).append(" -> ").append(AgronomyEngine.classifyPH(ph,cp)).append("\n");
+        s.append("1. PARAMETER TANAH\n");
+        s.append("Rentang pH profil komoditas: ").append(show(cp.phMin)).append("–").append(show(cp.phMax)).append("; hasil: ").append(AgronomyEngine.classifyPH(ph,cp)).append("\n");
+        s.append("pH tanah ").append(show(ph)).append(" -> ").append(AgronomyEngine.classifyPH(ph,cp)).append("\n");
         s.append("Basis klasifikasi N: ").append(prefs.getString("soil_n_classification_basis", NitrogenInference.BASIS_INFERRED)).append("\n");
         if (prefs.getBoolean("limecalc_has_result", false))
             s.append("KALKULATOR DOLOMIT (estimasi, bukan hasil uji kapur): ").append(prefs.getString("limecalc_summary", "Belum dihitung.")).append("\n");
@@ -110,10 +111,10 @@ public class AgronomyActivity extends Activity {
         }
         s.append("N-total estimasi: ").append(NitrogenInference.estimateTotalN(n)).append("\n");
         s.append("Rentang kelas pada sensitivitas asumsi rasio 1–3%: ").append(NitrogenInference.classifyRange(n)).append("\n");
-        s.append("P tersedia ").append(show(p)).append(" mg/kg -> ").append(AgronomyEngine.classifyP(p,method)).append("\n");
-        s.append("K tersedia ").append(show(k)).append(" mg/kg -> ").append(AgronomyEngine.classifyK(k,method)).append("\n");
-        s.append("EC sensor ").append(show(ec)).append(" µS/cm -> ").append(AgronomyEngine.classifyEC(ec,cp)).append("\n");
-        s.append("URUTAN ANALISIS: tentukan rentang setiap parameter terlebih dahulu; rekomendasi diberikan setelah identifikasi faktor pembatas utama.\n");
+        s.append("Rentang N-total screening untuk klasifikasi: sangat rendah <0,10%; rendah 0,10–0,20%; sedang >0,20–0,50%; tinggi >0,50–0,75%; sangat tinggi >0,75%.\n");
+        s.append("P tersedia ").append(show(p)).append(" mg/kg -> ").append(AgronomyEngine.classifyP(p,method)).append("; kisaran screening profil ").append(show(cp.pMin)).append("–").append(show(cp.pMax)).append(" mg/kg.\n");
+        s.append("K tersedia ").append(show(k)).append(" mg/kg -> ").append(AgronomyEngine.classifyK(k,method)).append("; kisaran screening profil ").append(show(cp.kMin)).append("–").append(show(cp.kMax)).append(" mg/kg.\n");
+        s.append("EC sensor ").append(show(ec)).append(" µS/cm -> ").append(AgronomyEngine.classifyEC(ec,cp)).append("; ambang profil ").append(show(cp.ecThresholdDsM)).append(" dS/m (EC µS/cm ÷ 1000 hanya konversi unit, bukan ECe lab).\n");
         if(Double.isFinite(ece))s.append("ECe lab ").append(show(ece)).append(" dS/m -> ").append(AgronomyEngine.classifyECe(ece)).append("\n");
         else s.append("ECe lab: belum tersedia; EC sensor tidak dikonversi otomatis menjadi ECe.\n");
         s.append("Kelembapan tanah ").append(show(moist)).append(" % -> ").append(AgronomyEngine.classifyMoisture(moist)).append("\n");
@@ -122,13 +123,34 @@ public class AgronomyActivity extends Activity {
             s.append("Stok teoritis lapisan ").append(show(depth)).append(" cm; BD ").append(show(bd)).append(" g/cm³: N-tersedia input ").append(show(AgronomyEngine.soilStockKgHa(n,bd,depth))).append("; P input ").append(show(AgronomyEngine.soilStockKgHa(p,bd,depth))).append("; K input ").append(show(AgronomyEngine.soilStockKgHa(k,bd,depth))).append(" kg/ha.\n");
             s.append("Ini konversi konsentrasi input menjadi stok lapisan teoritis, bukan stok N-total terukur, serapan tanaman, atau kredit pupuk langsung.\n");
         }
-        s.append("\n2. ANALISIS RENTANG SEMUA PARAMETER\n");
-        s.append(AgronomyEngine.comprehensiveRangeAnalysis(
-                crop, ph, n, nLow, nHigh, p, k, ec, ece, moist, fc, pwp,
-                num(prefs.getString("om_soil_moisture","")), num(prefs.getString("om_soil_temp","")), om, cec, bd, depth,
-                temp, apparent, dew, rh, pressure, rain, et0, wind, gust, cloud, uv,
-                visibility, num(prefs.getString("lux","")), shortwave, parEnergy, ppfd, sunshine, vpd, method));
-        s.append("\n\n3. NPK & PREDIKSI KEBUTUHAN FASE\n");
+        s.append("\n2. PARAMETER CUACA (TERMASUK AIR DAN EKOLOGI)\n");
+        String weatherProvider = pref("macro_weather_provider_used", pref("macro_weather_provider", "Open-Meteo"));
+        s.append("Sumber cuaca makro: ").append(weatherProvider).append(". Data historis/reanalisis dan nilai model bukan rekaman sensor langsung.\n");
+        s.append("Suhu ").append(show(temp)).append(" °C -> ").append(AgronomyEngine.temperatureStatus(temp,crop)).append("; kisaran profil ").append(show(cp.tempMin)).append("–").append(show(cp.tempMax)).append(" °C.\n");
+        double selectedTbase = resolveTBase(crop, cp.tBase);
+        String tbaseBasis = CropDatabase.tBaseSourceLabel(crop, selectedTbase);
+        s.append("Tbase/GDD: ").append(show(selectedTbase)).append(" °C • ").append(tbaseBasis).append("\n");
+        s.append("RH ").append(show(rh)).append(" % • hujan ").append(show(rain)).append(" mm/hari • ET₀ ").append(show(et0)).append(" mm/hari (").append(pref("om_et0_method", "metode belum tercatat")).append(")\n");
+        s.append("VPD ").append(show(vpd)).append(" kPa -> ").append(AgronomyEngine.classifyVpd(vpd)).append(". ").append(AgronomyEngine.vpdCombinedStatus(vpd,moist,fc,pwp,depth,et0,crop)).append("\n");
+        s.append("Angin ").append(pref("om_wind_direction","--")).append(" • ").append(pref("om_wind_speed","--")).append(" m/s • gust ").append(pref("om_wind_gust","--")).append(" m/s\n");
+        s.append("Terasa ").append(pref("om_apparent_temp","--")).append(" °C • titik embun ").append(pref("om_dewpoint","--")).append(" °C • awan ").append(pref("om_cloud_cover","--")).append(" % • visibilitas ").append(pref("om_visibility","--")).append(" m • UV ").append(pref("om_uv","--")).append("\n");
+        double macroSoilTemp = num(pref("om_soil_temp", ""));
+        s.append("Suhu tanah makro model: ").append(show(macroSoilTemp)).append(" °C bila tersedia; tidak mengganti input/sensor tanah.\n");
+        double macroSoilMoistureFraction = num(pref("om_soil_moisture", ""));
+        double macroSoilMoisturePct = Double.isFinite(macroSoilMoistureFraction) && macroSoilMoistureFraction >= 0 && macroSoilMoistureFraction <= 1.0 ? macroSoilMoistureFraction * 100.0 : macroSoilMoistureFraction;
+        s.append("Kelembapan tanah makro model: ").append(show(macroSoilMoisturePct)).append(" %vol • ").append(pref("om_soil_moisture_method", "tidak tersedia")).append(". Berbeda dari sensor tanah petak.\n");
+        s.append("Radiasi sesaat: ").append(show(shortwave)).append(" W/m²; radiasi harian: ").append(pref("om_radiation_daily", "--")).append(" MJ/m²/hari • ").append(pref("om_radiation_method", "metode belum tercatat")).append("\n");
+        s.append("Penyinaran: ").append(show(sunshine)).append(" jam/hari • daylight ").append(pref("om_daylight_hours", "--")).append(" jam/hari • ").append(pref("om_sunshine_method", "metode belum tercatat")).append("\n");
+        s.append("PAR: ").append(show(parEnergy)).append(" W/m² • PPFD: ").append(show(ppfd)).append(" µmol/m²/s • lux: ").append(pref("om_lux", pref("lux", "--"))).append(" (lux estimasi dari radiasi; bukan sensor illuminance).\n");
+        if (Double.isFinite(rain) && Double.isFinite(et0)) {
+            if (rain < et0) s.append("Dampak budidaya: hujan < ET₀; periksa kelembapan zona akar dan jadwalkan irigasi berdasarkan kondisi lahan.\n");
+            else if (rain > Math.max(10.0, et0 * 2.0)) s.append("Dampak budidaya: hujan sangat melebihi ET₀; jaga drainase dan tunda pemupukan bila tanah jenuh atau hujan deras masih diperkirakan.\n");
+            else s.append("Dampak budidaya: bandingkan hujan dan ET₀ dengan kelembapan tanah sebelum menetapkan irigasi.\n");
+        }
+        if (Double.isFinite(sunshine) && sunshine < 3) s.append("Penyinaran pendek dapat memperlambat pengeringan kanopi; atur jarak tanaman dan pekerjaan kebun saat daun kering.\n");
+        if (Double.isFinite(wind) && wind >= 5) s.append("Angin kuat: perhatikan drift penyemprotan, rebah, dan keseragaman irigasi.\n");
+        s.append("Prakiraan 7 hari: ").append(pref("om_forecast_7d","belum ada")).append("\n");
+        s.append("\n3. PEMUPUKAN NPK & PREDIKSI KEBUTUHAN FASE\n");
         double target=num(pref("farm_target_yield_t_ha",""));
         double[] credit=fertCredit(crop);
         double nn=AgronomyEngine.nutrientNeed(n,"N",crop,hst,credit[0],target,method,depth,bd,nLow,nHigh,manualPhase);
@@ -142,23 +164,11 @@ public class AgronomyActivity extends Activity {
         s.append("INDIKATOR & BATAS: kelas P/K merupakan screening sesuai pilihan metode. Untuk N, ambang rendah/tinggi khusus metode yang valid dipakai bila tersedia; jika kosong atau generik, kelas N-total ditaksir dari N tersedia dengan asumsi utama 2% (sensitivitas 1–3%) sehingga dukungan N tanah tidak otomatis dianggap nol. Jika N tersedia tidak ada, dukungan tanah N belum dapat diperkirakan. Angka pupuk adalah estimasi awal, bukan rekomendasi laboratorium atau STCR/PUTS terkalibrasi.\n");
         if ("Komoditas umum".equals(cp.name)) s.append("PERHATIAN: komoditas belum memiliki profil spesifik di aplikasi; kebutuhan musim memakai baseline umum dan ketidakpastian tinggi. Verifikasi dengan rekomendasi penyuluh/laboratorium setempat.\n");
         s.append("PENTING: bukan QUEFTS/STCR penuh. Gunakan persamaan STCR/PUTS lokal bila tersedia.\n");
-        s.append("\n4. CUACA, VPD, AIR & EKOLOGI\n");
-        s.append("Suhu ").append(show(temp)).append(" °C -> ").append(AgronomyEngine.temperatureStatus(temp,crop)).append("; kisaran profil ").append(show(cp.tempMin)).append("–").append(show(cp.tempMax)).append(" °C\n");
-        double selectedTbase = resolveTBase(crop, cp.tBase);
-        String tbaseBasis = CropDatabase.tBaseSourceLabel(crop, selectedTbase);
-        s.append("Tbase/GDD: ").append(show(selectedTbase)).append(" °C • ").append(tbaseBasis).append("\n");
-        s.append("RH ").append(show(rh)).append(" %; hujan ").append(show(rain)).append(" mm/hari; ET0 ").append(show(et0)).append(" mm/hari\n");
-        s.append("VPD ").append(show(vpd)).append(" kPa -> ").append(AgronomyEngine.classifyVpd(vpd)).append("\n");
-        s.append(AgronomyEngine.vpdCombinedStatus(vpd,moist,fc,pwp,depth,et0,crop)).append("\n");
-        s.append("Angin ").append(pref("om_wind_direction","--")).append(" • ").append(pref("om_wind_speed","--")).append(" m/s • gust ").append(pref("om_wind_gust","--")).append(" m/s\n");
-        s.append("Terasa ").append(pref("om_apparent_temp","--")).append(" °C • titik embun ").append(pref("om_dewpoint","--")).append(" °C • awan ").append(pref("om_cloud_cover","--")).append(" % • visibilitas ").append(pref("om_visibility","--")).append(" m • UV ").append(pref("om_uv","--")).append("\n");
-        s.append("Radiasi ").append(pref("om_radiation","--")).append(" W/m² • sunshine ").append(pref("om_sun_hours","--")).append(" jam/hari\n");        s.append("PAR estimasi ").append(pref("om_par","--")).append(" W/m² • PPFD estimasi ").append(pref("om_ppfd","--")).append(" µmol/m²/s\n");
-        s.append("Forecast 7 hari: ").append(pref("om_forecast_7d","belum ada")).append("\n");
-        s.append("\n5. PREDIKSI POTENSI OPT — RISK SCREENING\n");
+        s.append("\n4. RISK SCREENING PREDIKSI POTENSI OPT\n");
         s.append(AgronomyEngine.optRisk(crop,temp,rh,rain,num(pref("om_wind_speed","")),recent("opt_history",6),hst)).append("\n");
-        s.append("\n6. REKOMENDASI TEKNIS\n");
+        s.append("\n5. DATABASE & REKOMENDASI TEKNIS\n");
         addRecommendations(s,crop,mode,ph,ec,ece,moist,fc,pwp,vpd,temp,rh,rain,et0,hst,method);
-        s.append("\n8. CATATAN ILMIAH\n").append(AgronomyEngine.evidenceBrief()).append("\n");
+        s.append("\n6. CATATAN\n").append(AgronomyEngine.evidenceBrief()).append("\n");
         // Histori terpadu disimpan untuk laporan cetak/PDF, tetapi tidak ditampilkan pada layar analisis utama.
         String compact = compactReport(s.toString());
         report.setText(compact);
@@ -202,9 +212,9 @@ public class AgronomyActivity extends Activity {
         ScrollView root=new ScrollView(this); int pad=(int)(16*getResources().getDisplayMetrics().density); root.setPadding(pad,pad,pad,pad);
         LinearLayout content=new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
         TextView tv=new TextView(this); tv.setTextColor(getResources().getColor(R.color.text_main)); tv.setTextSize(14);
-        tv.setText("NOTE — INFORMASI ILMIAH, METODE & SUMBER\n\n"+
+        tv.setText("CATATAN • METODE & SUMBER\n\n"+
                 "ALUR ANALISIS\n"+
-                "1) Baca semua data terukur dari ThingSpeak/Open-Meteo/manual.\n"+
+                "1) Baca data terukur dari sensor/ThingSpeak/manual dan cuaca makro dari provider terpilih (Open-Meteo, OpenWeather, atau WeatherAPI).\n"+
                 "2) Klasifikasikan tiap parameter sesuai rentang/ambang yang relevan.\n"+
                 "3) Hubungkan parameter dan tentukan faktor pembatas utama.\n"+
                 "4) Baru susun rekomendasi teknis berdasarkan bukti dan fase tanaman.\n\n"+
@@ -219,7 +229,7 @@ public class AgronomyActivity extends Activity {
                 "AIR TANAH\n"+
                 "Open-Meteo soil moisture dinyatakan sebagai m³/m³ dan untuk tampilan persentase volume dikalikan 100. FC/PWP digunakan bila tersedia untuk menilai FTSW/air tersedia.\n\n"+
                 "VPD & ET₀\n"+
-                "VPD dibaca bersama suhu/RH dan kondisi air tanah. ET₀ Open-Meteo menggunakan referensi FAO-56 Penman-Monteith pada produk yang tersedia. ET₀ adalah kebutuhan referensi, bukan kebutuhan irigasi komoditas secara langsung.\n\n"+
+                "VPD dibaca bersama suhu/RH dan kondisi air tanah. ET₀ Open-Meteo dapat berasal dari produk FAO-56 Penman-Monteith; pada OpenWeather/WeatherAPI ET₀ dapat merupakan estimasi FAO-56 PM berbasis input/radiasi model kecuali API/paket menyediakannya langsung. ET₀ adalah kebutuhan referensi, bukan kebutuhan irigasi komoditas secara langsung.\n\n"+
                 "PAR / PPFD\n"+
                 "PAR estimasi = 0,45 × shortwave; PPFD estimasi = PAR × 4,57 µmol/J. Ini estimasi broadband, bukan pengukuran quantum sensor.\n\n"+
                 "OPT\n"+
@@ -228,11 +238,13 @@ public class AgronomyActivity extends Activity {
                 "Rekomendasi harus menggunakan input/proses yang diizinkan sistem organik yang berlaku dan tidak boleh menganggap semua input kimia setara dengan input organik.\n\n"+
                 "SUMBER UTAMA\n"+
                 "• Open-Meteo Historical Weather API — data historis reanalysis, variabel cuaca, tanah, ET₀, VPD dan radiasi.\n"+
+                "• OpenWeather One Call 3.0 — cuaca terkini/prakiraan; hasil estimasi turunan diberi label.\n"+
+                "• WeatherAPI Forecast/History API — cakupan dan parameter historis bergantung paket akun; ET₀/radiasi ditandai langsung atau estimasi sesuai respons.\n"+
                 "• OpenAlex — pencarian literatur ilmiah.\n"+
                 "• AgronomyEngine / NitrogenInference — model skrining lokal aplikasi.\n"+
                 "• Referensi EC/ECe: Pedosphere 32(6), 2022, DOI 10.1016/j.pedsph.2022.06.023; Journal of the Saudi Society of Agricultural Sciences 23(4), 2024, DOI 10.1016/j.jssas.2023.12.005.\n"+
                 "• Rujukan PPFD: Thimijan & Heins (1983), HortScience 18(6):818–822, DOI 10.21273/HORTSCI.18.6.818.");
-        content.addView(tv,new LinearLayout.LayoutParams(-1,-2)); root.addView(content,new ScrollView.LayoutParams(-1,-2)); new AlertDialog.Builder(this).setTitle("ⓘ INFORMASI ILMIAH").setView(root).setPositiveButton("TUTUP",null).show();
+        content.addView(tv,new LinearLayout.LayoutParams(-1,-2)); root.addView(content,new ScrollView.LayoutParams(-1,-2)); new AlertDialog.Builder(this).setTitle("CATATAN").setView(root).setPositiveButton("TUTUP",null).show();
     }
 
     /** Present the same results in clear cards; show actions first and keep technical details later. */
@@ -281,21 +293,19 @@ public class AgronomyActivity extends Activity {
         java.util.Collections.sort(ordered, (a, b) -> Integer.compare(agronomySectionOrder(a), agronomySectionOrder(b)));
         for (String h : ordered) {
             String label = friendlyAgronomyHeading(h);
-            addAgronomyCard(label, joinFriendlyLines(sections.get(h)), h.toUpperCase(Locale.ROOT).contains("REKOMENDASI"), h.toUpperCase(Locale.ROOT).contains("CATATAN ILMIAH"));
+            addAgronomyCard(label, joinFriendlyLines(sections.get(h)), h.toUpperCase(Locale.ROOT).contains("REKOMENDASI"), h.toUpperCase(Locale.ROOT).contains("CATATAN"));
         }
     }
 
     private int agronomySectionOrder(String heading) {
         String h = heading.toUpperCase(Locale.ROOT);
-        if (h.contains("REKOMENDASI")) return 0;
-        if (h.contains("TANAH")) return 10;
-        if (h.contains("NPK") || h.contains("KEBUTUHAN FASE")) return 20;
-        if (h.contains("CUACA") || h.contains("AIR,")) return 30;
-        if (h.contains("OPT") || h.contains("HAMA") || h.contains("PENYAKIT")) return 40;
-        if (h.contains("ANALISIS RENTANG")) return 50;
-        if (h.contains("DATA KEBUN") || h.contains("LAB KHUSUS")) return 55;
-        if (h.contains("CATATAN ILMIAH") || h.contains("SUMBER")) return 90;
-        return 60;
+        if (h.contains("PARAMETER TANAH")) return 10;
+        if (h.contains("PARAMETER CUACA")) return 20;
+        if (h.contains("PEMUPUKAN NPK")) return 30;
+        if (h.contains("RISK SCREENING PREDIKSI POTENSI OPT")) return 40;
+        if (h.contains("DATABASE & REKOMENDASI TEKNIS")) return 50;
+        if (h.contains("CATATAN")) return 60;
+        return 70;
     }
 
     private boolean isAgronomyHeading(String line) {
@@ -304,14 +314,12 @@ public class AgronomyActivity extends Activity {
 
     private String friendlyAgronomyHeading(String input) {
         String value = input.replaceFirst("^[0-9]+\\.\\s*", "").trim();
-        if (value.equals("TANAH")) return "1. KONDISI TANAH";
-        if (value.contains("ANALISIS RENTANG SEMUA PARAMETER")) return "2. PEMERIKSAAN KONDISI LAIN";
-        if (value.contains("NPK & PREDIKSI KEBUTUHAN FASE")) return "3. PERKIRAAN KEBUTUHAN PUPUK";
-        if (value.contains("CUACA, VPD, AIR & EKOLOGI")) return "4. CUACA DAN KEBUTUHAN AIR";
-        if (value.contains("PREDIKSI POTENSI OPT")) return "5. PERINGATAN HAMA DAN PENYAKIT";
-        if (value.contains("REKOMENDASI TEKNIS")) return "6. SARAN TINDAKAN UNTUK KEBUN";
-        if (value.contains("CATATAN")) return "7. CATATAN TAMBAHAN";
-        if (value.contains("DASAR ILMIAH")) return "8. SUMBER DAN BATAS PERHITUNGAN";
+        if (value.contains("PARAMETER TANAH")) return "1. PARAMETER TANAH";
+        if (value.contains("PARAMETER CUACA")) return "2. PARAMETER CUACA (TERMASUK AIR DAN EKOLOGI)";
+        if (value.contains("PEMUPUKAN NPK")) return "3. PEMUPUKAN NPK & PREDIKSI KEBUTUHAN FASE";
+        if (value.contains("RISK SCREENING PREDIKSI POTENSI OPT")) return "4. RISK SCREENING PREDIKSI POTENSI OPT";
+        if (value.contains("DATABASE & REKOMENDASI TEKNIS")) return "5. DATABASE & REKOMENDASI TEKNIS";
+        if (value.equalsIgnoreCase("CATATAN") || value.contains("CATATAN")) return "6. CATATAN";
         return value;
     }
 
@@ -468,6 +476,7 @@ public class AgronomyActivity extends Activity {
         if(Double.isFinite(rh)&&rh>90&&Double.isFinite(rain)&&rain>=5) s.append("• RH + hujan tinggi: tingkatkan scouting penyakit, sanitasi dan sirkulasi udara.\n");
         if(mode.toLowerCase(Locale.US).contains("organik")) s.append("• ORGANIK: gunakan input/proses yang diizinkan standar organik yang berlaku; prioritaskan bahan organik matang, sanitasi, varietas toleran, mekanis dan agen hayati. Verifikasi status input sebelum aplikasi.\n");
         else s.append("• KONVENSIONAL/PHT: gunakan pemupukan berimbang, monitoring ambang tindakan, rotasi bahan aktif dan patuhi label/interval pra-panen.\n");
+        s.append("• Waktu pemupukan: aplikasikan saat tanah lembap tetapi tidak tergenang; hindari sesaat sebelum hujan deras atau ketika tanah sangat kering. Bagi dosis N mengikuti fase dan rekomendasi setempat; jangan menebar dosis pekat saat panas terik.\n");
         s.append("• Fase: ").append(AgronomyEngine.phase(hst,crop)).append(". Prioritaskan tindakan berdasarkan fase dan data lapang, bukan umur saja.\n");
     }
 

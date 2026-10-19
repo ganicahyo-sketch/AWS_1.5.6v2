@@ -10,6 +10,8 @@
 ./PATCH_NOTES_FIX12_APP_LOGO.md
 ./PATCH_NOTES_FIX13_CROP_DATABASE_TBASE.md
 ./PATCH_NOTES_FIX14_TBASE_AUTOFILL.md
+./PATCH_NOTES_FIX15_MACRO_WEATHER_PROVIDERS.md
+./PATCH_NOTES_FIX16_WEATHERAPI_OPENWEATHER.md
 ./PATCH_NOTES_FIX4_FIELD_NOTES_WEATHER_FERTILIZER.md
 ./PATCH_NOTES_FIX5_SAVE_GPS_MODEL.md
 ./PATCH_NOTES_FIX6_PDF_REPORT.md
@@ -41,6 +43,7 @@
 ./app/src/main/java/id/stasiuncuaca/PdfReportActivity.java
 ./app/src/main/java/id/stasiuncuaca/SettingsActivity.java
 ./app/src/main/java/id/stasiuncuaca/UsbSoilMeter.java
+./app/src/main/java/id/stasiuncuaca/WeatherMacroModel.java
 ./app/src/main/res/drawable-nodpi/ic_launcher_art.png
 ./app/src/main/res/drawable/bg_button.xml
 ./app/src/main/res/drawable/bg_chip.xml

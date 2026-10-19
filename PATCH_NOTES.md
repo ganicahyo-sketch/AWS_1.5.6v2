@@ -198,3 +198,19 @@ Prediksi OPT bukan diagnosis. Verifikasi dengan gejala, populasi, luas serangan,
 
 ## FIX14 — Tbase otomatis
 Field Tbase (°C) kini otomatis terisi saat komoditas database dipilih pada Pengaturan atau Catatan Lapangan. Komoditas manual tetap bisa mengisi Tbase sendiri; Tbase disimpan bersama kunci tanaman dan ditampilkan sebagai basis GDD/thermal time.
+
+## FIX15 — provider cuaca makro, CSV histori, Catatan Lapangan dan Analisis Agronomi
+- Pengaturan memilih Open-Meteo atau OpenWeather One Call 3.0; Dashboard dan mode Prioritas Catatan Lapangan menggunakan pilihan Pengaturan. Pilihan eksplisit Open-Meteo/OpenWeather pada Catatan Lapangan mengalahkan pilihan global dan memicu fetch provider itu.
+- Cache memperlihatkan provider sebenarnya dan menoleransi data yang memang tidak disediakan API. OpenWeather tidak lagi memasukkan suhu tanah CWT/USB sebagai suhu tanah cuaca makro.
+- CSV Histori cuaca makro mencakup ET₀, sunshine duration, kelembapan tanah (grid/model), radiasi shortwave, PAR, PPFD dan lux. Open-Meteo mendukung export hourly/daily; OpenWeather Day Summary export harian dan memperingatkan estimasi model serta kuota request.
+- Dashboard tidak lagi menampilkan panel duplikat status tanah dan judul/isi rekomendasi cuaca difokuskan pada dampak budidaya singkat. Analisis OPT tetap di fitur sendiri.
+- Tombol Analisis Agronomi di Catatan Lapangan membuka layar analisis tersendiri tanpa menduplikasi hasil di bawah formulir. Susunan bab: tanah; cuaca/air/ekologi; NPK/fase; OPT; basis data dan rekomendasi teknis termasuk waktu aplikasi pupuk; catatan.
+- ET₀, sunshine duration, kelembapan tanah makro, radiasi, PAR, PPFD dan lux tetap pada dashboard. Nilai estimasi dibedakan dari sensor; sensor tanah tidak ditimpa data makro.
+- Detail rumus, batas dan sumber ada di `PATCH_NOTES_FIX15_MACRO_WEATHER_PROVIDERS.md`.
+- Semua fitur sebelumnya pada FIX14 termasuk logo, database komoditas, Tbase otomatis, GPS, simpan catatan, ekspor ThingSpeak, nitrogen/dolomit dan laporan dipertahankan.
+- Build Android penuh perlu diulang melalui GitHub Actions. Build lokal tidak dapat mengunduh Gradle 9.4.1 karena DNS untuk `services.gradle.org` gagal.
+
+
+## FIX16 — WeatherAPI dan panel OpenWeather
+
+WeatherAPI ditambahkan untuk dashboard, Catatan Lapangan, Analisis Agronomi, serta ekspor CSV histori harian. Dashboard OpenWeather diperbaiki untuk waktu matahari lokal, curah hujan harian/1 jam terakhir, dan UV saat ini/maksimum. Detail sumber, metode estimasi, dan batas build ada di `PATCH_NOTES_FIX16_WEATHERAPI_OPENWEATHER.md`.

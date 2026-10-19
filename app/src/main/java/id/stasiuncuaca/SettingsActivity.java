@@ -30,10 +30,10 @@ public class SettingsActivity extends Activity {
     private static final String DEFAULT_READ_KEY = "P4B56Z7HZM56Q7HJ";
     private static final String DEFAULT_AI_KEY = "";
     private android.content.SharedPreferences p;
-    private EditText title, channel, readKey, aiKey, aiModel, geminiKey, geminiModel, openRouterKey, openRouterModel, lat, lon, elev, tBase;
+    private EditText title, channel, readKey, aiKey, aiModel, geminiKey, geminiModel, openRouterKey, openRouterModel, lat, lon, elev, tBase, openWeatherKey, weatherApiKey;
     private AutoCompleteTextView crop;
     private TextView tBaseStatus;
-    private Spinner cult, aiProvider;
+    private Spinner cult, aiProvider, weatherProvider;
     private CheckBox aiGoogleSearch;
     private static final int LOCATION_REQ = 78;
     private static final long GPS_TIMEOUT_MS = 15000L;
@@ -73,6 +73,9 @@ public class SettingsActivity extends Activity {
         crop.setOnClickListener(v->crop.showDropDown());
         crop.setOnFocusChangeListener((v,hasFocus)->{ if(!hasFocus) applyTBaseForCrop(crop.getText().toString().trim(), false); });
         tBase.setOnFocusChangeListener((v,hasFocus)->{ if(!hasFocus) persistTBaseForCurrentCrop(); });
+        weatherProvider=findViewById(R.id.weatherProvider); openWeatherKey=findViewById(R.id.openWeatherKey); weatherApiKey=findViewById(R.id.weatherApiKey);
+        ArrayAdapter<String> weatherAdapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,new String[]{"Open-Meteo (tanpa API key)","OpenWeather One Call 3.0 (perlu API key)","WeatherAPI (perlu API key)"});
+        weatherAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); weatherProvider.setAdapter(weatherAdapter);
         aiProvider=findViewById(R.id.aiProvider); aiGoogleSearch=findViewById(R.id.aiGoogleSearch);
         geminiKey=findViewById(R.id.geminiKey); geminiModel=findViewById(R.id.geminiModel);
         openRouterKey=findViewById(R.id.openRouterKey); openRouterModel=findViewById(R.id.openRouterModel);
@@ -304,7 +307,7 @@ public class SettingsActivity extends Activity {
             editor.putFloat("elevation", (float) location.getAltitude());
         }
         // apply() updates SharedPreferences in memory immediately and writes asynchronously.
-        // The dashboard observes location_updated_epoch on resume and refreshes Open-Meteo,
+        // The dashboard observes location_updated_epoch on resume and refreshes the configured macro-weather provider,
         // so this button does not depend on the user pressing the separate Save Settings button.
         editor.apply();
         setGpsStatus(message + " Koordinat langsung diterapkan dan disimpan untuk dashboard.");
@@ -347,6 +350,10 @@ public class SettingsActivity extends Activity {
         aiGoogleSearch.setChecked(p.getBoolean("ai_google_search",true));
         crop.setText(p.getString("crop","Tanaman pertanian"));
         loadTBaseForCrop(crop.getText().toString().trim());
+        String macroProvider=p.getString("macro_weather_provider","Open-Meteo").toLowerCase(Locale.US);
+        weatherProvider.setSelection(macroProvider.contains("weatherapi") ? 2 : (macroProvider.contains("openweather") ? 1 : 0));
+        openWeatherKey.setText(p.getString("openweather_api_key",""));
+        weatherApiKey.setText(p.getString("weatherapi_api_key",""));
         lat.setText(f(p.getFloat("latitude",Float.NaN))); lon.setText(f(p.getFloat("longitude",Float.NaN))); elev.setText(f(p.getFloat("elevation",Float.NaN)));
         cult.setSelection(p.getString("farm_cultivation_mode","Konvensional / PHT").toLowerCase(Locale.US).contains("organik")?1:0);
         for(int i=0;i<8;i++){
@@ -375,7 +382,10 @@ public class SettingsActivity extends Activity {
                 .putString("ai_provider",aiProvider.getSelectedItem().toString()).putBoolean("ai_google_search",aiGoogleSearch.isChecked())
                 .putString("gemini_api_key",geminiKey.getText().toString().trim()).putString("gemini_model",geminiModel.getText().toString().trim().isEmpty()?"gemini-2.5-flash":geminiModel.getText().toString().trim())
                 .putString("openrouter_api_key",openRouterKey.getText().toString().trim()).putString("openrouter_model",openRouterModel.getText().toString().trim().isEmpty()?"google/gemini-2.5-flash":openRouterModel.getText().toString().trim())
-                .putString("crop",cv).putString("farm_cultivation_mode",cult.getSelectedItem().toString());
+                .putString("crop",cv).putString("farm_cultivation_mode",cult.getSelectedItem().toString())
+                .putString("macro_weather_provider",weatherProvider.getSelectedItemPosition()==1?"OpenWeather":(weatherProvider.getSelectedItemPosition()==2?"WeatherAPI":"Open-Meteo"))
+                .putString("openweather_api_key",openWeatherKey.getText().toString().trim())
+                .putString("weatherapi_api_key",weatherApiKey.getText().toString().trim());
         if(!Float.isNaN(tbValue)) e.putString("farm_tbase_c", String.format(Locale.US, "%.2f", tbValue)).putString("farm_tbase_crop", CropDatabase.key(cv));
         else e.remove("farm_tbase_c").remove("farm_tbase_crop");
         if(!Float.isNaN(la))e.putFloat("latitude",la); else e.remove("latitude");

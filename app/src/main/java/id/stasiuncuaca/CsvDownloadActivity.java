@@ -1,6 +1,7 @@
 package id.stasiuncuaca;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.DatePickerDialog;
 import android.content.Context;
 import android.content.Intent;
@@ -12,6 +13,8 @@ import android.os.Looper;
 import android.widget.DatePicker;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Spinner;
+import android.widget.ArrayAdapter;
 import android.widget.Toast;
 
 import org.json.JSONArray;
@@ -37,6 +40,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -100,6 +104,8 @@ public class CsvDownloadActivity extends Activity {
     private LinearLayout rangePanel;
     private LinearLayout openMeteoPanel;
     private TextView historyInfo;
+    private Spinner weatherProviderCsv;
+    private TextView weatherProviderInfo;
 
     private boolean allHistoryMode = false;
     private boolean openMeteoMode = false;
@@ -129,10 +135,23 @@ public class CsvDownloadActivity extends Activity {
         rangePanel = findViewById(R.id.rangePanel);
         openMeteoPanel = findViewById(R.id.openMeteoPanel);
         historyInfo = findViewById(R.id.historyInfo);
+        weatherProviderCsv = findViewById(R.id.historyWeatherProvider);
+        weatherProviderInfo = findViewById(R.id.historyWeatherProviderInfo);
+        ArrayAdapter<String> weatherProviderAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item,
+                new String[]{"Ikuti Pengaturan", "Open-Meteo", "OpenWeather One Call 3.0", "WeatherAPI"});
+        weatherProviderAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        weatherProviderCsv.setAdapter(weatherProviderAdapter);
+        weatherProviderCsv.setSelection(0);
+        weatherProviderCsv.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, android.view.View view, int position, long id) { updateMacroProviderUi(); }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+        });
 
         LocalDate today = LocalDate.now(WIB);
-        startDate = today.withDayOfMonth(1);
-        endDate = today;
+        // Default to completed days for historic exports; today can still be selected manually.
+        endDate = today.minusDays(1);
+        startDate = endDate.withDayOfMonth(1);
         refreshDateLabels();
 
         sourceThingSpeak.setOnClickListener(v -> setSource(false));
@@ -160,6 +179,7 @@ public class CsvDownloadActivity extends Activity {
         openMeteoMode = openMeteo;
         sourceOpenMeteo.setBackgroundResource(openMeteo ? R.drawable.bg_button : R.drawable.bg_edit);
         sourceThingSpeak.setBackgroundResource(openMeteo ? R.drawable.bg_edit : R.drawable.bg_button);
+        sourceOpenMeteo.setText("CUACA MAKRO");
         sourceOpenMeteo.setTextColor(openMeteo ? Color.rgb(7, 19, 31) : Color.WHITE);
         sourceThingSpeak.setTextColor(openMeteo ? Color.WHITE : Color.rgb(7, 19, 31));
 
@@ -169,10 +189,9 @@ public class CsvDownloadActivity extends Activity {
             modeRange.setVisibility(android.view.View.GONE);
             openMeteoPanel.setVisibility(android.view.View.VISIBLE);
             rangePanel.setVisibility(android.view.View.VISIBLE);
-            historyInfo.setText(
-                    "OPEN-METEO HISTORIS: pilih tanggal dan resolusi. Data berasal dari Historical Weather API, bukan rekaman sensor AWS. UV index dan visibility tidak tersedia pada endpoint historis; kolom itu akan kosong."
-            );
-            statusView.setText("Pilih tanggal dan resolusi, kemudian unduh CSV Open-Meteo.");
+            historyInfo.setText("CUACA MAKRO HISTORIS: pilih provider, tanggal dan resolusi. Data model/reanalysis bukan rekaman sensor AWS. ET₀, penyinaran, kelembapan tanah, PAR, PPFD, radiasi, dan lux dimasukkan bila tersedia atau diberi label estimasi.");
+            statusView.setText("Pilih provider cuaca makro dan rentang tanggal.");
+            updateMacroProviderUi();
             setOpenMeteoResolution(openMeteoHourly);
         } else {
             modeAllHistory.setVisibility(android.view.View.VISIBLE);
@@ -182,16 +201,48 @@ public class CsvDownloadActivity extends Activity {
         }
     }
 
+    private String selectedCsvWeatherProvider() {
+        int pos = weatherProviderCsv == null ? 0 : weatherProviderCsv.getSelectedItemPosition();
+        if (pos == 1) return "Open-Meteo";
+        if (pos == 2) return "OpenWeather";
+        if (pos == 3) return "WeatherAPI";
+        String saved = prefs.getString("macro_weather_provider", "Open-Meteo");
+        if (saved.toLowerCase(Locale.ROOT).contains("weatherapi")) return "WeatherAPI";
+        return saved.toLowerCase(Locale.ROOT).contains("openweather") ? "OpenWeather" : "Open-Meteo";
+    }
+
+    private void updateMacroProviderUi() {
+        if (weatherProviderInfo == null || weatherProviderCsv == null) return;
+        String provider = selectedCsvWeatherProvider();
+        if ("OpenWeather".equals(provider)) {
+            weatherProviderInfo.setText("OpenWeather One Call 3.0 • historis harian memakai sekitar satu permintaan API per tanggal. Perlu API key dan kuota/subscription aktif. ET₀, radiasi, penyinaran, PAR, PPFD, dan Lux adalah estimasi model; CSV harian.");
+            omHourly.setVisibility(android.view.View.GONE);
+            omDaily.setText("HARIAN");
+            openMeteoHourly = false;
+            omDaily.setVisibility(android.view.View.VISIBLE);
+        } else if ("WeatherAPI".equals(provider)) {
+            weatherProviderInfo.setText("WeatherAPI History API • ekspor harian menggunakan satu permintaan per tanggal agar kompatibel lintas paket. Histori sejak 1 Januari 2010 bergantung pada akses paket; ET₀/radiasi hanya nilai langsung bila paket dan respons menyediakannya, selain itu estimasi diberi label.");
+            omHourly.setVisibility(android.view.View.GONE);
+            omDaily.setText("HARIAN");
+            openMeteoHourly = false;
+            omDaily.setVisibility(android.view.View.VISIBLE);
+        } else {
+            weatherProviderInfo.setText("Open-Meteo Historical Weather API • mendukung CSV per jam maupun harian. ET₀, sunshine duration, dan radiasi tersedia pada endpoint historis; PAR, PPFD dan Lux turunan diberi label estimasi. Kelembapan tanah adalah model grid, bukan sensor petak.");
+            omHourly.setVisibility(android.view.View.VISIBLE);
+            omDaily.setVisibility(android.view.View.VISIBLE);
+        }
+        if (openMeteoMode && !downloading) statusView.setText("Provider CSV cuaca makro: " + provider + ".");
+    }
+
     private void setOpenMeteoResolution(boolean hourly) {
+        if ("OpenWeather".equals(selectedCsvWeatherProvider()) || "WeatherAPI".equals(selectedCsvWeatherProvider())) hourly = false;
         openMeteoHourly = hourly;
         omHourly.setBackgroundResource(hourly ? R.drawable.bg_button : R.drawable.bg_edit);
         omDaily.setBackgroundResource(hourly ? R.drawable.bg_edit : R.drawable.bg_button);
         omHourly.setTextColor(hourly ? Color.rgb(7, 19, 31) : Color.WHITE);
         omDaily.setTextColor(hourly ? Color.WHITE : Color.rgb(7, 19, 31));
         if (openMeteoMode && !downloading) {
-            statusView.setText(hourly
-                    ? "Resolusi per jam dipilih."
-                    : "Resolusi harian dipilih.");
+            statusView.setText(hourly ? "Resolusi per jam dipilih • " + selectedCsvWeatherProvider() : "Resolusi harian dipilih • " + selectedCsvWeatherProvider());
         }
     }
 
@@ -329,7 +380,9 @@ public class CsvDownloadActivity extends Activity {
 
     private void prepareCsv() {
         if (openMeteoMode) {
-            prepareOpenMeteoCsv();
+            if ("OpenWeather".equals(selectedCsvWeatherProvider())) prepareOpenWeatherCsv();
+            else if ("WeatherAPI".equals(selectedCsvWeatherProvider())) prepareWeatherApiCsv();
+            else prepareOpenMeteoCsv();
         } else {
             prepareThingSpeakCsv();
         }
@@ -487,14 +540,14 @@ public class CsvDownloadActivity extends Activity {
 
         downloading = true;
         readyToSave = false;
-        downloadButton.setText("MENGAMBIL OPEN-METEO...");
+        downloadButton.setText("MENGAMBIL CUACA MAKRO...");
         downloadButton.setEnabled(false);
 
         final LocalDate exportStart = startDate;
         final LocalDate exportEnd = endDate;
         final boolean hourly = openMeteoHourly;
         final String resolution = hourly ? "hourly" : "daily";
-        final String fileName = "STASIUN-CUACA-DESA-TURUS_OPEN-METEO_"
+        final String fileName = "STASIUN-CUACA_CUACA-MAKRO_OPEN-METEO_"
                 + startDate.format(FILE_FMT) + "_" + endDate.format(FILE_FMT) + "_" + resolution + ".csv";
         statusView.setText("Mengambil Open-Meteo " + resolution + " " + startDate + " sampai " + endDate + "...");
 
@@ -552,9 +605,11 @@ public class CsvDownloadActivity extends Activity {
                     + "&timezone=Asia%2FJakarta&temperature_unit=celsius&wind_speed_unit=ms&precipitation_unit=mm&timeformat=iso8601&cell_selection=land";
         } else {
             String vars = "weather_code,temperature_2m_mean,temperature_2m_max,temperature_2m_min,apparent_temperature_mean,apparent_temperature_max,apparent_temperature_min,precipitation_sum,rain_sum,precipitation_hours,sunrise,sunset,daylight_duration,sunshine_duration,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,shortwave_radiation_sum,et0_fao_evapotranspiration";
+            String hourlySoil = "soil_moisture_0_to_7cm,soil_moisture_7_to_28cm";
             url = "https://archive-api.open-meteo.com/v1/archive?latitude=" + enc(String.format(Locale.US, "%.6f", lat))
                     + "&longitude=" + enc(String.format(Locale.US, "%.6f", lon))
                     + "&start_date=" + start + "&end_date=" + end
+                    + "&hourly=" + enc(hourlySoil)
                     + "&daily=" + enc(vars)
                     + "&timezone=Asia%2FJakarta&temperature_unit=celsius&wind_speed_unit=ms&precipitation_unit=mm&timeformat=iso8601&cell_selection=land";
         }
@@ -584,7 +639,7 @@ public class CsvDownloadActivity extends Activity {
                 JSONArray times = h.optJSONArray("time");
                 if (times == null) throw new Exception("Kolom waktu hourly Open-Meteo tidak tersedia.");
                 writer.write(csvLine("timestamp_wib","source","data_type","latitude","longitude","elevation_m",
-                        "temperature_2m_c","relative_humidity_pct","dew_point_c","apparent_temperature_c","precipitation_mm","rain_mm","weather_code","surface_pressure_hpa","cloud_cover_pct","wind_speed_ms","wind_direction_deg","wind_gust_ms","visibility_m","uv_index","shortwave_radiation_wm2","vpd_kpa","et0_mm","sunshine_hours","soil_temperature_0_7cm_c","soil_temperature_7_28cm_c","soil_moisture_0_7cm_pct","soil_moisture_7_28cm_pct"));
+                        "temperature_2m_c","relative_humidity_pct","dew_point_c","apparent_temperature_c","precipitation_mm","rain_mm","weather_code","surface_pressure_hpa","cloud_cover_pct","wind_speed_ms","wind_direction_deg","wind_gust_ms","visibility_m","uv_index","shortwave_radiation_wm2","shortwave_radiation_energy_MJ_m2_hour","PAR_est_W_m2_hourmean","PPFD_est_umol_m2_s_hourmean","lux_est_hourmean","vpd_kpa","et0_FAO56_PM_mm_this_hour","sunshine_duration_h_this_hour","soil_temperature_0_7cm_c","soil_temperature_7_28cm_c","soil_moisture_0_7cm_pctvol","soil_moisture_7_28cm_pctvol","radiation_method","PAR_method","PPFD_method","lux_method","et0_method","sunshine_method","soil_moisture_method"));
                 writer.write("\r\n");
                 for (int i = 0; i < times.length(); i++) {
                     String timestamp = times.optString(i, "");
@@ -597,10 +652,12 @@ public class CsvDownloadActivity extends Activity {
                             fmtCsv(arrNum(h,"precipitation",i),3),fmtCsv(arrNum(h,"rain",i),3),
                             csvNum(h,"weather_code",i),fmtCsv(arrNum(h,"surface_pressure",i),1),fmtCsv(arrNum(h,"cloud_cover",i),1),
                             fmtCsv(arrNum(h,"wind_speed_10m",i),2),fmtCsv(arrNum(h,"wind_direction_10m",i),1),fmtCsv(arrNum(h,"wind_gusts_10m",i),2),
-                            fmtCsv(arrNum(h,"visibility",i),1),fmtCsv(arrNum(h,"uv_index",i),2),fmtCsv(sw,2),fmtCsv(arrNum(h,"vapour_pressure_deficit",i),3),
+                            "","",fmtCsv(sw,2),fmtCsv(sw*3600.0/1_000_000.0,5),fmtCsv(LightConversion.shortwaveToParWm2(sw),3),
+                            fmtCsv(LightConversion.parToPpfd(LightConversion.shortwaveToParWm2(sw)),3),fmtCsv(sw*120.0,1),fmtCsv(arrNum(h,"vapour_pressure_deficit",i),3),
                             fmtCsv(arrNum(h,"et0_fao_evapotranspiration",i),3),sunshineHours,
                             fmtCsv(arrNum(h,"soil_temperature_0_to_7cm",i),2),fmtCsv(arrNum(h,"soil_temperature_7_to_28cm",i),2),
-                            fmtCsv(arrNum(h,"soil_moisture_0_to_7cm",i) * 100.0,2),fmtCsv(arrNum(h,"soil_moisture_7_to_28cm",i) * 100.0,2)));
+                            fmtCsv(arrNum(h,"soil_moisture_0_to_7cm",i) * 100.0,2),fmtCsv(arrNum(h,"soil_moisture_7_to_28cm",i) * 100.0,2),
+                            "Open-Meteo hourly shortwave_radiation", "PAR=0.45×shortwave; estimated", "PPFD=PAR×4.57; estimated", "lux≈shortwave×120; broad-spectrum estimate", "Open-Meteo hourly ET₀ FAO-56 PM", "Open-Meteo sunshine_duration for hour", "Open-Meteo grid soil moisture m³/m³×100"));
                     writer.write("\r\n");
                     stats.rows++;
                     if (i % 48 == 0) postProgressOpenMeteo(stats, "Open-Meteo hourly: memproses...");
@@ -612,7 +669,8 @@ public class CsvDownloadActivity extends Activity {
                 if (times == null) throw new Exception("Kolom waktu daily Open-Meteo tidak tersedia.");
                 writer.write(csvLine("date","source","data_type","latitude","longitude","elevation_m",
                         "weather_code","temperature_mean_c","temperature_max_c","temperature_min_c","apparent_temperature_mean_c","apparent_temperature_max_c","apparent_temperature_min_c",
-                        "precipitation_sum_mm","rain_sum_mm","precipitation_hours","sunrise","sunset","daylight_hours","sunshine_hours","wind_speed_max_ms","wind_gusts_max_ms","wind_direction_dominant_deg","shortwave_radiation_sum_MJ_m2","et0_mm"));
+                        "precipitation_sum_mm","rain_sum_mm","precipitation_hours","sunrise","sunset","daylight_hours","sunshine_hours","wind_speed_max_ms","wind_gusts_max_ms","wind_direction_dominant_deg","shortwave_radiation_sum_MJ_m2","et0_mm",
+                        "soil_moisture_0_7cm_mean_pctvol","soil_moisture_7_28cm_mean_pctvol","shortwave_daylight_mean_W_m2_est","PAR_daylight_mean_W_m2_est","PPFD_daylight_mean_umol_m2_s_est","lux_daylight_mean_est","PAR_energy_sum_MJ_m2_est","radiation_method","PAR_method","PPFD_method","lux_method","et0_method","sunshine_method","soil_moisture_method"));
                 writer.write("\r\n");
                 for (int i=0;i<times.length();i++) {
                     writer.write(csvLine(times.optString(i,""),"OPEN-METEO","HISTORICAL_REANALYSIS",
@@ -622,7 +680,15 @@ public class CsvDownloadActivity extends Activity {
                             fmtCsv(arrNum(d,"precipitation_sum",i),3),fmtCsv(arrNum(d,"rain_sum",i),3),fmtCsv(arrNum(d,"precipitation_hours",i),2),
                             arrString(d,"sunrise",i),arrString(d,"sunset",i),fmtCsv(arrNum(d,"daylight_duration",i)/3600.0,3),fmtCsv(arrNum(d,"sunshine_duration",i)/3600.0,3),
                             fmtCsv(arrNum(d,"wind_speed_10m_max",i),2),fmtCsv(arrNum(d,"wind_gusts_10m_max",i),2),fmtCsv(arrNum(d,"wind_direction_10m_dominant",i),1),
-                            fmtCsv(arrNum(d,"shortwave_radiation_sum",i),3),fmtCsv(arrNum(d,"et0_fao_evapotranspiration",i),3)));
+                            fmtCsv(arrNum(d,"shortwave_radiation_sum",i),3),fmtCsv(arrNum(d,"et0_fao_evapotranspiration",i),3),
+                            fmtCsv(meanHourlyForDate(root,"soil_moisture_0_to_7cm",times.optString(i,""))*100.0,2),
+                            fmtCsv(meanHourlyForDate(root,"soil_moisture_7_to_28cm",times.optString(i,""))*100.0,2),
+                            fmtCsv(daylightMeanWm2(arrNum(d,"shortwave_radiation_sum",i),arrNum(d,"daylight_duration",i)),2),
+                            fmtCsv(daylightMeanWm2(arrNum(d,"shortwave_radiation_sum",i),arrNum(d,"daylight_duration",i))*0.45,2),
+                            fmtCsv(daylightMeanWm2(arrNum(d,"shortwave_radiation_sum",i),arrNum(d,"daylight_duration",i))*0.45*4.57,2),
+                            fmtCsv(daylightMeanWm2(arrNum(d,"shortwave_radiation_sum",i),arrNum(d,"daylight_duration",i))*120.0,1),
+                            fmtCsv(arrNum(d,"shortwave_radiation_sum",i)*0.45,3),
+                            "Open-Meteo shortwave_radiation_sum", "PAR=0.45×shortwave; estimated", "PPFD=PAR×4.57; estimated", "lux≈shortwave×120; broad-spectrum estimate", "Open-Meteo daily ET₀ FAO-56 PM", "Open-Meteo daily sunshine_duration", "Open-Meteo hourly reanalysis soil moisture m³/m³×100"));
                     writer.write("\r\n");
                     stats.rows++;
                     if (i % 7 == 0) postProgressOpenMeteo(stats, "Open-Meteo harian: memproses...");
@@ -631,6 +697,319 @@ public class CsvDownloadActivity extends Activity {
         } finally {
             if (c != null) c.disconnect();
         }
+    }
+
+    private double meanHourlyForDate(JSONObject root, String variable, String date) {
+        JSONObject hourly = root.optJSONObject("hourly");
+        if (hourly == null) return Double.NaN;
+        JSONArray times = hourly.optJSONArray("time"), values = hourly.optJSONArray(variable);
+        if (times == null || values == null) return Double.NaN;
+        double sum = 0; int count = 0;
+        for (int i = 0; i < Math.min(times.length(), values.length()); i++) {
+            if (!times.optString(i, "").startsWith(date) || values.isNull(i)) continue;
+            double v = values.optDouble(i, Double.NaN);
+            if (Double.isFinite(v)) { sum += v; count++; }
+        }
+        return count == 0 ? Double.NaN : sum / count;
+    }
+
+    private double daylightMeanWm2(double radiationMj, double daylightSeconds) {
+        return Double.isFinite(radiationMj) && Double.isFinite(daylightSeconds) && daylightSeconds > 0
+                ? radiationMj * 1_000_000.0 / daylightSeconds : Double.NaN;
+    }
+
+    private void prepareWeatherApiCsv() {
+        if (downloading) return;
+        String key = prefs.getString("weatherapi_api_key", "").trim();
+        if (key.isEmpty()) { statusView.setText("API key WeatherAPI belum diisi. Buka Pengaturan → Cuaca Makro → WeatherAPI."); return; }
+        double lat = prefs.getFloat("latitude", Float.NaN), lon = prefs.getFloat("longitude", Float.NaN);
+        if (!Double.isFinite(lat) || !Double.isFinite(lon)) { statusView.setText("Koordinat GPS belum tersedia. Gunakan GPS HP atau isi latitude/longitude di Pengaturan."); return; }
+        LocalDate today = LocalDate.now(WIB);
+        if (startDate.isAfter(endDate)) { statusView.setText("Rentang tanggal tidak valid."); return; }
+        if (startDate.isBefore(LocalDate.of(2010, 1, 1))) { statusView.setText("WeatherAPI History API tersedia mulai 1 Januari 2010. Ubah tanggal awal."); return; }
+        if (!endDate.isBefore(today)) { statusView.setText("Untuk histori WeatherAPI, pilih tanggal akhir paling lambat kemarin agar data satu hari penuh."); return; }
+        long days = ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        if (days > 31) {
+            new AlertDialog.Builder(this).setTitle("Ekspor histori WeatherAPI")
+                    .setMessage("Rentang " + days + " hari akan memerlukan hingga " + days + " permintaan History API. Ketersediaan tanggal dan parameter bergantung pada paket/key WeatherAPI; kuota dapat terpakai.")
+                    .setNegativeButton("BATAL", null)
+                    .setPositiveButton("LANJUTKAN", (dialog, which) -> startWeatherApiCsv(lat, lon, startDate, endDate, days))
+                    .show();
+            return;
+        }
+        startWeatherApiCsv(lat, lon, startDate, endDate, days);
+    }
+
+    private void startWeatherApiCsv(double lat, double lon, LocalDate exportStart, LocalDate exportEnd, long days) {
+        downloading = true; readyToSave = false;
+        downloadButton.setText("MENGAMBIL WEATHERAPI..."); downloadButton.setEnabled(false);
+        final String fileName = "STASIUN-CUACA_CUACA-MAKRO_WEATHERAPI_" + exportStart.format(FILE_FMT) + "_" + exportEnd.format(FILE_FMT) + "_daily.csv";
+        statusView.setText("Mengambil histori WeatherAPI harian • sekitar " + days + " permintaan...");
+        net.execute(() -> {
+            File temp = null;
+            try {
+                temp = File.createTempFile("stasiun_cuaca_weatherapi_", ".csv", getCacheDir());
+                final File tempFile = temp;
+                OpenMeteoStats stats = new OpenMeteoStats();
+                try (Writer writer = Files.newBufferedWriter(temp.toPath(), StandardCharsets.UTF_8)) {
+                    writer.write('\uFEFF');
+                    fetchWeatherApiHistorical(lat, lon, exportStart, exportEnd, writer, stats);
+                    writer.flush();
+                }
+                if (stats.rows <= 0) throw new Exception("WeatherAPI tidak mengembalikan data pada rentang tersebut.");
+                pendingCsvFile = tempFile; pendingFileName = fileName; readyToSave = true;
+                final long rows = stats.rows;
+                runOnUiThread(() -> {
+                    downloading = false; downloadButton.setEnabled(true); downloadButton.setText("SIMPAN FILE CSV");
+                    statusView.setText("WeatherAPI siap disimpan: " + rows + " hari • " + days + " permintaan API • GPS " + String.format(Locale.US, "%.5f, %.5f", lat, lon));
+                });
+            } catch (Exception ex) {
+                if (temp != null) try { temp.delete(); } catch (Exception ignored) {}
+                pendingCsvFile = null; readyToSave = false;
+                final String message = safeMessage(ex);
+                runOnUiThread(() -> { downloading = false; downloadButton.setEnabled(true); downloadButton.setText("UNDUH DATA CSV"); statusView.setText("Gagal WeatherAPI: " + message); });
+            }
+        });
+    }
+
+    private void fetchWeatherApiHistorical(double lat, double lon, LocalDate start, LocalDate end, Writer writer, OpenMeteoStats stats) throws Exception {
+        String key = prefs.getString("weatherapi_api_key", "").trim();
+        double elevation = prefs.getFloat("elevation", 0f);
+        double fc = preferenceNumber("soil_fc_pct", 30.0), pwp = preferenceNumber("soil_pwp_pct", 12.0);
+        double rootDepth = preferenceNumber("soil_root_depth_cm", 30.0);
+        if (!Double.isFinite(fc) || !Double.isFinite(pwp) || fc <= pwp) { fc = 30.0; pwp = 12.0; }
+        if (!Double.isFinite(rootDepth) || rootDepth <= 0) rootDepth = 30.0;
+        double kc = WeatherMacroModel.cropCoefficient(prefs.getString("farm_phase_manual", ""));
+        double availableFraction = 0.50; // explicit model state; not measured soil moisture.
+        writer.write(csvLine("date_local","source","data_type","latitude","longitude","temperature_mean_c","temperature_max_c","temperature_min_c","relative_humidity_mean_pct","pressure_mean_hpa","cloud_cover_mean_pct","precipitation_total_mm","wind_speed_max_ms","wind_direction_mean_deg","uv_index_max","sunrise_local","sunset_local","daylight_hours","estimated_sunshine_hours","shortwave_radiation_sum_MJ_m2","shortwave_source","PAR_est_daylight_mean_W_m2","PPFD_est_daylight_mean_umol_m2_s","lux_est_daylight_mean","ET0_mm","ET0_source","estimated_soil_moisture_pctvol","soil_moisture_method"));
+        writer.write("\r\n");
+        long total = ChronoUnit.DAYS.between(start, end) + 1;
+        long done = 0;
+        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
+            String query = enc(String.format(Locale.US, "%.6f,%.6f", lat, lon));
+            String url = "https://api.weatherapi.com/v1/history.json?key=" + enc(key) + "&q=" + query + "&dt=" + date + "&aqi=no";
+            JSONObject root = getJsonCsv(url);
+            JSONObject forecast = root.optJSONObject("forecast");
+            JSONArray fdays = forecast == null ? null : forecast.optJSONArray("forecastday");
+            JSONObject fd = fdays == null ? null : fdays.optJSONObject(0);
+            if (fd == null) throw new Exception("WeatherAPI tidak mengembalikan histori tanggal " + date + ". Periksa paket/key dan tanggal.");
+            JSONObject day = fd.optJSONObject("day"); if (day == null) day = new JSONObject();
+            JSONObject astro = fd.optJSONObject("astro"); if (astro == null) astro = new JSONObject();
+            JSONArray hours = fd.optJSONArray("hour");
+            double rhMean = finiteMean(hours, "humidity");
+            if (!Double.isFinite(rhMean)) rhMean = day.optDouble("avghumidity", Double.NaN);
+            double pMean = finiteMean(hours, "pressure_mb");
+            double cloudMean = finiteMean(hours, "cloud");
+            double windDir = circularMeanDegrees(hours, "wind_degree");
+            double maxWindKph = day.optDouble("maxwind_kph", Double.NaN);
+            double rain = day.optDouble("totalprecip_mm", 0.0);
+            double tMax = day.optDouble("maxtemp_c", Double.NaN), tMin = day.optDouble("mintemp_c", Double.NaN);
+            double tMean = day.optDouble("avgtemp_c", Double.NaN);
+            double windMs = maxWindKph / 3.6;
+            WeatherMacroModel.DailyDerived model = WeatherMacroModel.estimateDaily(lat, elevation, date, tMax, tMin, rhMean, pMean, windMs, cloudMean);
+            // Use direct short_rad/ET0 where the subscriber response exposes them; otherwise retain a clearly labelled estimate.
+            double directShortRadEnergy = sumHourlyRadiationMjm2(hours);
+            boolean hasDirectShortRad = Double.isFinite(directShortRadEnergy);
+            double shortwaveEnergy = hasDirectShortRad ? directShortRadEnergy : model.solarRadiationMjM2;
+            String radiationSource = hasDirectShortRad ? "WeatherAPI short_rad; direct provider field" : "Hargreaves-Samani estimate; not directly returned by this package";
+            double et0 = sumHourlyField(hours, "et0");
+            boolean hasDirectEt0 = Double.isFinite(et0);
+            if (!hasDirectEt0) et0 = model.et0Mm;
+            String et0Source = hasDirectEt0 ? "WeatherAPI hourly ET0; direct provider field" : "FAO-56 PM estimate; not direct API field";
+            double daylightHours = daylightHoursFromAstro(astro);
+            if (!Double.isFinite(daylightHours)) daylightHours = model.daylightHours;
+            double swMean = Double.isFinite(shortwaveEnergy) && daylightHours > 0 ? shortwaveEnergy * 1_000_000.0 / (daylightHours * 3600.0) : Double.NaN;
+            double parMean = LightConversion.shortwaveToParWm2(swMean);
+            double ppfd = LightConversion.parToPpfd(parMean);
+            double lux = Double.isFinite(swMean) ? swMean * 120.0 : Double.NaN;
+            availableFraction = WeatherMacroModel.nextAvailableWaterFraction(availableFraction, rain, et0, kc, fc, pwp, rootDepth);
+            double soilPct = WeatherMacroModel.moisturePctVol(availableFraction, fc, pwp);
+            writer.write(csvLine(date.toString(),"WeatherAPI","HISTORICAL_DAILY",""+fmtCsv(lat,5),fmtCsv(lon,5),fmtCsv(tMean,2),fmtCsv(tMax,2),fmtCsv(tMin,2),fmtCsv(rhMean,2),fmtCsv(pMean,2),fmtCsv(cloudMean,2),fmtCsv(rain,3),fmtCsv(windMs,2),fmtCsv(windDir,1),fmtCsv(day.optDouble("uv",Double.NaN),2),astro.optString("sunrise",""),astro.optString("sunset",""),fmtCsv(daylightHours,3),fmtCsv(model.sunshineHours,3),fmtCsv(shortwaveEnergy,3),radiationSource,fmtCsv(parMean,3),fmtCsv(ppfd,3),fmtCsv(lux,1),fmtCsv(et0,3),et0Source,fmtCsv(soilPct,3),"Water-bucket estimate from rainfall and ET0; FC/PWP/root depth and initial fraction are assumptions unless configured"));
+            writer.write("\r\n");
+            stats.rows++;
+            done++;
+            if (done % 3 == 0 || done == total) {
+                final long progress = done;
+                main.post(() -> statusView.setText("WeatherAPI histori: " + progress + "/" + total + " hari diproses..."));
+            }
+        }
+    }
+
+    private double finiteMean(JSONArray objects, String key) {
+        if (objects == null) return Double.NaN;
+        double sum = 0; int n = 0;
+        for (int i=0; i<objects.length(); i++) {
+            JSONObject o=objects.optJSONObject(i); if(o==null || o.isNull(key)) continue;
+            double v=o.optDouble(key,Double.NaN); if(Double.isFinite(v)){sum+=v;n++;}
+        }
+        return n == 0 ? Double.NaN : sum / n;
+    }
+
+    private double circularMeanDegrees(JSONArray objects, String key) {
+        if (objects == null) return Double.NaN;
+        double sx=0, sy=0; int n=0;
+        for(int i=0;i<objects.length();i++){
+            JSONObject o=objects.optJSONObject(i); if(o==null || o.isNull(key)) continue;
+            double d=o.optDouble(key,Double.NaN); if(!Double.isFinite(d)) continue;
+            sx+=Math.cos(Math.toRadians(d)); sy+=Math.sin(Math.toRadians(d)); n++;
+        }
+        if(n==0) return Double.NaN;
+        double deg=Math.toDegrees(Math.atan2(sy/n,sx/n)); return deg<0?deg+360:deg;
+    }
+
+    private double sumHourlyField(JSONArray objects, String key) {
+        if (objects == null) return Double.NaN;
+        double sum=0; int n=0;
+        for(int i=0;i<objects.length();i++){
+            JSONObject o=objects.optJSONObject(i); if(o==null || o.isNull(key)) continue;
+            double v=o.optDouble(key,Double.NaN); if(Double.isFinite(v)){sum+=v;n++;}
+        }
+        return n == 0 ? Double.NaN : sum;
+    }
+
+    private double sumHourlyRadiationMjm2(JSONArray objects) {
+        if (objects == null) return Double.NaN;
+        double sum=0; int n=0;
+        for(int i=0;i<objects.length();i++){
+            JSONObject o=objects.optJSONObject(i); if(o==null || o.isNull("short_rad")) continue;
+            double v=o.optDouble("short_rad",Double.NaN); if(Double.isFinite(v)){sum += Math.max(0,v) * 3600.0 / 1_000_000.0; n++;}
+        }
+        return n == 0 ? Double.NaN : sum;
+    }
+
+    private double daylightHoursFromAstro(JSONObject astro) {
+        try {
+            java.time.format.DateTimeFormatter f=java.time.format.DateTimeFormatter.ofPattern("h:mm a", Locale.US);
+            java.time.LocalTime rise=java.time.LocalTime.parse(astro.optString("sunrise",""),f);
+            java.time.LocalTime set=java.time.LocalTime.parse(astro.optString("sunset",""),f);
+            long mins=java.time.Duration.between(rise,set).toMinutes(); if(mins<0) mins+=24*60;
+            return mins / 60.0;
+        } catch(Exception ignored) { return Double.NaN; }
+    }
+
+    private void prepareOpenWeatherCsv() {
+        if (downloading) return;
+        String key = prefs.getString("openweather_api_key", "").trim();
+        if (key.isEmpty()) { statusView.setText("API key OpenWeather belum diisi. Buka Pengaturan → Cuaca Makro → OpenWeather One Call 3.0."); return; }
+        double lat = prefs.getFloat("latitude", Float.NaN), lon = prefs.getFloat("longitude", Float.NaN);
+        if (!Double.isFinite(lat) || !Double.isFinite(lon)) { statusView.setText("Koordinat GPS belum tersedia. Gunakan GPS HP atau isi latitude/longitude di Pengaturan."); return; }
+        LocalDate today = LocalDate.now(WIB);
+        if (startDate.isAfter(endDate)) { statusView.setText("Rentang tanggal tidak valid."); return; }
+        if (startDate.isBefore(LocalDate.of(1979, 1, 2))) {
+            statusView.setText("Histori OpenWeather One Call Day Summary tersedia mulai 2 Januari 1979. Ubah tanggal awal."); return;
+        }
+        if (endDate.isAfter(today)) { statusView.setText("Tanggal akhir OpenWeather histori tidak boleh melewati hari ini."); return; }
+        long days = ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        if (days > 31) {
+            new AlertDialog.Builder(this).setTitle("Ekspor histori OpenWeather")
+                    .setMessage("Rentang " + days + " hari memakai sekitar " + days + " permintaan One Call Day Summary (satu permintaan per hari), sesuai kuota/subscription API key. Proses dapat memerlukan beberapa menit dan pemakaian kuota API.")
+                    .setNegativeButton("BATAL", null)
+                    .setPositiveButton("LANJUTKAN", (dialog, which) -> startOpenWeatherCsv(lat, lon, startDate, endDate, days))
+                    .show();
+            return;
+        }
+        startOpenWeatherCsv(lat, lon, startDate, endDate, days);
+    }
+
+    private void startOpenWeatherCsv(double lat, double lon, LocalDate exportStart, LocalDate exportEnd, long days) {
+        downloading = true; readyToSave = false;
+        downloadButton.setText("MENGAMBIL OPENWEATHER..."); downloadButton.setEnabled(false);
+        final String fileName = "STASIUN-CUACA_CUACA-MAKRO_OPENWEATHER_" + exportStart.format(FILE_FMT) + "_" + exportEnd.format(FILE_FMT) + "_daily.csv";
+        statusView.setText("Mengambil OpenWeather historis harian • sekitar " + days + " permintaan API...");
+        net.execute(() -> {
+            File temp = null;
+            try {
+                temp = File.createTempFile("stasiun_cuaca_openweather_", ".csv", getCacheDir());
+                final File tempFile = temp;
+                OpenMeteoStats stats = new OpenMeteoStats();
+                try (Writer writer = Files.newBufferedWriter(temp.toPath(), StandardCharsets.UTF_8)) {
+                    writer.write('\uFEFF');
+                    fetchOpenWeatherHistorical(lat, lon, exportStart, exportEnd, writer, stats);
+                    writer.flush();
+                }
+                if (stats.rows <= 0) throw new Exception("OpenWeather tidak mengembalikan data pada rentang tersebut.");
+                pendingCsvFile = tempFile; pendingFileName = fileName; readyToSave = true;
+                final long rows = stats.rows;
+                runOnUiThread(() -> {
+                    downloading = false; downloadButton.setEnabled(true); downloadButton.setText("SIMPAN FILE CSV");
+                    statusView.setText("OpenWeather siap disimpan: " + rows + " hari • " + days + " permintaan API • GPS " + String.format(Locale.US, "%.5f, %.5f", lat, lon));
+                });
+            } catch (Exception ex) {
+                if (temp != null) try { temp.delete(); } catch (Exception ignored) {}
+                pendingCsvFile = null; readyToSave = false;
+                final String message = safeMessage(ex);
+                runOnUiThread(() -> { downloading = false; downloadButton.setEnabled(true); downloadButton.setText("UNDUH DATA CSV"); statusView.setText("Gagal OpenWeather: " + message); });
+            }
+        });
+    }
+
+    private void fetchOpenWeatherHistorical(double lat, double lon, LocalDate start, LocalDate end, Writer writer, OpenMeteoStats stats) throws Exception {
+        String key = prefs.getString("openweather_api_key", "").trim();
+        double elevation = prefs.getFloat("elevation", 0f);
+        double fc = preferenceNumber("soil_fc_pct", 30.0), pwp = preferenceNumber("soil_pwp_pct", 12.0);
+        double rootDepth = preferenceNumber("soil_root_depth_cm", 30.0);
+        if (!Double.isFinite(fc) || !Double.isFinite(pwp) || fc <= pwp) { fc = 30.0; pwp = 12.0; }
+        if (!Double.isFinite(rootDepth) || rootDepth <= 0) rootDepth = 30.0;
+        double kc = WeatherMacroModel.cropCoefficient(prefs.getString("farm_phase_manual", ""));
+        double availableFraction = 0.50; // explicit initial condition; not a measured history value.
+        writer.write(csvLine("date_wib","source","data_type","latitude","longitude","elevation_m","temperature_afternoon_c","temperature_max_c","temperature_min_c","relative_humidity_afternoon_pct","pressure_afternoon_hpa","cloud_cover_afternoon_pct","precipitation_total_mm","wind_speed_max_ms","wind_direction_max_deg","extraterrestrial_radiation_MJ_m2","estimated_shortwave_radiation_sum_MJ_m2","estimated_shortwave_daylight_mean_W_m2","estimated_PAR_daylight_mean_W_m2","estimated_PAR_energy_sum_MJ_m2","estimated_PPFD_daylight_mean_umol_m2_s","estimated_lux_daylight_mean","estimated_sunshine_duration_hours","estimated_daylight_hours","estimated_ET0_FAO56_PM_mm","estimated_soil_moisture_pctvol","soil_moisture_method","radiation_method","sunshine_method","et0_method"));
+        writer.write("\r\n");
+        long total = ChronoUnit.DAYS.between(start, end) + 1;
+        long done = 0;
+        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
+            String url = "https://api.openweathermap.org/data/3.0/onecall/day_summary?lat=" + enc(String.format(Locale.US,"%.6f",lat))
+                    + "&lon=" + enc(String.format(Locale.US,"%.6f",lon)) + "&date=" + date
+                    + "&tz=%2B07%3A00&units=metric&appid=" + enc(key);
+            JSONObject root = getJsonCsv(url);
+            JSONObject temps = root.optJSONObject("temperature"); if (temps == null) temps = new JSONObject();
+            JSONObject humidity = root.optJSONObject("humidity"); if (humidity == null) humidity = new JSONObject();
+            JSONObject pressure = root.optJSONObject("pressure"); if (pressure == null) pressure = new JSONObject();
+            JSONObject cloud = root.optJSONObject("cloud_cover"); if (cloud == null) cloud = new JSONObject();
+            JSONObject precip = root.optJSONObject("precipitation"); if (precip == null) precip = new JSONObject();
+            JSONObject wind = root.optJSONObject("wind"); if (wind == null) wind = new JSONObject();
+            JSONObject windMax = wind.optJSONObject("max"); if (windMax == null) windMax = new JSONObject();
+            double tMax = temps.optDouble("max", Double.NaN), tMin = temps.optDouble("min", Double.NaN);
+            double rh = humidity.optDouble("afternoon", Double.NaN), pHpa = pressure.optDouble("afternoon", Double.NaN);
+            double cloudPct = cloud.optDouble("afternoon", Double.NaN), rain = precip.optDouble("total", 0.0);
+            double windMaxMs = windMax.optDouble("speed", Double.NaN), windDir = windMax.optDouble("direction", Double.NaN);
+            WeatherMacroModel.DailyDerived model = WeatherMacroModel.estimateDaily(lat, elevation, date, tMax, tMin, rh, pHpa, windMaxMs, cloudPct);
+            availableFraction = WeatherMacroModel.nextAvailableWaterFraction(availableFraction, rain, model.et0Mm, kc, fc, pwp, rootDepth);
+            double soilPct = WeatherMacroModel.moisturePctVol(availableFraction, fc, pwp);
+            writer.write(csvLine(date.toString(),"OpenWeather One Call 3.0","HISTORICAL_DAILY_SUMMARY",fmtCsv(lat,5),fmtCsv(lon,5),fmtCsv(elevation,1),
+                    fmtCsv(temps.optDouble("afternoon",Double.NaN),2),fmtCsv(tMax,2),fmtCsv(tMin,2),fmtCsv(rh,1),fmtCsv(pHpa,1),fmtCsv(cloudPct,1),fmtCsv(rain,3),
+                    fmtCsv(windMaxMs,2),fmtCsv(windDir,1),fmtCsv(model.extraterrestrialRadiationMjM2,3),fmtCsv(model.solarRadiationMjM2,3),
+                    fmtCsv(model.shortwaveDaylightMeanWm2,2),fmtCsv(model.parWm2,2),fmtCsv(model.solarRadiationMjM2*0.45,3),fmtCsv(model.ppfdUmolM2S,2),fmtCsv(model.luxEstimate,1),
+                    fmtCsv(model.sunshineHours,3),fmtCsv(model.daylightHours,3),fmtCsv(model.et0Mm,3),fmtCsv(soilPct,2),
+                    "Water-bucket; inisialisasi 50% air tersedia; FC/PWP/rizodepth dari pengaturan atau default 30/12%vol/30cm",
+                    "Hargreaves-Samani Rs = 0,16√(Tmax−Tmin)×Ra; PAR = 0,45×Rs",
+                    "Inversi Angstrom-Prescott; estimasi, bukan pengukuran","FAO-56 Penman-Monteith menggunakan Rs estimasi"));
+            writer.write("\r\n"); stats.rows++; done++;
+            long progress = done;
+            main.post(() -> statusView.setText("OpenWeather histori: " + progress + "/" + total + " hari • " + progress + " permintaan API selesai..."));
+        }
+    }
+
+    private double preferenceNumber(String key, double fallback) {
+        try { String s = prefs.getString(key, "").trim(); if (!s.isEmpty()) { double d = Double.parseDouble(s.replace(',', '.')); if (Double.isFinite(d)) return d; } }
+        catch (Exception ignored) { }
+        return fallback;
+    }
+
+    private JSONObject getJsonCsv(String url) throws Exception {
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) new URL(url).openConnection();
+            c.setRequestMethod("GET"); c.setConnectTimeout(CONNECT_TIMEOUT_MS); c.setReadTimeout(READ_TIMEOUT_MS * 2);
+            c.setUseCaches(false); c.setRequestProperty("Accept", "application/json");
+            int code = c.getResponseCode();
+            if (code < 200 || code >= 300) {
+                String detail = readErrorBody(c);
+                String bounded = detail == null ? "" : detail.trim();
+                try { JSONObject e = new JSONObject(bounded); String msg=e.optString("message","").trim(); String cod=e.optString("cod","").trim(); if(!msg.isEmpty()) bounded=msg+(cod.isEmpty()?"":" ("+cod+")"); } catch(Exception ignored){}
+                throw new Exception("OpenWeather HTTP " + code + (bounded.isEmpty() ? "" : " • " + (bounded.length()>260?bounded.substring(0,260)+"…":bounded)));
+            }
+            return new JSONObject(readAll(c.getInputStream()));
+        } finally { if (c != null) c.disconnect(); }
     }
 
     private void postProgressOpenMeteo(OpenMeteoStats stats, String message) {

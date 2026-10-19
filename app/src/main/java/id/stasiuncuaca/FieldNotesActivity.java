@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DatePickerDialog;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
@@ -76,6 +77,7 @@ public class FieldNotesActivity extends Activity {
     private EditText soilPh, soilMoisture, soilTemp, soilEc, soilN, soilP, soilK, soilDepth, soilBulkDensity, soilFc, soilPwp, soilPhBuffer, soilAlDd, soilHDd, soilCec, soilOm, soilEce, soilLimeReq, soilNLow, soilNHigh;
     private Spinner soilTestMethod, ageUnit, dataSource, bulkDensityPreset;
     private String previousAgeUnit = "HST / hari";
+    private String previousDataSource = "";
     private EditText airTemp, airRh, pressure, rain24, et0, lux, par, sunHours, windSpeed;
     private Spinner noteType, severity, soilSource, windDirection, cultivation, soilNThresholdBasis;
     private TextView autoPhase, analysisView, timelineView, soilSummaryView, dataSourceStatus, usbSoilStatus, tBaseStatus;
@@ -101,9 +103,11 @@ public class FieldNotesActivity extends Activity {
             "Konvensional / PHT", "Organik"
     };
     private static final String[] DATA_SOURCES = {
-            "Prioritas: ThingSpeak → Open-Meteo",
+            "Prioritas: ThingSpeak → Cuaca Makro (sesuai Pengaturan)",
             "ThingSpeak",
             "Open-Meteo",
+            "OpenWeather",
+            "WeatherAPI",
             "Manual (tidak otomatis)"
     };
     private static final String[] BULK_DENSITY_PRESETS = {
@@ -190,6 +194,7 @@ public class FieldNotesActivity extends Activity {
         dataSource = findViewById(R.id.fnDataSource);
         bulkDensityPreset = findViewById(R.id.fnBulkDensityPreset);
         dataSourceStatus = findViewById(R.id.fnDataSourceStatus);
+        macroWeatherSummary = findViewById(R.id.fnMacroWeatherSummary);
         usbSoilStatus = findViewById(R.id.fnUsbSoilStatus);
 
         airTemp = findViewById(R.id.fnAirTemp);
@@ -218,6 +223,9 @@ public class FieldNotesActivity extends Activity {
         analysisView.setVisibility(View.GONE);
         timelineView = findViewById(R.id.fnTimeline);
         soilSummaryView = findViewById(R.id.fnSoilSummary);
+        // The soil status summary is shown in the Agronomy window only; keep field
+        // inputs here to avoid presenting the same diagnostic twice.
+        if (soilSummaryView != null) soilSummaryView.setVisibility(View.GONE);
 
         bindSpinner(noteType, NOTE_TYPES);
         bindSpinner(severity, SEVERITY);
@@ -327,7 +335,15 @@ public class FieldNotesActivity extends Activity {
         findViewById(R.id.fnSave).setOnClickListener(v -> saveFieldNote(prefs));
         findViewById(R.id.fnAddFertilizer).setOnClickListener(v -> showFertilizerDialog(prefs));
         findViewById(R.id.fnAddOpt).setOnClickListener(v -> showOptDialog(prefs));
-        findViewById(R.id.fnAnalyze).setOnClickListener(v -> runAnalysis(prefs));
+        findViewById(R.id.fnAnalyze).setOnClickListener(v -> {
+            try {
+                persistCurrentInputsForAnalysis();
+                startActivity(new Intent(this, AgronomyActivity.class).putExtra("source", "field_notes"));
+            } catch (Exception e) {
+                Log.e("FieldNotes", "Gagal menyiapkan analisis agronomi", e);
+                Toast.makeText(this, "Data belum dapat disiapkan untuk analisis: " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()), Toast.LENGTH_LONG).show();
+            }
+        });
         findViewById(R.id.fnAutoFill).setOnClickListener(v -> applyAutomaticData(prefs));
         findViewById(R.id.fnUsbSoilScan).setOnClickListener(v -> {
             if (usbSoilMeter != null) usbSoilMeter.scanNow();
@@ -337,7 +353,14 @@ public class FieldNotesActivity extends Activity {
         findViewById(R.id.fnNotes).setOnClickListener(v -> showMethodNotes());
         dataSource.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> parent, android.view.View view, int position, long id) {
-                prefs.edit().putString("agro_data_source", DATA_SOURCES[position]).apply();
+                String selectedSource = DATA_SOURCES[position];
+                prefs.edit().putString("agro_data_source", selectedSource).apply();
+                boolean changedByUser = !previousDataSource.isEmpty() && !previousDataSource.equals(selectedSource);
+                previousDataSource = selectedSource;
+                if (changedByUser && !selectedSource.toLowerCase(Locale.ROOT).contains("tidak")) {
+                    dataSourceStatus.setText("Sumber berubah menjadi " + selectedSource + "; mengambil data dari sumber yang dipilih…");
+                    applyAutomaticData(prefs);
+                }
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
@@ -727,6 +750,22 @@ public class FieldNotesActivity extends Activity {
             putTextNumber(o, "sunHours", sunHours);
             putTextNumber(o, "luxEstimate", lux);
             putTextNumber(o, "ppfdOrPar", par);
+            o.put("weatherDataSourceChoice", selectedText(dataSource, DATA_SOURCES[0]));
+            o.put("macroWeatherProvider", sourceUsesMacroWeather(selectedText(dataSource, DATA_SOURCES[0]))
+                    ? prefs.getString("macro_weather_provider_used", effectiveMacroWeatherProvider(selectedText(dataSource, DATA_SOURCES[0])))
+                    : (selectedText(dataSource, DATA_SOURCES[0]).equals("ThingSpeak") ? "ThingSpeak" : "Manual / cache terpisah"));
+            putOptionalJsonNumber(o, "macroSoilMoisturePctVol", optionalPrefNumber(prefs, "om_soil_moisture", Double.NaN) * 100.0);
+            putOptionalJsonNumber(o, "macroRadiationInstantWm2", optionalPrefNumber(prefs, "om_radiation", Double.NaN));
+            putOptionalJsonNumber(o, "macroRadiationDailyMjM2", optionalPrefNumber(prefs, "om_radiation_daily", Double.NaN));
+            putOptionalJsonNumber(o, "macroSunshineHours", optionalPrefNumber(prefs, "om_sun_hours", Double.NaN));
+            putOptionalJsonNumber(o, "macroDaylightHours", optionalPrefNumber(prefs, "om_daylight_hours", Double.NaN));
+            putOptionalJsonNumber(o, "macroParWm2", optionalPrefNumber(prefs, "om_par", Double.NaN));
+            putOptionalJsonNumber(o, "macroPpfdUmolM2S", optionalPrefNumber(prefs, "om_ppfd", Double.NaN));
+            putOptionalJsonNumber(o, "macroLuxEstimate", optionalPrefNumber(prefs, "om_lux", Double.NaN));
+            o.put("macroEt0Method", prefs.getString("om_et0_method", ""));
+            o.put("macroSunshineMethod", prefs.getString("om_sunshine_method", ""));
+            o.put("macroRadiationMethod", prefs.getString("om_radiation_method", ""));
+            o.put("macroSoilMoistureMethod", prefs.getString("om_soil_moisture_method", ""));
             putTextNumber(o, "windSpeedMs", windSpeed);
             o.put("windDirection", selectedText(windDirection, "Variabel"));
             o.put("created", System.currentTimeMillis());
@@ -872,20 +911,51 @@ public class FieldNotesActivity extends Activity {
         // position 2 intentionally preserves manual input.
     }
 
+    private String effectiveMacroWeatherProvider(String sourceChoice) {
+        if (sourceChoice != null && sourceChoice.startsWith("Prioritas")) {
+            String configured = prefs.getString("macro_weather_provider", "Open-Meteo");
+            if (configured.toLowerCase(Locale.ROOT).contains("weatherapi")) return "WeatherAPI";
+            return configured.toLowerCase(Locale.ROOT).contains("openweather") ? "OpenWeather" : "Open-Meteo";
+        }
+        if (sourceChoice != null && sourceChoice.toLowerCase(Locale.ROOT).contains("weatherapi")) return "WeatherAPI";
+        if (sourceChoice != null && sourceChoice.toLowerCase(Locale.ROOT).contains("openweather")) return "OpenWeather";
+        return "Open-Meteo";
+    }
+
+    private boolean sourceUsesMacroWeather(String src) {
+        return src != null && (src.startsWith("Prioritas") || src.equalsIgnoreCase("Open-Meteo") || src.equalsIgnoreCase("OpenWeather") || src.equalsIgnoreCase("WeatherAPI"));
+    }
+
     private void applyAutomaticDataFromCache(SharedPreferences prefs) {
         String src = dataSource == null ? DATA_SOURCES[0] : String.valueOf(dataSource.getSelectedItem());
-        boolean hasCache = !prefs.getString("ts_field_1", "").trim().isEmpty()
-                || !prefs.getString("om_temp", "").trim().isEmpty();
-        if (!hasCache || src.toLowerCase(Locale.US).contains("tidak")) return;
+        if (src.toLowerCase(Locale.US).contains("tidak")) return;
+        boolean hasTs = !prefs.getString("ts_field_1", "").trim().isEmpty();
+        boolean hasWeather = !prefs.getString("om_temp", "").trim().isEmpty();
+        if (sourceUsesMacroWeather(src)) {
+            String wanted = effectiveMacroWeatherProvider(src);
+            String used = prefs.getString("macro_weather_provider_used", "");
+            boolean sameProvider = wanted.equalsIgnoreCase(used)
+                    || (wanted.equals("Open-Meteo") && used.toLowerCase(Locale.ROOT).contains("open-meteo"))
+                    || (wanted.equals("OpenWeather") && used.toLowerCase(Locale.ROOT).contains("openweather"))
+                    || (wanted.equals("WeatherAPI") && used.toLowerCase(Locale.ROOT).contains("weatherapi"));
+            // Never silently display provider A's cache when the form explicitly asks for provider B.
+            // Fetch the requested provider immediately instead of waiting for a manual second tap.
+            if (!hasWeather || !sameProvider) {
+                applyAutomaticData(prefs);
+                return;
+            }
+        }
+        if (!hasTs && !hasWeather) return;
         applySourceValues(prefs, null, null, true);
     }
 
     private void applyAutomaticData(SharedPreferences prefs) {
         final String src = String.valueOf(dataSource.getSelectedItem());
-        dataSourceStatus.setText("Mengambil data terbaru: " + src + "...");
+        final String provider = effectiveMacroWeatherProvider(src);
+        dataSourceStatus.setText("Mengambil data: " + src + " • provider cuaca " + provider + "...");
         net.execute(() -> {
-            JSONObject tsMeta = null, tsFeed = null, om = null;
-            String tsError = "", omError = "";
+            JSONObject tsMeta = null, tsFeed = null, macroWeather = null;
+            String tsError = "", weatherError = "";
             try {
                 if (src.startsWith("Prioritas") || src.equals("ThingSpeak")) {
                     JSONObject[] x = fetchThingSpeakSnapshot(prefs);
@@ -893,21 +963,22 @@ public class FieldNotesActivity extends Activity {
                 }
             } catch (Exception e) { tsError = e.getMessage() == null ? "ThingSpeak gagal" : e.getMessage(); }
             try {
-                if (src.startsWith("Prioritas") || src.equals("Open-Meteo")) {
-                    om = fetchOpenMeteoSnapshot(prefs);
+                if (sourceUsesMacroWeather(src)) {
+                    macroWeather = provider.equals("OpenWeather") ? fetchOpenWeatherSnapshot(prefs)
+                            : (provider.equals("WeatherAPI") ? fetchWeatherApiSnapshot(prefs) : fetchOpenMeteoSnapshot(prefs));
                 }
-            } catch (Exception e) { omError = e.getMessage() == null ? "Open-Meteo gagal" : e.getMessage(); }
-            final JSONObject fTsMeta = tsMeta, fTsFeed = tsFeed, fOm = om;
-            final String fTsError = tsError, fOmError = omError;
+            } catch (Exception e) { weatherError = e.getMessage() == null ? provider + " gagal" : e.getMessage(); }
+            final JSONObject fTsMeta = tsMeta, fTsFeed = tsFeed, fWeather = macroWeather;
+            final String fTsError = tsError, fWeatherError = weatherError, fProvider = provider;
             runOnUiThread(() -> {
                 try {
-                    applySourceValues(prefs, fTsMeta, fTsFeed, false, fOm);
-                    String msg = "Data terisi.";
-                    if (!fTsError.isEmpty()) msg += " TS: " + fTsError + ".";
-                    if (!fOmError.isEmpty()) msg += " OM: " + fOmError + ".";
+                    applySourceValues(prefs, fTsMeta, fTsFeed, false, fWeather);
+                    String msg = "Sumber cuaca: " + (fWeather != null ? fProvider : "data tersimpan/tidak tersedia") + ".";
+                    if (!fTsError.isEmpty()) msg += " ThingSpeak: " + fTsError + ".";
+                    if (!fWeatherError.isEmpty()) msg += " " + fProvider + ": " + fWeatherError + ".";
                     dataSourceStatus.setText(msg);
                     refreshViews(prefs);
-                    runAnalysis(prefs);
+                    hideInlineAgronomyResult();
                 } catch (Exception e) {
                     dataSourceStatus.setText("Pengisian otomatis gagal: " + (e.getMessage() == null ? "data tidak terbaca" : e.getMessage()));
                 }
@@ -915,15 +986,15 @@ public class FieldNotesActivity extends Activity {
         });
     }
 
-    // Overload retained so cache application can use the stored prefs only.
+    // Overload retained so cache application can use stored preferences only.
     private void applySourceValues(SharedPreferences prefs, JSONObject tsMeta, JSONObject tsFeed, boolean cacheOnly) {
         applySourceValues(prefs, tsMeta, tsFeed, cacheOnly, null);
     }
 
-    private void applySourceValues(SharedPreferences prefs, JSONObject tsMeta, JSONObject tsFeed, boolean cacheOnly, JSONObject om) {
+    private void applySourceValues(SharedPreferences prefs, JSONObject tsMeta, JSONObject tsFeed, boolean cacheOnly, JSONObject macroWeather) {
         String src = String.valueOf(dataSource.getSelectedItem());
         boolean useTs = src.startsWith("Prioritas") || src.equals("ThingSpeak");
-        boolean useOm = src.startsWith("Prioritas") || src.equals("Open-Meteo");
+        boolean useMacro = sourceUsesMacroWeather(src);
         JSONObject feed = tsFeed;
         JSONObject meta = tsMeta;
         if (cacheOnly && useTs) {
@@ -933,20 +1004,23 @@ public class FieldNotesActivity extends Activity {
                     feed.put("field"+i, prefs.getString("ts_field_"+i, ""));
                     meta.put("field"+i, prefs.getString("ts_field_name_"+i, prefs.getString("field_name_"+i, "")));
                 }
-            } catch (org.json.JSONException ignored) {
-                feed = null;
-                meta = null;
+            } catch (org.json.JSONException ignored) { feed = null; meta = null; }
+        }
+        if (useTs && feed != null) applyThingSpeakFields(prefs, meta, feed);
+        if (useMacro) {
+            JSONObject x = macroWeather;
+            if (x == null) {
+                String used = prefs.getString("macro_weather_provider_used", "");
+                String wanted = effectiveMacroWeatherProvider(src);
+                boolean sameProvider = wanted.equalsIgnoreCase(used)
+                        || (wanted.equals("Open-Meteo") && used.toLowerCase(Locale.ROOT).contains("open-meteo"))
+                        || (wanted.equals("OpenWeather") && used.toLowerCase(Locale.ROOT).contains("openweather"))
+                        || (wanted.equals("WeatherAPI") && used.toLowerCase(Locale.ROOT).contains("weatherapi"));
+                if (sameProvider) x = openMeteoObjectFromPrefs(prefs);
             }
-        }
-        if (useTs && feed != null) {
-            applyThingSpeakFields(prefs, meta, feed);
-        }
-        if (useOm) {
-            JSONObject x = om;
-            if (x == null) x = openMeteoObjectFromPrefs(prefs);
             if (x != null) applyOpenMeteoFields(x, useTs, meta, feed);
         }
-        dataSourceStatus.setText("Sumber input: " + src + ". Nilai otomatis tetap dapat diedit manual.");
+        dataSourceStatus.setText("Sumber input: " + src + (useMacro ? " • provider cuaca: " + effectiveMacroWeatherProvider(src) : "") + ". Nilai otomatis tetap dapat diedit manual.");
     }
 
     private JSONObject[] fetchThingSpeakSnapshot(SharedPreferences prefs) throws Exception {
@@ -973,12 +1047,213 @@ public class FieldNotesActivity extends Activity {
         double lat = prefs.getFloat("latitude", Float.NaN), lon = prefs.getFloat("longitude", Float.NaN);
         if (!Double.isFinite(lat) || !Double.isFinite(lon)) throw new Exception("koordinat GPS belum tersedia");
         String cur = "temperature_2m,relative_humidity_2m,apparent_temperature,dew_point_2m,precipitation,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m,shortwave_radiation,vapour_pressure_deficit,soil_temperature_0_to_10cm,soil_moisture_0_to_10cm,uv_index,cloud_cover,visibility";
-        String daily = "precipitation_sum,sunshine_duration,et0_fao_evapotranspiration";
+        String daily = "precipitation_sum,sunshine_duration,daylight_duration,shortwave_radiation_sum,et0_fao_evapotranspiration,uv_index_max,sunrise,sunset";
         String u = "https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon
                 + "&current=" + java.net.URLEncoder.encode(cur,"UTF-8")
                 + "&daily=" + java.net.URLEncoder.encode(daily,"UTF-8")
                 + "&wind_speed_unit=ms&timezone=Asia%2FJakarta&forecast_days=1";
-        return httpJson(u);
+        JSONObject root = httpJson(u);
+        root.put("macroWeatherProvider", "Open-Meteo");
+        return root;
+    }
+
+    /** Use OpenWeather only when explicitly selected; Priority resolves to Settings first. */
+    private JSONObject fetchOpenWeatherSnapshot(SharedPreferences prefs) throws Exception {
+        double lat = prefs.getFloat("latitude", Float.NaN), lon = prefs.getFloat("longitude", Float.NaN);
+        if (!Double.isFinite(lat) || !Double.isFinite(lon)) throw new Exception("koordinat GPS belum tersedia");
+        String key = prefs.getString("openweather_api_key", "").trim();
+        if (key.isEmpty()) throw new Exception("API key kosong. Isi Pengaturan → Cuaca Makro → OpenWeather One Call 3.0.");
+        String url = "https://api.openweathermap.org/data/3.0/onecall?lat=" + lat + "&lon=" + lon
+                + "&exclude=minutely,alerts&units=metric&appid=" + java.net.URLEncoder.encode(key, "UTF-8");
+        JSONObject ow = httpJson(url);
+        JSONObject current = ow.optJSONObject("current");
+        JSONArray dayArray = ow.optJSONArray("daily");
+        if (current == null || dayArray == null || dayArray.length() == 0) throw new Exception("Respons OpenWeather tidak memiliki current/daily.");
+        JSONObject day = dayArray.optJSONObject(0);
+        if (day == null) throw new Exception("Data harian OpenWeather kosong.");
+        JSONObject temp = day.optJSONObject("temp"); if (temp == null) temp = new JSONObject();
+        double tMax = temp.optDouble("max", current.optDouble("temp", Double.NaN));
+        double tMin = temp.optDouble("min", current.optDouble("temp", Double.NaN));
+        double elev = prefs.getFloat("elevation", 0f);
+        WeatherMacroModel.DailyDerived derived = WeatherMacroModel.estimateDaily(lat, elev, LocalDate.now(WIB), tMax, tMin,
+                current.optDouble("humidity", Double.NaN), current.optDouble("pressure", Double.NaN),
+                current.optDouble("wind_speed", Double.NaN), current.optDouble("clouds", Double.NaN));
+        JSONObject normalized = new JSONObject(), c = new JSONObject(), d = new JSONObject();
+        c.put("temperature_2m", current.optDouble("temp", Double.NaN));
+        c.put("relative_humidity_2m", current.optDouble("humidity", Double.NaN));
+        c.put("apparent_temperature", current.optDouble("feels_like", Double.NaN));
+        c.put("dew_point_2m", current.optDouble("dew_point", Double.NaN));
+        JSONObject currentRain = current.optJSONObject("rain"); c.put("precipitation", currentRain == null ? 0.0 : currentRain.optDouble("1h", 0.0));
+        c.put("surface_pressure", current.optDouble("pressure", Double.NaN));
+        c.put("wind_speed_10m", current.optDouble("wind_speed", Double.NaN));
+        c.put("wind_direction_10m", current.optDouble("wind_deg", Double.NaN));
+        c.put("wind_gusts_10m", current.optDouble("wind_gust", Double.NaN));
+        c.put("shortwave_radiation", derived.shortwaveDaylightMeanWm2);
+        c.put("vapour_pressure_deficit", AgronomyEngine.vpd(current.optDouble("temp", Double.NaN), current.optDouble("humidity", Double.NaN)));
+        // OpenWeather One Call does not provide topsoil temperature. Keep the real soil sensor/manual value separate.
+        double fc = num(prefs.getString("soil_fc_pct", "")), pwp = num(prefs.getString("soil_pwp_pct", ""));
+        boolean defaultHydraulics = !(Double.isFinite(fc) && Double.isFinite(pwp) && fc > pwp);
+        if (defaultHydraulics) { fc = 30.0; pwp = 12.0; }
+        double depth = num(prefs.getString("soil_root_depth_cm", "30")); if (!Double.isFinite(depth) || depth <= 0) depth = 30.0;
+        double fraction = prefs.getFloat("openweather_soil_water_fraction", 0.5f);
+        String previous = prefs.getString("openweather_soil_water_date", "");
+        if (!LocalDate.now(WIB).toString().equals(previous)) {
+            double rainMm = day.optDouble("rain", 0.0);
+            fraction = WeatherMacroModel.nextAvailableWaterFraction(fraction, rainMm, derived.et0Mm,
+                    WeatherMacroModel.cropCoefficient(prefs.getString("farm_phase_manual", "")), fc, pwp, depth);
+            if (!Double.isFinite(fraction)) fraction = 0.5;
+            prefs.edit().putFloat("openweather_soil_water_fraction", (float) fraction)
+                    .putString("openweather_soil_water_date", LocalDate.now(WIB).toString()).apply();
+        }
+        double moistFraction = WeatherMacroModel.moisturePctVol(fraction, fc, pwp) / 100.0;
+        c.put("soil_moisture_0_to_10cm", moistFraction);
+        c.put("cloud_cover", current.optDouble("clouds", Double.NaN)); c.put("uv_index", current.optDouble("uvi", Double.NaN));
+        c.put("visibility", current.optDouble("visibility", Double.NaN)); c.put("weather_code", openWeatherToWmo(current));
+        d.put("precipitation_sum", singleton(day.has("rain") ? day.optDouble("rain", Double.NaN) : 0.0));
+        d.put("uv_index_max", singleton(day.optDouble("uvi", Double.NaN)));
+        d.put("et0_fao_evapotranspiration", singleton(derived.et0Mm));
+        d.put("sunshine_duration", singleton(derived.sunshineHours * 3600.0));
+        d.put("daylight_duration", singleton(derived.daylightHours * 3600.0));
+        d.put("shortwave_radiation_sum", singleton(derived.solarRadiationMjM2));
+        d.put("temperature_2m_max", singleton(tMax)); d.put("temperature_2m_min", singleton(tMin));
+        String providerTimezone = ow.optString("timezone", "Asia/Jakarta");
+        d.put("sunrise", singletonString(epochLocal(day.optLong("sunrise",0L), providerTimezone))); d.put("sunset", singletonString(epochLocal(day.optLong("sunset",0L), providerTimezone)));
+        StringBuilder forecast = new StringBuilder();
+        for (int i=0;i<dayArray.length() && i<7;i++) {
+            JSONObject di=dayArray.optJSONObject(i); if(di==null) continue; JSONObject ti=di.optJSONObject("temp");
+            JSONArray wa=di.optJSONArray("weather"); JSONObject wi=wa==null?null:wa.optJSONObject(0); if(i>0) forecast.append(" • ");
+            forecast.append(epochLocal(di.optLong("dt",0L), providerTimezone)).append(' ').append(wi==null?"Cuaca":wi.optString("main","Cuaca"))
+                    .append(' ').append(fmt(ti==null?Double.NaN:ti.optDouble("min",Double.NaN),0)).append('–')
+                    .append(fmt(ti==null?Double.NaN:ti.optDouble("max",Double.NaN),0)).append("°C");
+        }
+        normalized.put("current", c).put("daily", d).put("macroWeatherProvider", "OpenWeather")
+                .put("macroEt0Method", "Estimasi FAO-56 PM dengan radiasi Hargreaves-Samani")
+                .put("macroSunshineMethod", "Estimasi Angstrom-Prescott")
+                .put("macroRadiationMethod", "Estimasi Hargreaves-Samani")
+                .put("macroSoilMoistureMethod", "Estimasi neraca air zona akar; bukan data pengukuran OpenWeather")
+                .put("macroForecastSummary", forecast.toString());
+        return normalized;
+    }
+
+    private JSONObject fetchWeatherApiSnapshot(SharedPreferences prefs) throws Exception {
+        double lat = prefs.getFloat("latitude", Float.NaN), lon = prefs.getFloat("longitude", Float.NaN);
+        if (!Double.isFinite(lat) || !Double.isFinite(lon)) throw new Exception("koordinat GPS belum tersedia");
+        String key = prefs.getString("weatherapi_api_key", "").trim();
+        if (key.isEmpty()) throw new Exception("API key kosong. Isi Pengaturan → Cuaca Makro → WeatherAPI.");
+        String q = java.net.URLEncoder.encode(String.format(Locale.US, "%.6f,%.6f", lat, lon), "UTF-8");
+        String forecastBase = "https://api.weatherapi.com/v1/forecast.json?key="
+                + java.net.URLEncoder.encode(key, "UTF-8") + "&q=" + q + "&days=";
+        JSONObject raw;
+        try {
+            raw = httpJson(forecastBase + "7&aqi=no&alerts=no");
+        } catch (Exception firstError) {
+            String errorText = firstError.getMessage() == null ? "" : firstError.getMessage().toLowerCase(Locale.ROOT);
+            if (!(errorText.contains("2009") || errorText.contains("plan") || errorText.contains("subscription")
+                    || errorText.contains("forecast days") || errorText.contains("forecast range"))) throw firstError;
+            raw = httpJson(forecastBase + "3&aqi=no&alerts=no");
+        }
+        JSONObject loc = raw.optJSONObject("location"), current = raw.optJSONObject("current"), fc = raw.optJSONObject("forecast");
+        JSONArray fd = fc == null ? null : fc.optJSONArray("forecastday");
+        if (loc == null || current == null || fd == null || fd.length() == 0) throw new Exception("Respons WeatherAPI tidak memiliki cuaca saat ini/prakiraan.");
+        JSONObject dayObj = fd.optJSONObject(0); JSONObject day = dayObj == null ? null : dayObj.optJSONObject("day");
+        JSONObject astro = dayObj == null ? null : dayObj.optJSONObject("astro");
+        if (day == null) throw new Exception("Data harian WeatherAPI kosong.");
+        if (astro == null) astro = new JSONObject();
+        double elev = prefs.getFloat("elevation", 0f);
+        double windMs = current.optDouble("wind_kph", Double.NaN) / 3.6;
+        WeatherMacroModel.DailyDerived derived = WeatherMacroModel.estimateDaily(lat, elev,
+                LocalDate.parse(dayObj.optString("date", LocalDate.now(WIB).toString())),
+                day.optDouble("maxtemp_c", current.optDouble("temp_c", Double.NaN)),
+                day.optDouble("mintemp_c", current.optDouble("temp_c", Double.NaN)),
+                day.optDouble("avghumidity", current.optDouble("humidity", Double.NaN)),
+                current.optDouble("pressure_mb", Double.NaN), windMs,
+                current.optDouble("cloud", Double.NaN));
+        JSONObject normalized = new JSONObject(), c = new JSONObject(), d = new JSONObject();
+        c.put("temperature_2m", current.optDouble("temp_c", Double.NaN));
+        c.put("relative_humidity_2m", current.optDouble("humidity", Double.NaN));
+        c.put("apparent_temperature", current.optDouble("feelslike_c", Double.NaN));
+        c.put("dew_point_2m", current.optDouble("dewpoint_c", Double.NaN));
+        c.put("precipitation", current.optDouble("precip_mm", Double.NaN));
+        c.put("surface_pressure", current.optDouble("pressure_mb", Double.NaN));
+        c.put("wind_speed_10m", windMs); c.put("wind_direction_10m", current.optDouble("wind_degree", Double.NaN));
+        c.put("wind_gusts_10m", current.optDouble("gust_kph", Double.NaN) / 3.6);
+        c.put("shortwave_radiation", derived.shortwaveDaylightMeanWm2);
+        c.put("vapour_pressure_deficit", AgronomyEngine.vpd(current.optDouble("temp_c", Double.NaN), current.optDouble("humidity", Double.NaN)));
+        c.put("cloud_cover", current.optDouble("cloud", Double.NaN)); c.put("uv_index", current.optDouble("uv", Double.NaN));
+        c.put("visibility", current.optDouble("vis_km", Double.NaN) * 1000.0);
+        // WeatherAPI does not return measured topsoil temperature/moisture. Keep soil
+        // temperature unavailable, but use the same clearly-labeled water-bucket model as
+        // OpenWeather for the macro summary. This never populates the measured field inputs.
+        c.put("soil_temperature_0_to_10cm", JSONObject.NULL);
+        double fcPct = num(prefs.getString("soil_fc_pct", ""));
+        double pwpPct = num(prefs.getString("soil_pwp_pct", ""));
+        boolean defaultHydraulics = !(Double.isFinite(fcPct) && Double.isFinite(pwpPct) && fcPct > pwpPct);
+        if (defaultHydraulics) { fcPct = 30.0; pwpPct = 12.0; }
+        double rootDepthCm = num(prefs.getString("soil_root_depth_cm", "30"));
+        if (!Double.isFinite(rootDepthCm) || rootDepthCm <= 0) rootDepthCm = 30.0;
+        String localDateKey = dayObj.optString("date", LocalDate.now(WIB).toString());
+        double availableWater = prefs.getFloat("weatherapi_soil_water_fraction", 0.5f);
+        String priorModelDate = prefs.getString("weatherapi_soil_water_date", "");
+        if (!localDateKey.equals(priorModelDate)) {
+            double rainToday = day.optDouble("totalprecip_mm", 0.0);
+            availableWater = WeatherMacroModel.nextAvailableWaterFraction(availableWater, rainToday,
+                    derived.et0Mm, WeatherMacroModel.cropCoefficient(prefs.getString("farm_phase_manual", "")),
+                    fcPct, pwpPct, rootDepthCm);
+            if (!Double.isFinite(availableWater)) availableWater = 0.5;
+            prefs.edit().putFloat("weatherapi_soil_water_fraction", (float) availableWater)
+                    .putString("weatherapi_soil_water_date", localDateKey).apply();
+        }
+        c.put("soil_moisture_0_to_10cm", WeatherMacroModel.moisturePctVol(availableWater, fcPct, pwpPct) / 100.0);
+        d.put("precipitation_sum", singleton(day.optDouble("totalprecip_mm", Double.NaN)));
+        d.put("uv_index_max", singleton(day.optDouble("uv", Double.NaN)));
+        d.put("et0_fao_evapotranspiration", singleton(derived.et0Mm));
+        d.put("sunshine_duration", singleton(derived.sunshineHours * 3600.0));
+        d.put("daylight_duration", singleton(derived.daylightHours * 3600.0));
+        d.put("shortwave_radiation_sum", singleton(derived.solarRadiationMjM2));
+        d.put("temperature_2m_max", singleton(day.optDouble("maxtemp_c", Double.NaN)));
+        d.put("temperature_2m_min", singleton(day.optDouble("mintemp_c", Double.NaN)));
+        LocalDate date = LocalDate.parse(dayObj.optString("date", LocalDate.now(WIB).toString()));
+        d.put("sunrise", singletonString(weatherApiAstronomyIso(date, astro.optString("sunrise", ""))));
+        d.put("sunset", singletonString(weatherApiAstronomyIso(date, astro.optString("sunset", ""))));
+        StringBuilder summary = new StringBuilder();
+        for (int i=0; i<fd.length() && i<7; i++) {
+            JSONObject di=fd.optJSONObject(i); if(di==null) continue; JSONObject dy=di.optJSONObject("day"); if(dy==null) continue;
+            JSONObject cond=dy.optJSONObject("condition"); if(summary.length()>0) summary.append(" • ");
+            summary.append(di.optString("date", "--")).append(' ').append(cond==null?"Cuaca":cond.optString("text", "Cuaca"))
+                    .append(' ').append(fmt(dy.optDouble("mintemp_c",Double.NaN),0)).append('–')
+                    .append(fmt(dy.optDouble("maxtemp_c",Double.NaN),0)).append("°C");
+        }
+        normalized.put("current", c).put("daily", d).put("macroWeatherProvider", "WeatherAPI")
+                .put("macroForecastSummary", summary.toString())
+                .put("macroEt0Method", "Estimasi FAO-56 PM; radiasi Hargreaves-Samani")
+                .put("macroSunshineMethod", "Estimasi Angstrom-Prescott; bukan sunshine recorder")
+                .put("macroRadiationMethod", "Estimasi Hargreaves-Samani; bukan radiasi terukur WeatherAPI")
+                .put("macroSoilMoistureMethod", "Estimasi neraca air zona akar dari hujan dan ET₀; FC/PWP/kedalaman akar dapat diasumsikan; bukan pengukuran WeatherAPI atau sensor petak");
+        return normalized;
+    }
+
+    private String weatherApiAstronomyIso(LocalDate date, String value) {
+        if (date == null || value == null || value.trim().isEmpty()) return "";
+        try { return date + "T" + java.time.LocalTime.parse(value.trim(), java.time.format.DateTimeFormatter.ofPattern("h:mm a", Locale.US)).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm", Locale.US)); }
+        catch (Exception ignored) { return ""; }
+    }
+
+    private JSONArray singleton(double value) { JSONArray a = new JSONArray(); a.put(Double.isFinite(value) ? value : JSONObject.NULL); return a; }
+    private JSONArray singletonString(String value) { JSONArray a = new JSONArray(); a.put(value == null || value.isEmpty() ? JSONObject.NULL : value); return a; }
+    private String epochLocal(long seconds) { return epochLocal(seconds, WIB.getId()); }
+    private String epochLocal(long seconds, String timezone) {
+        if (seconds <= 0) return "";
+        try {
+            java.time.ZoneId zone = java.time.ZoneId.of(timezone == null || timezone.trim().isEmpty() ? WIB.getId() : timezone.trim());
+            return java.time.Instant.ofEpochSecond(seconds).atZone(zone).format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm", Locale.US));
+        } catch (Exception ignored) {
+            return java.time.Instant.ofEpochSecond(seconds).atZone(WIB).format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm", Locale.US));
+        }
+    }
+    private int openWeatherToWmo(JSONObject current) {
+        JSONArray a=current.optJSONArray("weather"); JSONObject i=a==null?null:a.optJSONObject(0); int id=i==null?0:i.optInt("id",0);
+        if(id>=200&&id<300)return 95; if(id>=300&&id<400)return 51; if(id>=500&&id<600)return id>=502?65:61; if(id>=600&&id<700)return 71;
+        if(id==701||id==741)return 45; if(id==800)return 0; if(id==801||id==802)return 2; if(id>=803)return 3; return -1;
     }
 
     private void applyThingSpeakFields(SharedPreferences prefs, JSONObject meta, JSONObject feed) {
@@ -1097,13 +1372,14 @@ public class FieldNotesActivity extends Activity {
         try {
             JSONObject c=root.optJSONObject("current"), d=root.optJSONObject("daily");
             if(c==null) return;
+            String macroProvider = root.optString("macroWeatherProvider", prefs.getString("macro_weather_provider", "Open-Meteo"));
             setOm(airTemp, c.optDouble("temperature_2m",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"suhu udara","air temp","temperature"},new String[]{"tanah","soil"}));
             setOm(airRh, c.optDouble("relative_humidity_2m",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kelembapan udara","humidity","rh"},new String[]{"tanah","soil"}));
             setOm(pressure, c.optDouble("surface_pressure",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"tekanan","pressure","baro"},new String[]{}));
             setOm(rain24, d==null?Double.NaN:first(d,"precipitation_sum"), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"hujan 24","rain","precip"},new String[]{}));
             setOm(et0, d==null?Double.NaN:first(d,"et0_fao_evapotranspiration"), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"et0","evapotrans"},new String[]{}));
-            setOm(soilTemp, c.optDouble("soil_temperature_0_to_10cm",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"suhu tanah","soil temp","soil_temperature"},new String[]{}));
-            setOm(soilMoisture, c.optDouble("soil_moisture_0_to_10cm",Double.NaN)*100.0, tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kelembapan tanah","soil moisture","soil_moisture","moisture"},new String[]{"udara","air"}));
+            // Both soil temperature and soil moisture from a macro grid/model are shown in the
+            // macro summary only; never overwrite field-measured/sensor/manual soil inputs.
             setOm(windSpeed, c.optDouble("wind_speed_10m",Double.NaN), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"kecepatan angin","wind speed","wind"},new String[]{"arah","direction","gust"}));
             setOm(par, LightConversion.parToPpfd(LightConversion.shortwaveToParWm2(c.optDouble("shortwave_radiation",Double.NaN))), tsFirst && hasTs(tsMeta,tsFeed,new String[]{"ppfd","par"},new String[]{"shortwave"}));
             // Open-Meteo has radiative flux, not direct lux. This is an explicitly labelled estimate.
@@ -1114,6 +1390,11 @@ public class FieldNotesActivity extends Activity {
                     .putString("om_rh", show(c.optDouble("relative_humidity_2m",Double.NaN)))
                     .putString("om_pressure", show(c.optDouble("surface_pressure",Double.NaN)))
                     .putString("om_rain", show(d==null?Double.NaN:first(d,"precipitation_sum")))
+                    .putString("om_rain_now", show(c.optDouble("precipitation",Double.NaN)))
+                    .putString("om_uv", show(c.optDouble("uv_index",Double.NaN)))
+                    .putString("om_uv_daily_max", show(d==null?Double.NaN:first(d,"uv_index_max")))
+                    .putString("om_sunrise", shortTime(d==null?"":firstString(d,"sunrise")))
+                    .putString("om_sunset", shortTime(d==null?"":firstString(d,"sunset")))
                     .putString("om_et0", show(d==null?Double.NaN:first(d,"et0_fao_evapotranspiration")))
                     .putString("om_soil_temp", show(c.optDouble("soil_temperature_0_to_10cm",Double.NaN)))
                     .putString("om_soil_moisture", show(c.optDouble("soil_moisture_0_to_10cm",Double.NaN)))
@@ -1124,28 +1405,75 @@ public class FieldNotesActivity extends Activity {
                     .putString("om_lux", show(c.optDouble("shortwave_radiation",Double.NaN) * 120.0))
                     .putString("om_par", show(LightConversion.shortwaveToParWm2(c.optDouble("shortwave_radiation",Double.NaN))))
                     .putString("om_ppfd", show(LightConversion.parToPpfd(LightConversion.shortwaveToParWm2(c.optDouble("shortwave_radiation",Double.NaN)))))
-                    .putString("om_sun_hours", show(d==null?Double.NaN:first(d,"sunshine_duration")/3600.0)).apply();
+                    .putString("om_sun_hours", show(d==null?Double.NaN:first(d,"sunshine_duration")/3600.0))
+                    .putString("om_forecast_7d", root.optString("macroForecastSummary", prefs.getString("om_forecast_7d", "")))
+                    .putString("om_radiation_daily", show(d==null?Double.NaN:first(d,"shortwave_radiation_sum")))
+                    .putString("om_daylight_hours", show(d==null?Double.NaN:first(d,"daylight_duration")/3600.0))
+                    .putString("macro_weather_provider_used", macroProvider)
+                    .putString("om_et0_method", root.optString("macroEt0Method", macroProvider.equals("Open-Meteo") ? "Open-Meteo ET₀ FAO-56 PM" : "Estimasi FAO-56 PM"))
+                    .putString("om_sunshine_method", root.optString("macroSunshineMethod", macroProvider.equals("Open-Meteo") ? "Open-Meteo sunshine_duration" : "Estimasi Angstrom-Prescott"))
+                    .putString("om_radiation_method", root.optString("macroRadiationMethod", macroProvider.equals("Open-Meteo") ? "Open-Meteo shortwave_radiation" : "Estimasi Hargreaves-Samani"))
+                    .putString("om_soil_moisture_method", root.optString("macroSoilMoistureMethod", macroProvider.equals("Open-Meteo") ? "Open-Meteo soil moisture model/grid" : "Model soil moisture / parameter tidak tersedia"))
+                    .apply();
+            double macroMoisture = c.optDouble("soil_moisture_0_to_10cm", Double.NaN);
+            double shortwave = c.optDouble("shortwave_radiation", Double.NaN);
+            double parWm2 = LightConversion.shortwaveToParWm2(shortwave);
+            String methodLux = "lux estimasi ≈ shortwave × 120; bukan pengukuran lux langsung";
+            StringBuilder macroText = new StringBuilder();
+            macroText.append("CUACA MAKRO • ").append(macroProvider)
+                    .append("\nSuhu tanah makro model ").append(show(c.optDouble("soil_temperature_0_to_10cm",Double.NaN))).append(" °C (bila tersedia; tidak mengganti sensor) ")
+                    .append("\nET₀ ").append(show(d==null?Double.NaN:first(d,"et0_fao_evapotranspiration"))).append(" mm/hari • Sunshine ")
+                    .append(show(d==null?Double.NaN:first(d,"sunshine_duration")/3600.0)).append(" jam/hari")
+                    .append("\nRadiasi shortwave ").append(show(shortwave)).append(" W/m² • radiasi harian ")
+                    .append(show(d==null?Double.NaN:first(d,"shortwave_radiation_sum"))).append(" MJ/m²")
+                    .append("\nPAR estimasi ").append(show(parWm2)).append(" W/m² • PPFD estimasi ")
+                    .append(show(LightConversion.parToPpfd(parWm2))).append(" µmol/m²/s • Lux estimasi ").append(show(shortwave*120.0)).append(" lux")
+                    .append("\nKelembapan tanah makro ").append(show(macroMoisture*100.0)).append(" %vol • ")
+                    .append(root.optString("macroSoilMoistureMethod", macroProvider.equals("Open-Meteo") ? "grid/model Open-Meteo" : "model/tidak tersedia dari provider langsung"))
+                    .append(".\nET₀: ").append(root.optString("macroEt0Method", macroProvider.equals("OpenWeather") ? "FAO-56 PM, radiasi Hargreaves-Samani" : "FAO-56 PM Open-Meteo"))
+                    .append("; Sunshine: ").append(root.optString("macroSunshineMethod", macroProvider.equals("Open-Meteo") ? "Open-Meteo sunshine_duration" : "estimasi Angström-Prescott"))
+                    .append("; ").append(methodLux).append(".");
+            if (macroWeatherSummary != null) macroWeatherSummary.setText(macroText.toString());
         } catch(Exception ignored) {}
     }
 
     private JSONObject openMeteoObjectFromPrefs(SharedPreferences prefs) {
-        // Cache is already applied by MainActivity; this method exists as a no-network fallback.
-        JSONObject root=new JSONObject(), c=new JSONObject(), d=new JSONObject();
+        // Cached macro weather should remain usable even where a provider does not supply
+        // a parameter (for example, OpenWeather has no topsoil temperature). Never put NaN
+        // into JSONObject: that throws and would discard the entire cached weather object.
+        JSONObject root = new JSONObject(), c = new JSONObject(), d = new JSONObject();
         try {
-            c.put("temperature_2m", num(prefs.getString("om_temp","")));
-            c.put("relative_humidity_2m", num(prefs.getString("om_rh","")));
-            c.put("surface_pressure", num(prefs.getString("om_pressure","")));
-            c.put("soil_temperature_0_to_10cm", num(prefs.getString("om_soil_temp","")));
-            c.put("soil_moisture_0_to_10cm", num(prefs.getString("om_soil_moisture","")));
-            c.put("wind_speed_10m", num(prefs.getString("om_wind_speed","")));
-            c.put("wind_direction_10m", windDegrees(prefs.getString("om_wind_direction","")));
-            c.put("vapour_pressure_deficit", num(prefs.getString("om_vpd","")));
-            c.put("shortwave_radiation", num(prefs.getString("om_radiation","")));
-            JSONArray rain=new JSONArray(); rain.put(num(prefs.getString("om_rain",""))); d.put("precipitation_sum",rain);
-            JSONArray et=new JSONArray(); et.put(num(prefs.getString("om_et0",""))); d.put("et0_fao_evapotranspiration",et);
-            JSONArray sunshine=new JSONArray(); sunshine.put(num(prefs.getString("om_sun_hours",""))*3600.0); d.put("sunshine_duration",sunshine);
-            root.put("current",c).put("daily",d); return root;
-        } catch(Exception e){return null;}
+            putJsonNumber(c, "temperature_2m", num(prefs.getString("om_temp", "")));
+            putJsonNumber(c, "relative_humidity_2m", num(prefs.getString("om_rh", "")));
+            putJsonNumber(c, "surface_pressure", num(prefs.getString("om_pressure", "")));
+            putJsonNumber(c, "soil_temperature_0_to_10cm", num(prefs.getString("om_soil_temp", "")));
+            putJsonNumber(c, "soil_moisture_0_to_10cm", num(prefs.getString("om_soil_moisture", "")));
+            putJsonNumber(c, "wind_speed_10m", num(prefs.getString("om_wind_speed", "")));
+            putJsonNumber(c, "wind_direction_10m", windDegrees(prefs.getString("om_wind_direction", "")));
+            putJsonNumber(c, "vapour_pressure_deficit", num(prefs.getString("om_vpd", "")));
+            putJsonNumber(c, "shortwave_radiation", num(prefs.getString("om_radiation", "")));
+            d.put("precipitation_sum", singleton(num(prefs.getString("om_rain", ""))));
+            d.put("et0_fao_evapotranspiration", singleton(num(prefs.getString("om_et0", ""))));
+            d.put("sunshine_duration", singleton(num(prefs.getString("om_sun_hours", "")) * 3600.0));
+            d.put("shortwave_radiation_sum", singleton(num(prefs.getString("om_radiation_daily", ""))));
+            d.put("daylight_duration", singleton(num(prefs.getString("om_daylight_hours", "")) * 3600.0));
+            root.put("current", c).put("daily", d)
+                    .put("macroWeatherProvider", prefs.getString("macro_weather_provider_used",
+                            prefs.getString("macro_weather_provider", "Open-Meteo")))
+                    .put("macroEt0Method", prefs.getString("om_et0_method", ""))
+                    .put("macroSunshineMethod", prefs.getString("om_sunshine_method", ""))
+                    .put("macroRadiationMethod", prefs.getString("om_radiation_method", ""))
+                    .put("macroSoilMoistureMethod", prefs.getString("om_soil_moisture_method", ""))
+                    .put("macroForecastSummary", prefs.getString("om_forecast_7d", ""));
+            return root;
+        } catch (Exception e) {
+            android.util.Log.w("FieldNotes", "Cache cuaca makro tidak lengkap", e);
+            return null;
+        }
+    }
+
+    private void putJsonNumber(JSONObject target, String key, double value) throws org.json.JSONException {
+        target.put(key, Double.isFinite(value) ? value : JSONObject.NULL);
     }
 
     private double windDegrees(String s){
@@ -1170,7 +1498,7 @@ public class FieldNotesActivity extends Activity {
         java.net.HttpURLConnection c=(java.net.HttpURLConnection)new java.net.URL(url).openConnection();
         c.setRequestMethod("GET"); c.setConnectTimeout(8000); c.setReadTimeout(12000); c.setUseCaches(false); c.setRequestProperty("Accept","application/json");
         int code=c.getResponseCode(); InputStream in=(code>=200&&code<300)?c.getInputStream():c.getErrorStream(); String body=readAll(in); c.disconnect();
-        if(code<200||code>=300)throw new Exception("HTTP "+code); if(body.trim().isEmpty())throw new Exception("Respons kosong"); return new JSONObject(body);
+        if(code<200||code>=300)throw new Exception("HTTP "+code+(body.trim().isEmpty()?"":" — "+body.substring(0,Math.min(240,body.length())))); if(body.trim().isEmpty())throw new Exception("Respons kosong"); return new JSONObject(body);
     }
 
     private String readAll(InputStream in) throws Exception {
@@ -1323,7 +1651,7 @@ public class FieldNotesActivity extends Activity {
             {"Data asli tersedia (input pengguna/sensor/API/riwayat; periksa metode dan satuannya):", "Data asli yang sudah ada:"},
             {"Data belum tersedia:", "Data yang belum diisi atau belum ditemukan:"},
             {"Estimasi/default yang dipakai hanya di dalam perhitungan:", "Perkiraan atau nilai bawaan yang dipakai dalam hitungan:"},
-            {"PENTING: nilai asli dari input, sensor USB/RS485, ThingSpeak/Open-Meteo, riwayat atau laboratorium tidak ditimpa oleh estimasi. Saat nilai asli baru/terbaru masuk, analisis dihitung ulang dengan nilai asli tersebut.", "Nilai asli dari pengguna, sensor, cuaca, riwayat, atau laboratorium tidak diganti oleh perkiraan. Jika data asli terbaru masuk, hasil akan dihitung ulang."},
+            {"PENTING: nilai asli dari input, sensor USB/RS485, ThingSpeak/cuaca makro dari provider terpilih, riwayat atau laboratorium tidak ditimpa oleh estimasi. Saat nilai asli baru/terbaru masuk, analisis dihitung ulang dengan nilai asli tersebut.", "Nilai asli dari pengguna, sensor, cuaca, riwayat, atau laboratorium tidak diganti oleh perkiraan. Jika data asli terbaru masuk, hasil akan dihitung ulang."},
             {"PENTING:", "Penting:"}, {"pH-buffer", "uji penyangga pH"}, {"Al-dd", "aluminium tanah (Al-dd)"},
             {"H-dd", "keasaman cadangan (H-dd)"}, {"CEC/KTK", "kemampuan tanah menahan hara (KTK)"}, {"CEC", "KTK"},
             {"bulk density", "berat isi tanah"}, {"Stok lapisan", "Perkiraan jumlah hara dalam lapisan tanah"},
@@ -1685,7 +2013,76 @@ public class FieldNotesActivity extends Activity {
         }catch(Exception e){Toast.makeText(this,"Histori tidak dapat dibaca.",Toast.LENGTH_SHORT).show();}
     }
 
+    /** Save current form values for the standalone Agronomy window, without adding a field-history entry. */
+    private void persistCurrentInputsForAnalysis() {
+        String c = crop.getText().toString().trim();
+        if (c.isEmpty()) { crop.setError("Pilih atau ketik komoditas"); crop.requestFocus(); throw new IllegalArgumentException("Nama komoditas perlu diisi."); }
+        applyTBaseForCrop(c, false);
+        String canonical = CropDatabase.canonicalName(c);
+        String baseCrop = canonical == null ? c : canonical;
+        double areaNow = areaM2(), targetThaNow = targetYieldTHa();
+        prefs.edit()
+                .putString("crop", c).putString("farm_tbase_c", tBase.getText().toString().trim()).putString("farm_tbase_crop", CropDatabase.key(baseCrop))
+                .putString("farm_variety", variety.getText().toString().trim()).putString("farm_area_m2", area.getText().toString().trim())
+                .putString("farm_area_ha", Double.isFinite(areaNow) ? String.format(Locale.US, "%.8f", areaNow / 10000.0) : "")
+                .putString("farm_cultivation_mode", selectedText(cultivation, "Konvensional / PHT"))
+                .putString("farm_planting_date", plantDate.getText().toString().trim()).putString("farm_hst", String.valueOf(currentHst()))
+                .putString("farm_age_value", hst.getText().toString().trim()).putString("farm_age_unit", selectedText(ageUnit, "HST / hari"))
+                .putString("farm_phase_manual", phaseManual.getText().toString().trim()).putString("farm_target_yield_kg", targetYield.getText().toString().trim())
+                .putString("farm_target_yield_t_ha", Double.isFinite(targetThaNow) ? String.format(Locale.US, "%.6f", targetThaNow) : "")
+                .putString("soil_ph", soilPh.getText().toString().trim()).putString("soil_moisture_pct", soilMoisture.getText().toString().trim())
+                .putString("soil_temp_c", soilTemp.getText().toString().trim()).putString("soil_ec_us_cm", soilEc.getText().toString().trim())
+                .putString("soil_n", soilN.getText().toString().trim()).putString("soil_p", soilP.getText().toString().trim()).putString("soil_k", soilK.getText().toString().trim())
+                .putString("soil_source", selectedText(soilSource, "Input manual")).putString("soil_depth_cm", soilDepth.getText().toString().trim())
+                .putString("soil_bulk_density_g_cm3", soilBulkDensity.getText().toString().trim()).putString("soil_fc_pct", soilFc.getText().toString().trim())
+                .putString("soil_pwp_pct", soilPwp.getText().toString().trim()).putString("soil_ph_buffer", soilPhBuffer.getText().toString().trim())
+                .putString("soil_al_dd", soilAlDd.getText().toString().trim()).putString("soil_h_dd", soilHDd.getText().toString().trim())
+                .putString("soil_cec", soilCec.getText().toString().trim()).putString("soil_om_pct", soilOm.getText().toString().trim())
+                .putString("soil_ece_ds_m", soilEce.getText().toString().trim()).putString("soil_lime_requirement_kg_ha", soilLimeReq.getText().toString().trim())
+                .putString("soil_test_method", selectedText(soilTestMethod, "Metode tidak diketahui"))
+                .putString("soil_n_low", soilNLow.getText().toString().trim()).putString("soil_n_high", soilNHigh.getText().toString().trim())
+                .putString("soil_n_classification_basis", selectedText(soilNThresholdBasis, NitrogenInference.BASIS_INFERRED))
+                .putString("om_temp", airTemp.getText().toString().trim()).putString("om_rh", airRh.getText().toString().trim())
+                .putString("om_pressure", pressure.getText().toString().trim()).putString("om_rain", rain24.getText().toString().trim())
+                .putString("om_et0", et0.getText().toString().trim()).putString("om_sun_hours", sunHours.getText().toString().trim())
+                .putString("om_lux", lux.getText().toString().trim()).putString("om_ppfd", par.getText().toString().trim())
+                .putString("om_sun_hours", sunHours.getText().toString().trim())
+                .putString("om_wind_speed", windSpeed.getText().toString().trim()).putString("om_wind_direction", selectedText(windDirection, "Variabel"))
+                .putString("agro_data_source", selectedText(dataSource, DATA_SOURCES[0])).apply();
+        // Keep the Agronomy window aligned with the displayed input values. The form's PAR field
+        // is PPFD (µmol m⁻² s⁻¹); invert the screening conversion only when a usable value exists.
+        double formPpfd = num(par.getText().toString());
+        if (Double.isFinite(formPpfd) && formPpfd >= 0) {
+            double formParWm2 = formPpfd / 4.57;
+            double formShortwaveWm2 = formParWm2 / 0.45;
+            prefs.edit().putString("om_par", String.format(Locale.US, "%.3f", formParWm2))
+                    .putString("om_ppfd", String.format(Locale.US, "%.3f", formPpfd))
+                    .putString("om_radiation", String.format(Locale.US, "%.3f", formShortwaveWm2)).apply();
+        } else {
+            double formLux = num(lux.getText().toString());
+            if (Double.isFinite(formLux) && formLux >= 0) {
+                double formShortwaveWm2 = formLux / 120.0;
+                double formParWm2 = formShortwaveWm2 * 0.45;
+                prefs.edit().putString("om_par", String.format(Locale.US, "%.3f", formParWm2))
+                        .putString("om_radiation", String.format(Locale.US, "%.3f", formShortwaveWm2))
+                        .putString("om_lux", String.format(Locale.US, "%.1f", formLux)).apply();
+            }
+        }
+        if (macroWeatherSummary != null && !sourceUsesMacroWeather(selectedText(dataSource, DATA_SOURCES[0]))) {
+            macroWeatherSummary.setText("CUACA MAKRO • data tersimpan terpisah dari sumber pengisian "
+                    + selectedText(dataSource, DATA_SOURCES[0]) + ". Pilih prioritas/Open-Meteo/OpenWeather/WeatherAPI dan ambil data terbaru untuk memperbarui ringkasan makro.");
+        }
+    }
+
+    private void hideInlineAgronomyResult() {
+        View panel = findViewById(R.id.fnAnalysisPanel);
+        if (panel != null) panel.setVisibility(View.GONE);
+        if (analysisCards != null) analysisCards.setVisibility(View.GONE);
+        if (analysisView != null) analysisView.setVisibility(View.GONE);
+    }
+
     private void runAnalysis(SharedPreferences prefs) {
+        hideInlineAgronomyResult();
         try {
             String c = crop.getText().toString().trim();
             AgronomyEngine.CropProfile p = AgronomyEngine.profile(c);
@@ -1920,7 +2317,7 @@ public class FieldNotesActivity extends Activity {
         s.append("Data belum tersedia: ").append(missing.length()==0 ? "parameter inti yang dinilai sudah terisi" : missing.toString()).append(".\n");
         s.append("Estimasi/default yang dipakai hanya di dalam perhitungan: ").append(assumptions).append("\n");
         s.append("Tingkat ketidakpastian rekomendasi: ").append(uncertainty).append(".\n");
-        s.append("PENTING: nilai asli dari input, sensor USB/RS485, ThingSpeak/Open-Meteo, riwayat atau laboratorium tidak ditimpa oleh estimasi. Saat nilai asli baru/terbaru masuk, analisis dihitung ulang dengan nilai asli tersebut.\n\n");
+        s.append("PENTING: nilai asli dari input, sensor USB/RS485, ThingSpeak/cuaca makro dari provider terpilih, riwayat atau laboratorium tidak ditimpa oleh estimasi. Saat nilai asli baru/terbaru masuk, analisis dihitung ulang dengan nilai asli tersebut.\n\n");
     }
 
     private void appendPresent(StringBuilder target, String label, boolean present) {
@@ -2322,6 +2719,32 @@ public class FieldNotesActivity extends Activity {
                 || normalized.contains("elaeis guineensis");
     }
     private boolean sameCrop(String a, String b) { return a != null && b != null && (a.trim().equalsIgnoreCase(b.trim()) || AgronomyEngine.normalizeCrop(a).equalsIgnoreCase(AgronomyEngine.normalizeCrop(b))); }
+    private double optionalPrefNumber(SharedPreferences p, String key, double fallback) {
+        if (p == null) return fallback;
+        String raw = p.getString(key, "").trim();
+        if (raw.isEmpty()) return fallback;
+        double value = num(raw);
+        return Double.isFinite(value) ? value : fallback;
+    }
+
+    private void putOptionalJsonNumber(JSONObject target, String key, double value) throws Exception {
+        target.put(key, Double.isFinite(value) ? value : JSONObject.NULL);
+    }
+
+    private String firstString(JSONObject object, String key) {
+        if (object == null) return "";
+        JSONArray values = object.optJSONArray(key);
+        if (values == null || values.length() == 0 || values.isNull(0)) return "";
+        String value = values.optString(0, "");
+        return value == null || "null".equalsIgnoreCase(value) ? "" : value;
+    }
+
+    private String shortTime(String value) {
+        if (value == null || value.isEmpty()) return "--";
+        int p = value.indexOf('T');
+        return p >= 0 && value.length() >= p + 6 ? value.substring(p + 1, p + 6) : value;
+    }
+
     private String show(double v) { return Double.isNaN(v) || Double.isInfinite(v) ? "--" : String.format(Locale.US, "%.2f", v); }
     private int dp(int v) { return Math.max(1, Math.round(v * getResources().getDisplayMetrics().density)); }
 }

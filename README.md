@@ -109,3 +109,14 @@ Ikon launcher sekarang memakai logo kedua pilihan pengguna. Aset tersedia sebaga
 
 ## FIX14 — Tbase otomatis
 Field Tbase (°C) kini otomatis terisi saat komoditas database dipilih pada Pengaturan atau Catatan Lapangan. Komoditas manual tetap bisa mengisi Tbase sendiri; Tbase disimpan bersama kunci tanaman dan ditampilkan sebagai basis GDD/thermal time.
+
+## FIX15 — Cuaca Makro multi-provider
+
+FIX15 menambahkan pilihan provider cuaca makro Open-Meteo/OpenWeather One Call 3.0, menyamakan perilaku dashboard/Catatan Lapangan/CSV, dan menyediakan ekspor historis turunan dengan label metode untuk ET₀, sunshine duration, kelembapan tanah makro, radiasi, PAR, PPFD, serta lux. Untuk dokumentasi lengkap rumus, batas API dan validasi, baca `PATCH_NOTES_FIX15_MACRO_WEATHER_PROVIDERS.md`.
+
+Open-Meteo histori dapat diekspor hourly atau daily. OpenWeather melalui One Call 3.0 Day Summary diekspor harian, satu request per tanggal; lama proses/kuota mengikuti paket key. Kelembapan tanah Open-Meteo adalah grid model, sedangkan OpenWeather menggunakan model neraca air; keduanya bukan sensor petak. Lux dihitung sebagai estimasi kasar dari shortwave, bukan pengukuran illuminance langsung.
+
+
+## FIX16 — WeatherAPI + perbaikan dashboard OpenWeather
+
+FIX16 menambahkan WeatherAPI sebagai penyedia cuaca makro, termasuk konfigurasi API key, data prakiraan, sumber otomatis Catatan Lapangan, ringkasan Agronomi, dan ekspor CSV histori harian sesuai akses paket. Panel OpenWeather menampilkan sunrise/sunset menurut zona waktu respons, hujan harian dan 1 jam terakhir secara terpisah, serta UV saat ini dan UV maksimum harian. Estimasi ET₀/radiasi/kelembapan tanah diberi label model dan tidak menggantikan data pengukuran tanah. Lihat `PATCH_NOTES_FIX16_WEATHERAPI_OPENWEATHER.md`.

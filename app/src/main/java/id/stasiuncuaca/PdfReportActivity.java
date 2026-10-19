@@ -181,12 +181,16 @@ public class PdfReportActivity extends Activity {
 
     private void addCurrentWeather(ReportCanvas rc, android.content.SharedPreferences p) {
         rc.section("1. DATA CUACA TERKINI DAN PRAKIRAAN");
+        rc.kv("Sumber cuaca makro", pref("macro_weather_provider_used", pref("macro_weather_provider", "Open-Meteo")));
         rc.kv("Suhu udara", pref("om_temp","--")+" °C");
         rc.kv("Suhu terasa", pref("om_apparent_temp","--")+" °C");
         rc.kv("Titik embun", pref("om_dewpoint","--")+" °C");
         rc.kv("Kelembapan", pref("om_rh","--")+" %");
         rc.kv("Tekanan", pref("om_pressure","--")+" hPa");
         rc.kv("Curah hujan harian", pref("om_rain","--")+" mm/hari");
+        rc.kv("Curah hujan 1 jam terakhir", pref("om_rain_now","--")+" mm");
+        rc.kv("Matahari terbit / terbenam", pref("om_sunrise","--")+" / "+pref("om_sunset","--")+" (waktu lokasi)");
+        rc.kv("UV saat ini / maksimum hari ini", pref("om_uv","--")+" / "+pref("om_uv_daily_max","--"));
         rc.kv("ET0 FAO-56", pref("om_et0","--")+" mm/hari");
         double vpd=num(pref("om_vpd","")); rc.kv("VPD",pref("om_vpd","--")+" kPa -> "+AgronomyEngine.classifyVpd(vpd));
         rc.kv("Arah angin",pref("om_wind_direction","--")+" | "+pref("om_wind_speed","--")+" m/s | gust "+pref("om_wind_gust","--")+" m/s");
