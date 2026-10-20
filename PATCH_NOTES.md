@@ -200,9 +200,9 @@ Prediksi OPT bukan diagnosis. Verifikasi dengan gejala, populasi, luas serangan,
 Field Tbase (°C) kini otomatis terisi saat komoditas database dipilih pada Pengaturan atau Catatan Lapangan. Komoditas manual tetap bisa mengisi Tbase sendiri; Tbase disimpan bersama kunci tanaman dan ditampilkan sebagai basis GDD/thermal time.
 
 ## FIX15 — provider cuaca makro, CSV histori, Catatan Lapangan dan Analisis Agronomi
-- Pengaturan memilih Open-Meteo atau OpenWeather One Call 3.0; Dashboard dan mode Prioritas Catatan Lapangan menggunakan pilihan Pengaturan. Pilihan eksplisit Open-Meteo/OpenWeather pada Catatan Lapangan mengalahkan pilihan global dan memicu fetch provider itu.
+- FIX15 (historis): Pengaturan memilih Open-Meteo atau OpenWeather One Call. Implementasi ini telah diganti pada FIX20: Dashboard dan Catatan Lapangan menggunakan endpoint OpenWeather standar Current Weather + Forecast 5 Day / 3 Hour; tidak ada panggilan One Call API 3.0.
 - Cache memperlihatkan provider sebenarnya dan menoleransi data yang memang tidak disediakan API. OpenWeather tidak lagi memasukkan suhu tanah CWT/USB sebagai suhu tanah cuaca makro.
-- CSV Histori cuaca makro mencakup ET₀, sunshine duration, kelembapan tanah (grid/model), radiasi shortwave, PAR, PPFD dan lux. Open-Meteo mendukung export hourly/daily; OpenWeather Day Summary export harian dan memperingatkan estimasi model serta kuota request.
+- FIX15 (historis): ekspor harian OpenWeather pernah menggunakan Day Summary. Sejak FIX20, histori OpenWeather tidak dipanggil karena endpoint standar tidak menyediakan arsip historis; ekspor historis memakai Open-Meteo atau WeatherAPI sesuai akses akun.
 - Dashboard tidak lagi menampilkan panel duplikat status tanah dan judul/isi rekomendasi cuaca difokuskan pada dampak budidaya singkat. Analisis OPT tetap di fitur sendiri.
 - Tombol Analisis Agronomi di Catatan Lapangan membuka layar analisis tersendiri tanpa menduplikasi hasil di bawah formulir. Susunan bab: tanah; cuaca/air/ekologi; NPK/fase; OPT; basis data dan rekomendasi teknis termasuk waktu aplikasi pupuk; catatan.
 - ET₀, sunshine duration, kelembapan tanah makro, radiasi, PAR, PPFD dan lux tetap pada dashboard. Nilai estimasi dibedakan dari sensor; sensor tanah tidak ditimpa data makro.

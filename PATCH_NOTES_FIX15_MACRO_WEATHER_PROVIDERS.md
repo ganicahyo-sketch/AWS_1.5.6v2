@@ -1,3 +1,5 @@
+> **Catatan historis:** catatan ini mendeskripsikan implementasi FIX15. Sejak FIX20, integrasi OpenWeather beralih ke Current Weather dan Forecast 5 Day / 3 Hour API standar; endpoint One Call/Day Summary tidak lagi dipanggil dan ekspor historis OpenWeather dinonaktifkan.
+
 # FIX15 — Cuaca Makro Multi-Provider, CSV Historis, Catatan Lapangan dan Analisis Agronomi
 
 Basis: STASIUN CUACA v1.5.7 — FIX14. Versi aplikasi tetap 1.5.7 / versionCode 157.

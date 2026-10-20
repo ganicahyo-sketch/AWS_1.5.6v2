@@ -1,3 +1,5 @@
+> **Catatan historis:** catatan ini mendeskripsikan implementasi FIX16. Sejak FIX20, integrasi OpenWeather beralih ke Current Weather dan Forecast 5 Day / 3 Hour API standar; UV/riwayat OpenWeather tidak dianggap tersedia pada endpoint standar dan tidak ada pemanggilan One Call API 3.0.
+
 # FIX16 — WeatherAPI + Perbaikan Dashboard OpenWeather
 
 Basis: `STASIUN CUACA v1.5.7 — FIX15` dari paket sumber yang tersedia. `versionName` dan `versionCode` aplikasi sengaja dipertahankan sesuai basis v1.5.7/157 agar pembaruan ini tetap merupakan patch sumber, bukan rilis versi aplikasi baru.

@@ -74,7 +74,7 @@ public class SettingsActivity extends Activity {
         crop.setOnFocusChangeListener((v,hasFocus)->{ if(!hasFocus) applyTBaseForCrop(crop.getText().toString().trim(), false); });
         tBase.setOnFocusChangeListener((v,hasFocus)->{ if(!hasFocus) persistTBaseForCurrentCrop(); });
         weatherProvider=findViewById(R.id.weatherProvider); openWeatherKey=findViewById(R.id.openWeatherKey); weatherApiKey=findViewById(R.id.weatherApiKey);
-        ArrayAdapter<String> weatherAdapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,new String[]{"Open-Meteo (tanpa API key)","OpenWeather One Call 3.0 (perlu API key)","WeatherAPI (perlu API key)"});
+        ArrayAdapter<String> weatherAdapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,new String[]{"Open-Meteo (tanpa API key)","OpenWeather Standard 2.5 (perlu API key)","WeatherAPI (perlu API key)"});
         weatherAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); weatherProvider.setAdapter(weatherAdapter);
         aiProvider=findViewById(R.id.aiProvider); aiGoogleSearch=findViewById(R.id.aiGoogleSearch);
         geminiKey=findViewById(R.id.geminiKey); geminiModel=findViewById(R.id.geminiModel);

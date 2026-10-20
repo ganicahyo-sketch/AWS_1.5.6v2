@@ -112,11 +112,20 @@ Field Tbase (°C) kini otomatis terisi saat komoditas database dipilih pada Peng
 
 ## FIX15 — Cuaca Makro multi-provider
 
-FIX15 menambahkan pilihan provider cuaca makro Open-Meteo/OpenWeather One Call 3.0, menyamakan perilaku dashboard/Catatan Lapangan/CSV, dan menyediakan ekspor historis turunan dengan label metode untuk ET₀, sunshine duration, kelembapan tanah makro, radiasi, PAR, PPFD, serta lux. Untuk dokumentasi lengkap rumus, batas API dan validasi, baca `PATCH_NOTES_FIX15_MACRO_WEATHER_PROVIDERS.md`.
+FIX20 menggunakan endpoint OpenWeather standar (Current Weather API `/data/2.5/weather` dan 5 Day / 3 Hour Forecast `/data/2.5/forecast`) untuk Dashboard dan Catatan Lapangan. Tidak ada pemanggilan One Call API 3.0. API standar menyediakan keadaan saat ini dan prakiraan, bukan arsip histori, dan tidak menyediakan UV index; gunakan Open-Meteo atau WeatherAPI bila membutuhkan ekspor cuaca historis/UV.
 
-Open-Meteo histori dapat diekspor hourly atau daily. OpenWeather melalui One Call 3.0 Day Summary diekspor harian, satu request per tanggal; lama proses/kuota mengikuti paket key. Kelembapan tanah Open-Meteo adalah grid model, sedangkan OpenWeather menggunakan model neraca air; keduanya bukan sensor petak. Lux dihitung sebagai estimasi kasar dari shortwave, bukan pengukuran illuminance langsung.
+Open-Meteo histori dapat diekspor per jam atau harian. WeatherAPI historis bergantung paket akun. Pada OpenWeather standar, curah hujan harian yang ditampilkan merupakan jumlah interval prakiraan 3 jam tersisa pada tanggal lokal, bukan total observasi sejak tengah malam. ET₀, sunshine duration, radiasi, PAR, PPFD, lux, dan kelembapan tanah makro diturunkan dengan model dan dilabeli estimasi; bukan pengukuran sensor petak.
 
 
 ## FIX16 — WeatherAPI + perbaikan dashboard OpenWeather
 
 FIX16 menambahkan WeatherAPI sebagai penyedia cuaca makro, termasuk konfigurasi API key, data prakiraan, sumber otomatis Catatan Lapangan, ringkasan Agronomi, dan ekspor CSV histori harian sesuai akses paket. Panel OpenWeather menampilkan sunrise/sunset menurut zona waktu respons, hujan harian dan 1 jam terakhir secara terpisah, serta UV saat ini dan UV maksimum harian. Estimasi ET₀/radiasi/kelembapan tanah diberi label model dan tidak menggantikan data pengukuran tanah. Lihat `PATCH_NOTES_FIX16_WEATHERAPI_OPENWEATHER.md`.
+
+
+## FIX20 — OpenWeather Standard / Free endpoints
+
+- Dashboard dan Catatan Lapangan memakai Current Weather (`/data/2.5/weather`) dan 5 Day / 3 Hour Forecast (`/data/2.5/forecast`) dengan API key biasa.
+- Penggunaan One Call API 3.0 dan Day Summary API dihapus dari kode aplikasi.
+- UV tidak diisi/diperkirakan dari OpenWeather standar karena endpoint tersebut tidak menyediakannya. Pilih Open-Meteo atau WeatherAPI bila memerlukan UV.
+- Ekspor histori OpenWeather dinonaktifkan dengan pemberitahuan; OpenWeather standar hanya dipakai untuk kondisi kini dan prakiraan.
+- Hujan OpenWeather di label prakiraan adalah penjumlahan interval forecast 3 jam yang tersisa pada tanggal lokal.

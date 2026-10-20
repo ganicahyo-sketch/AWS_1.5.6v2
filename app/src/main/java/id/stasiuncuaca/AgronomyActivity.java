@@ -70,7 +70,9 @@ public class AgronomyActivity extends Activity {
         AgronomyEngine.CropProfile cp=AgronomyEngine.profile(crop);
         String mode=prefs.getString("farm_cultivation_mode","Konvensional / PHT");
         String method=prefs.getString("soil_test_method","Metode tidak diketahui");
-        double ph=num(prefs.getString("soil_ph","")),n=num(prefs.getString("soil_n","")),p=num(prefs.getString("soil_p","")),k=num(prefs.getString("soil_k",""));
+        double ph=num(prefs.getString("soil_ph",""));
+        if(!Double.isFinite(ph)) ph=num(FieldNotesActivity.latestFieldNotePhValue(this, prefs));
+        double n=num(prefs.getString("soil_n","")),p=num(prefs.getString("soil_p","")),k=num(prefs.getString("soil_k",""));
         double nLow=num(prefs.getString("soil_n_low","")),nHigh=num(prefs.getString("soil_n_high",""));
         if (!NitrogenInference.usesMethodSpecificThresholds(prefs.getString("soil_n_classification_basis", NitrogenInference.BASIS_INFERRED))) { nLow=Double.NaN; nHigh=Double.NaN; }
         double ec=num(prefs.getString("soil_ec_us_cm","")),ece=num(prefs.getString("soil_ece_ds_m","")),moist=num(prefs.getString("soil_moisture_pct",""));
@@ -198,8 +200,8 @@ public class AgronomyActivity extends Activity {
         s.append("Kebutuhan CaCO₃-ekuivalen estimasi: ").append(show(num(prefs.getString("limecalc_caco3_equivalent_t_ha", ""))))
                 .append(" t/ha. Dosis dolomit hasil hitung: ").append(show(num(prefs.getString("limecalc_dolomite_t_ha", ""))))
                 .append(" t/ha = ").append(show(num(prefs.getString("limecalc_dolomite_kg_ha", "")))).append(" kg/ha.\n");
-        s.append("Luas yang digunakan kalkulator: ").append(show(num(prefs.getString("limecalc_area_ha", ""))))
-                .append(" ha; total dolomit untuk luas tersebut: ")
+        s.append("Luas yang digunakan kalkulator: ").append(show(num(prefs.getString("limecalc_area_m2", ""))))
+                .append(" m²; total dolomit untuk luas tersebut: ")
                 .append(show(num(prefs.getString("limecalc_total_kg", "")))).append(" kg.\n");
         s.append("Ringkasan kalkulator: ").append(prefs.getString("limecalc_summary", "Tidak ada ringkasan."))
                 .append("\nCatatan: estimasi pH-only; validasi dosis dengan uji buffer/Al-dd/H-dd/CEC dan kebutuhan Ca/Mg sebelum aplikasi.\n");
@@ -352,7 +354,7 @@ public class AgronomyActivity extends Activity {
                 "Rekomendasi harus menggunakan input/proses yang diizinkan sistem organik yang berlaku dan tidak boleh menganggap semua input kimia setara dengan input organik.\n\n"+
                 "SUMBER UTAMA\n"+
                 "• Open-Meteo Historical Weather API — data historis reanalysis, variabel cuaca, tanah, ET₀, VPD dan radiasi.\n"+
-                "• OpenWeather One Call 3.0 — cuaca terkini/prakiraan; hasil estimasi turunan diberi label.\n"+
+                "• OpenWeather Current Weather + Forecast 5 Day / 3 Hour (API standar); UV dan histori tidak tersedia pada endpoint ini, parameter turunan diberi label estimasi.\n"+
                 "• WeatherAPI Forecast/History API — cakupan dan parameter historis bergantung paket akun; ET₀/radiasi ditandai langsung atau estimasi sesuai respons.\n"+
                 "• OpenAlex — pencarian literatur ilmiah.\n"+
                 "• AgronomyEngine / NitrogenInference — model skrining lokal aplikasi.\n"+

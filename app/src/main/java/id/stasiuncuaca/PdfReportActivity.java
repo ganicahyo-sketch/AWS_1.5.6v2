@@ -209,7 +209,9 @@ public class PdfReportActivity extends Activity {
 
     private void addSoil(ReportCanvas rc, android.content.SharedPreferences p) {
         String crop=pref("crop","Tanaman pertanian"); AgronomyEngine.CropProfile cp=AgronomyEngine.profile(crop);
-        double ph=num(pref("soil_ph","")),n=num(pref("soil_n","")),pp=num(pref("soil_p","")),k=num(pref("soil_k","")),nLow=num(pref("soil_n_low","")),nHigh=num(pref("soil_n_high",""));
+        double ph=num(pref("soil_ph",""));
+        if(!Double.isFinite(ph)) ph=num(FieldNotesActivity.latestFieldNotePhValue(this, p));
+        double n=num(pref("soil_n","")),pp=num(pref("soil_p","")),k=num(pref("soil_k","")),nLow=num(pref("soil_n_low","")),nHigh=num(pref("soil_n_high",""));
         if (!NitrogenInference.usesMethodSpecificThresholds(pref("soil_n_classification_basis", NitrogenInference.BASIS_INFERRED))) { nLow=Double.NaN; nHigh=Double.NaN; }
         double ec=num(pref("soil_ec_us_cm","")),ece=num(pref("soil_ece_ds_m","")),moist=num(pref("soil_moisture_pct",""));
         double depth=num(pref("soil_depth_cm","20")),bd=num(pref("soil_bulk_density_g_cm3","1.30")),fc=num(pref("soil_fc_pct","")),pwp=num(pref("soil_pwp_pct",""));
@@ -348,10 +350,10 @@ public class PdfReportActivity extends Activity {
             rc.kv("Faktor CaCO₃-ekuivalen / efektivitas", show(num(pref("limecalc_rate_t_ha_per_ph", ""))) + " t/ha/unit pH / " + show(num(pref("limecalc_neutralizing_pct", ""))) + "%");
             rc.kv("CaCO₃-ekuivalen estimasi", show(num(pref("limecalc_caco3_equivalent_t_ha", ""))) + " t/ha");
             rc.kv("Dosis dolomit hasil hitung", show(num(pref("limecalc_dolomite_t_ha", ""))) + " t/ha = " + show(num(pref("limecalc_dolomite_kg_ha", ""))) + " kg/ha");
-            rc.kv("Luas kalkulator / total dolomit", show(num(pref("limecalc_area_ha", ""))) + " ha / " + show(num(pref("limecalc_total_kg", ""))) + " kg");
+            rc.kv("Luas kalkulator / total dolomit", show(num(pref("limecalc_area_m2", ""))) + " m² / " + show(num(pref("limecalc_total_kg", ""))) + " kg");
             rc.text(pref("limecalc_summary", "Ringkasan kalkulator dolomit tidak tersedia."));
         } else {
-            rc.text("Belum ada hasil perhitungan dolomit tersimpan. Gunakan Kalkulator Dolomit di Analisis Agronomi untuk menghitung dosis dan total berdasarkan luas.");
+            rc.text("Belum ada hasil perhitungan dolomit tersimpan. Gunakan Kalkulator Dolomit yang terintegrasi di Analisis Agronomi untuk menghitung dosis dan total berdasarkan luas.");
         }
         rc.text("Estimasi dolomit di aplikasi adalah model pH-only, bukan pengukuran kebutuhan kapur laboratorium. Validasi dengan pH-buffer, Al-dd/H-dd, CEC/KTK serta kebutuhan Ca/Mg; jangan aplikasi hanya berdasarkan pH tanpa mempertimbangkan tanah dan komoditas.");
 

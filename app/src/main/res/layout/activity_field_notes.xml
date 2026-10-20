@@ -444,16 +444,6 @@
                 <EditText android:id="@+id/fnSoilBulkDensity" android:layout_width="match_parent" android:layout_height="48dp" android:hint="Bulk density (g/cm³); preset mineral 1,30 / gambut 0,30 / input sendiri" android:inputType="numberDecimal" android:textColor="@color/text_main" android:textColorHint="@color/text_muted" android:singleLine="true"/>
                 <EditText android:id="@+id/fnSoilFc" android:layout_width="match_parent" android:layout_height="48dp" android:hint="Field Capacity / FC (% volume), hasil lab" android:inputType="numberDecimal" android:textColor="@color/text_main" android:textColorHint="@color/text_muted" android:singleLine="true"/>
                 <EditText android:id="@+id/fnSoilPwp" android:layout_width="match_parent" android:layout_height="48dp" android:hint="Permanent Wilting Point / PWP (% volume), hasil lab" android:inputType="numberDecimal" android:textColor="@color/text_main" android:textColorHint="@color/text_muted" android:singleLine="true"/>
-                <TextView
-                    android:id="@+id/fnDolomiteCalculator"
-                    android:layout_width="match_parent"
-                    android:layout_height="44dp"
-                    android:layout_marginTop="5dp"
-                    android:gravity="center"
-                    android:text="KALKULATOR DOLOMIT BERDASARKAN pH"
-                    android:background="@drawable/bg_button"
-                    android:textColor="@color/navy_950"
-                    android:textStyle="bold"/>
                 <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Klasifikasi N: pilih basis dengan benar. Ambang N hanya berlaku jika berasal dari metode/lab N-spesifik." android:textColor="@color/cyan" android:textSize="15sp"/>
                 <Spinner android:id="@+id/fnSoilNThresholdBasis" android:layout_width="match_parent" android:layout_height="48dp"/>
                 <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Batas rendah/tinggi N tersedia khusus metode N-spesifik (mg/kg), opsional" android:textColor="@color/text_muted" android:textSize="13sp"/>

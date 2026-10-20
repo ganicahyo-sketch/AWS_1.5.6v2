@@ -327,11 +327,6 @@ public class FieldNotesActivity extends Activity {
         par.setText(prefs.getString("om_ppfd", ""));
 
         findViewById(R.id.fnBack).setOnClickListener(v -> finish());
-        findViewById(R.id.fnDolomiteCalculator).setOnClickListener(v -> {
-            double areaHaNow = areaM2() / 10000.0;
-            String areaHaOverride = Double.isFinite(areaHaNow) && areaHaNow > 0 ? String.format(Locale.US, "%.6f", areaHaNow) : null;
-            DolomiteCalculatorDialog.show(this, prefs, () -> runAnalysis(prefs), soilPh.getText().toString().trim(), crop.getText().toString().trim(), areaHaOverride);
-        });
         findViewById(R.id.fnSave).setOnClickListener(v -> saveFieldNote(prefs));
         findViewById(R.id.fnAddFertilizer).setOnClickListener(v -> showFertilizerDialog(prefs));
         findViewById(R.id.fnAddOpt).setOnClickListener(v -> showOptDialog(prefs));
@@ -1057,82 +1052,142 @@ public class FieldNotesActivity extends Activity {
         return root;
     }
 
-    /** Use OpenWeather only when explicitly selected; Priority resolves to Settings first. */
+    /** OpenWeather free/standard APIs only. Historical weather and UV are not part of these endpoints. */
     private JSONObject fetchOpenWeatherSnapshot(SharedPreferences prefs) throws Exception {
         double lat = prefs.getFloat("latitude", Float.NaN), lon = prefs.getFloat("longitude", Float.NaN);
         if (!Double.isFinite(lat) || !Double.isFinite(lon)) throw new Exception("koordinat GPS belum tersedia");
         String key = prefs.getString("openweather_api_key", "").trim();
-        if (key.isEmpty()) throw new Exception("API key kosong. Isi Pengaturan → Cuaca Makro → OpenWeather One Call 3.0.");
-        String url = "https://api.openweathermap.org/data/3.0/onecall?lat=" + lat + "&lon=" + lon
-                + "&exclude=minutely,alerts&units=metric&appid=" + java.net.URLEncoder.encode(key, "UTF-8");
-        JSONObject ow = httpJson(url);
-        JSONObject current = ow.optJSONObject("current");
-        JSONArray dayArray = ow.optJSONArray("daily");
-        if (current == null || dayArray == null || dayArray.length() == 0) throw new Exception("Respons OpenWeather tidak memiliki current/daily.");
-        JSONObject day = dayArray.optJSONObject(0);
-        if (day == null) throw new Exception("Data harian OpenWeather kosong.");
-        JSONObject temp = day.optJSONObject("temp"); if (temp == null) temp = new JSONObject();
-        double tMax = temp.optDouble("max", current.optDouble("temp", Double.NaN));
-        double tMin = temp.optDouble("min", current.optDouble("temp", Double.NaN));
-        double elev = prefs.getFloat("elevation", 0f);
-        WeatherMacroModel.DailyDerived derived = WeatherMacroModel.estimateDaily(lat, elev, LocalDate.now(WIB), tMax, tMin,
-                current.optDouble("humidity", Double.NaN), current.optDouble("pressure", Double.NaN),
-                current.optDouble("wind_speed", Double.NaN), current.optDouble("clouds", Double.NaN));
+        if (key.isEmpty()) throw new Exception("API key OpenWeather belum diisi. Buka Pengaturan → Cuaca Makro.");
+        String coords = "lat=" + String.format(Locale.US, "%.6f", lat) + "&lon=" + String.format(Locale.US, "%.6f", lon);
+        String encodedKey = java.net.URLEncoder.encode(key, "UTF-8");
+        JSONObject currentRoot = httpJson("https://api.openweathermap.org/data/2.5/weather?" + coords + "&units=metric&appid=" + encodedKey);
+        JSONObject forecastRoot = httpJson("https://api.openweathermap.org/data/2.5/forecast?" + coords + "&units=metric&appid=" + encodedKey);
+        JSONObject main = currentRoot.optJSONObject("main"); if (main == null) main = new JSONObject();
+        JSONObject wind = currentRoot.optJSONObject("wind"); if (wind == null) wind = new JSONObject();
+        JSONObject clouds = currentRoot.optJSONObject("clouds"); if (clouds == null) clouds = new JSONObject();
+        JSONObject sys = currentRoot.optJSONObject("sys"); if (sys == null) sys = new JSONObject();
+        JSONObject city = forecastRoot.optJSONObject("city"); if (city == null) city = new JSONObject();
+        JSONArray list = forecastRoot.optJSONArray("list");
+        if (list == null || list.length() == 0) throw new Exception("OpenWeather tidak mengembalikan prakiraan 5 hari / 3 jam.");
+        int offsetSeconds = city.optInt("timezone", currentRoot.optInt("timezone", 25200));
+        int boundedOffset = Math.max(-64800, Math.min(64800, offsetSeconds));
+        ZoneId zone = ZoneId.ofOffset("GMT", java.time.ZoneOffset.ofTotalSeconds(boundedOffset));
+        long now = currentRoot.optLong("dt", System.currentTimeMillis() / 1000L);
+        LocalDate todayDate = java.time.Instant.ofEpochSecond(now).atZone(zone).toLocalDate();
+        JSONObject today = openWeatherDailySummary(list, zone, todayDate);
+        double currentTemp = main.optDouble("temp", Double.NaN);
+        double tMax = today == null ? main.optDouble("temp_max", currentTemp) : today.optDouble("temp_max", currentTemp);
+        double tMin = today == null ? main.optDouble("temp_min", currentTemp) : today.optDouble("temp_min", currentTemp);
+        double elevation = prefs.getFloat("elevation", 0f);
+        WeatherMacroModel.DailyDerived derived = WeatherMacroModel.estimateDaily(lat, elevation, todayDate,
+                tMax, tMin, main.optDouble("humidity", Double.NaN), main.optDouble("pressure", Double.NaN),
+                wind.optDouble("speed", Double.NaN), clouds.optDouble("all", Double.NaN));
         JSONObject normalized = new JSONObject(), c = new JSONObject(), d = new JSONObject();
-        c.put("temperature_2m", current.optDouble("temp", Double.NaN));
-        c.put("relative_humidity_2m", current.optDouble("humidity", Double.NaN));
-        c.put("apparent_temperature", current.optDouble("feels_like", Double.NaN));
-        c.put("dew_point_2m", current.optDouble("dew_point", Double.NaN));
-        JSONObject currentRain = current.optJSONObject("rain"); c.put("precipitation", currentRain == null ? 0.0 : currentRain.optDouble("1h", 0.0));
-        c.put("surface_pressure", current.optDouble("pressure", Double.NaN));
-        c.put("wind_speed_10m", current.optDouble("wind_speed", Double.NaN));
-        c.put("wind_direction_10m", current.optDouble("wind_deg", Double.NaN));
-        c.put("wind_gusts_10m", current.optDouble("wind_gust", Double.NaN));
+        c.put("temperature_2m", currentTemp);
+        c.put("relative_humidity_2m", main.optDouble("humidity", Double.NaN));
+        c.put("apparent_temperature", main.optDouble("feels_like", Double.NaN));
+        c.put("dew_point_2m", estimateDewPointMagnus(main.optDouble("temp", Double.NaN), main.optDouble("humidity", Double.NaN)));
+        JSONObject currentRain = currentRoot.optJSONObject("rain");
+        c.put("precipitation", currentRain != null && currentRain.has("1h") ? currentRain.optDouble("1h", Double.NaN) : 0.0);
+        c.put("surface_pressure", main.optDouble("pressure", Double.NaN));
+        c.put("wind_speed_10m", wind.optDouble("speed", Double.NaN));
+        c.put("wind_direction_10m", wind.optDouble("deg", Double.NaN));
+        c.put("wind_gusts_10m", wind.optDouble("gust", Double.NaN));
         c.put("shortwave_radiation", derived.shortwaveDaylightMeanWm2);
-        c.put("vapour_pressure_deficit", AgronomyEngine.vpd(current.optDouble("temp", Double.NaN), current.optDouble("humidity", Double.NaN)));
-        // OpenWeather One Call does not provide topsoil temperature. Keep the real soil sensor/manual value separate.
+        c.put("vapour_pressure_deficit", AgronomyEngine.vpd(currentTemp, main.optDouble("humidity", Double.NaN)));
+        c.put("cloud_cover", clouds.optDouble("all", Double.NaN));
+        c.put("uv_index", JSONObject.NULL); // UV Index endpoint was retired; standard weather endpoints do not include UV.
+        c.put("visibility", currentRoot.optDouble("visibility", Double.NaN));
+        c.put("soil_temperature_0_to_10cm", JSONObject.NULL);
         double fc = num(prefs.getString("soil_fc_pct", "")), pwp = num(prefs.getString("soil_pwp_pct", ""));
-        boolean defaultHydraulics = !(Double.isFinite(fc) && Double.isFinite(pwp) && fc > pwp);
-        if (defaultHydraulics) { fc = 30.0; pwp = 12.0; }
+        if (!(Double.isFinite(fc) && Double.isFinite(pwp) && fc > pwp)) { fc = 30.0; pwp = 12.0; }
         double depth = num(prefs.getString("soil_root_depth_cm", "30")); if (!Double.isFinite(depth) || depth <= 0) depth = 30.0;
         double fraction = prefs.getFloat("openweather_soil_water_fraction", 0.5f);
         String previous = prefs.getString("openweather_soil_water_date", "");
-        if (!LocalDate.now(WIB).toString().equals(previous)) {
-            double rainMm = day.optDouble("rain", 0.0);
-            fraction = WeatherMacroModel.nextAvailableWaterFraction(fraction, rainMm, derived.et0Mm,
+        double rainForecast = today == null ? Double.NaN : today.optDouble("rain_total", Double.NaN);
+        if (!todayDate.toString().equals(previous)) {
+            fraction = WeatherMacroModel.nextAvailableWaterFraction(fraction,
+                    Double.isFinite(rainForecast) ? rainForecast : 0.0, derived.et0Mm,
                     WeatherMacroModel.cropCoefficient(prefs.getString("farm_phase_manual", "")), fc, pwp, depth);
             if (!Double.isFinite(fraction)) fraction = 0.5;
             prefs.edit().putFloat("openweather_soil_water_fraction", (float) fraction)
-                    .putString("openweather_soil_water_date", LocalDate.now(WIB).toString()).apply();
+                    .putString("openweather_soil_water_date", todayDate.toString()).apply();
         }
-        double moistFraction = WeatherMacroModel.moisturePctVol(fraction, fc, pwp) / 100.0;
-        c.put("soil_moisture_0_to_10cm", moistFraction);
-        c.put("cloud_cover", current.optDouble("clouds", Double.NaN)); c.put("uv_index", current.optDouble("uvi", Double.NaN));
-        c.put("visibility", current.optDouble("visibility", Double.NaN)); c.put("weather_code", openWeatherToWmo(current));
-        d.put("precipitation_sum", singleton(day.has("rain") ? day.optDouble("rain", Double.NaN) : 0.0));
-        d.put("uv_index_max", singleton(day.optDouble("uvi", Double.NaN)));
+        c.put("soil_moisture_0_to_10cm", WeatherMacroModel.moisturePctVol(fraction, fc, pwp) / 100.0);
+        c.put("weather_code", openWeatherToWmo(currentRoot));
+        d.put("precipitation_sum", singleton(rainForecast));
+        d.put("uv_index_max", singleton(Double.NaN));
         d.put("et0_fao_evapotranspiration", singleton(derived.et0Mm));
         d.put("sunshine_duration", singleton(derived.sunshineHours * 3600.0));
         d.put("daylight_duration", singleton(derived.daylightHours * 3600.0));
         d.put("shortwave_radiation_sum", singleton(derived.solarRadiationMjM2));
         d.put("temperature_2m_max", singleton(tMax)); d.put("temperature_2m_min", singleton(tMin));
-        String providerTimezone = ow.optString("timezone", "Asia/Jakarta");
-        d.put("sunrise", singletonString(epochLocal(day.optLong("sunrise",0L), providerTimezone))); d.put("sunset", singletonString(epochLocal(day.optLong("sunset",0L), providerTimezone)));
-        StringBuilder forecast = new StringBuilder();
-        for (int i=0;i<dayArray.length() && i<7;i++) {
-            JSONObject di=dayArray.optJSONObject(i); if(di==null) continue; JSONObject ti=di.optJSONObject("temp");
-            JSONArray wa=di.optJSONArray("weather"); JSONObject wi=wa==null?null:wa.optJSONObject(0); if(i>0) forecast.append(" • ");
-            forecast.append(epochLocal(di.optLong("dt",0L), providerTimezone)).append(' ').append(wi==null?"Cuaca":wi.optString("main","Cuaca"))
-                    .append(' ').append(fmt(ti==null?Double.NaN:ti.optDouble("min",Double.NaN),0)).append('–')
-                    .append(fmt(ti==null?Double.NaN:ti.optDouble("max",Double.NaN),0)).append("°C");
-        }
-        normalized.put("current", c).put("daily", d).put("macroWeatherProvider", "OpenWeather")
-                .put("macroEt0Method", "Estimasi FAO-56 PM dengan radiasi Hargreaves-Samani")
-                .put("macroSunshineMethod", "Estimasi Angstrom-Prescott")
-                .put("macroRadiationMethod", "Estimasi Hargreaves-Samani")
-                .put("macroSoilMoistureMethod", "Estimasi neraca air zona akar; bukan data pengukuran OpenWeather")
-                .put("macroForecastSummary", forecast.toString());
+        d.put("sunrise", singletonString(epochLocal(sys.optLong("sunrise", 0L), zone.getId())));
+        d.put("sunset", singletonString(epochLocal(sys.optLong("sunset", 0L), zone.getId())));
+        normalized.put("current", c).put("daily", d).put("macroWeatherProvider", "OpenWeather Standard 2.5")
+                .put("macroEt0Method", "Estimasi FAO-56 PM dengan radiasi Hargreaves-Samani; bukan nilai langsung OpenWeather")
+                .put("macroSunshineMethod", "Estimasi Angstrom-Prescott; bukan pengukuran sunshine recorder")
+                .put("macroRadiationMethod", "Estimasi Hargreaves-Samani; bukan radiasi terukur OpenWeather")
+                .put("macroDewPointMethod", "Titik embun estimasi rumus Magnus dari suhu dan RH; bukan field langsung OpenWeather")
+                .put("macroUvMethod", "UV tidak tersedia pada endpoint Current Weather/Forecast standar OpenWeather; pilih Open-Meteo atau WeatherAPI untuk UV")
+                .put("macroRainMethod", "Prakiraan curah hujan sisa hari dari interval forecast 3 jam, bukan total hujan observasi sejak tengah malam")
+                .put("macroSoilMoistureMethod", "Estimasi neraca air zona akar dari prakiraan hujan dan ET₀; bukan pengukuran OpenWeather atau sensor petak")
+                .put("macroForecastSummary", openWeatherForecastSummary(list, zone));
         return normalized;
+    }
+
+    private double estimateDewPointMagnus(double tempC, double rhPct) {
+        if (!Double.isFinite(tempC) || !Double.isFinite(rhPct) || rhPct <= 0.0 || rhPct > 100.0 || tempC <= -243.04) return Double.NaN;
+        double a = 17.625, b = 243.04;
+        double gamma = Math.log(rhPct / 100.0) + (a * tempC) / (b + tempC);
+        double denominator = a - gamma;
+        return Math.abs(denominator) < 1e-9 ? Double.NaN : (b * gamma) / denominator;
+    }
+
+    private JSONObject openWeatherDailySummary(JSONArray list, ZoneId zone, LocalDate target) throws Exception {
+        double min = Double.POSITIVE_INFINITY, max = Double.NEGATIVE_INFINITY, rainTotal = 0.0;
+        boolean any = false; String condition = "Cuaca";
+        for (int i = 0; list != null && i < list.length(); i++) {
+            JSONObject item = list.optJSONObject(i); if (item == null) continue;
+            long epoch = item.optLong("dt", 0L); if (epoch <= 0L) continue;
+            LocalDate date;
+            try { date = java.time.Instant.ofEpochSecond(epoch).atZone(zone).toLocalDate(); }
+            catch (Exception ignored) { continue; }
+            if (!target.equals(date)) continue;
+            JSONObject values = item.optJSONObject("main"); if (values == null) values = new JSONObject();
+            double temp = values.optDouble("temp", Double.NaN);
+            double lo = values.optDouble("temp_min", temp), hi = values.optDouble("temp_max", temp);
+            if (Double.isFinite(lo)) min = Math.min(min, lo);
+            if (Double.isFinite(hi)) max = Math.max(max, hi);
+            JSONObject rain = item.optJSONObject("rain"); if (rain != null) rainTotal += Math.max(0.0, rain.optDouble("3h", 0.0));
+            JSONArray weather = item.optJSONArray("weather"); JSONObject first = weather == null ? null : weather.optJSONObject(0);
+            if (first != null && "Cuaca".equals(condition)) condition = first.optString("main", "Cuaca");
+            any = true;
+        }
+        if (!any) return null;
+        JSONObject out = new JSONObject();
+        if (Double.isFinite(min)) out.put("temp_min", min); else out.put("temp_min", JSONObject.NULL);
+        if (Double.isFinite(max)) out.put("temp_max", max); else out.put("temp_max", JSONObject.NULL);
+        out.put("rain_total", rainTotal); out.put("condition", condition); out.put("date", target.toString());
+        return out;
+    }
+
+    private String openWeatherForecastSummary(JSONArray list, ZoneId zone) throws Exception {
+        StringBuilder out = new StringBuilder(); LocalDate previous = null;
+        for (int i = 0; list != null && i < list.length(); i++) {
+            JSONObject item = list.optJSONObject(i); if (item == null) continue;
+            long epoch = item.optLong("dt", 0L); if (epoch <= 0L) continue;
+            LocalDate date = java.time.Instant.ofEpochSecond(epoch).atZone(zone).toLocalDate();
+            if (date.equals(previous)) continue;
+            previous = date;
+            JSONObject day = openWeatherDailySummary(list, zone, date); if (day == null) continue;
+            if (out.length() > 0) out.append(" • ");
+            out.append(date).append(' ').append(day.optString("condition", "Cuaca")).append(' ')
+                    .append(fmt(day.optDouble("temp_min", Double.NaN), 0)).append('–')
+                    .append(fmt(day.optDouble("temp_max", Double.NaN), 0)).append("°C • Hujan ")
+                    .append(fmt(day.optDouble("rain_total", Double.NaN), 1)).append(" mm");
+        }
+        return out.toString();
     }
 
     private JSONObject fetchWeatherApiSnapshot(SharedPreferences prefs) throws Exception {
@@ -1975,6 +2030,30 @@ public class FieldNotesActivity extends Activity {
         );
         root.addView(tv,new LinearLayout.LayoutParams(-1,-2));
         new AlertDialog.Builder(this).setTitle("NOTE — METODE & RUMUS").setView(wrap(root)).setPositiveButton("TUTUP",null).show();
+    }
+
+    /** Latest valid pH recorded in field-note history, newest timestamp wins. */
+    public static String latestFieldNotePhValue(android.content.Context context, SharedPreferences prefs) {
+        double best = Double.NaN; long bestCreated = Long.MIN_VALUE;
+        try {
+            JSONArray a = new JSONArray(prefs.getString(KEY_NOTES, "[]"));
+            for (int i=0;i<a.length();i++) {
+                JSONObject o=a.optJSONObject(i); if(o==null) continue;
+                double ph=o.optDouble("soilPh", Double.NaN); long created=o.optLong("created", Long.MIN_VALUE);
+                if(Double.isFinite(ph) && ph>=0 && ph<=14 && created>=bestCreated){best=ph;bestCreated=created;}
+            }
+        } catch(Exception ignored) {}
+        try {
+            File f=new File(context.getFilesDir(), historyFileName(KEY_NOTES));
+            if(f.isFile()) {
+                StringBuilder rawBuilder=new StringBuilder();
+                try (java.io.BufferedReader br=new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(f), java.nio.charset.StandardCharsets.UTF_8))) { String line; while((line=br.readLine())!=null) rawBuilder.append(line); }
+                String raw=rawBuilder.toString();
+                JSONArray a=new JSONArray(raw);
+                for(int i=0;i<a.length();i++){JSONObject o=a.optJSONObject(i);if(o==null)continue;double ph=o.optDouble("soilPh",Double.NaN);long created=o.optLong("created",Long.MIN_VALUE);if(Double.isFinite(ph)&&ph>=0&&ph<=14&&created>=bestCreated){best=ph;bestCreated=created;}}
+            }
+        } catch(Exception ignored) {}
+        return Double.isFinite(best) ? String.format(Locale.US, "%.2f", best) : "";
     }
 
     private void showHistoryManager(SharedPreferences prefs){
