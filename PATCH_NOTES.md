@@ -214,3 +214,9 @@ Field Tbase (°C) kini otomatis terisi saat komoditas database dipilih pada Peng
 ## FIX16 — WeatherAPI dan panel OpenWeather
 
 WeatherAPI ditambahkan untuk dashboard, Catatan Lapangan, Analisis Agronomi, serta ekspor CSV histori harian. Dashboard OpenWeather diperbaiki untuk waktu matahari lokal, curah hujan harian/1 jam terakhir, dan UV saat ini/maksimum. Detail sumber, metode estimasi, dan batas build ada di `PATCH_NOTES_FIX16_WEATHERAPI_OPENWEATHER.md`.
+
+## FIX18 — hasil hitung pupuk dan dolomit pada analisis serta PDF
+- Konversi Dosis Pupuk menyimpan rincian produk yang dihitung, dosis kg/ha dan total kg jika luas tersedia, kadar label N/P₂O₅/K₂O, target hara, hara tersuplai, komoditas dan waktu perhitungan.
+- Analisis Agronomi menampilkan dosis hara, produk hasil konversi, status kesesuaian perhitungan terkini, serta hingga enam catatan pemakaian pupuk aktual untuk komoditas terpilih.
+- Hasil kalkulator dolomit ditampilkan rinci meliputi pH awal/target, ΔpH, tipe tanah, faktor CaCO₃-ekuivalen, efektivitas netralisasi, dosis t/ha dan kg/ha, luas, dan total kg.
+- PDF ringkas dan lengkap mempunyai bagian khusus hasil perhitungan pupuk/dolomit dan catatan pupuk aktual; hasil konversi tidak dianggap otomatis sebagai pupuk yang telah diaplikasikan.

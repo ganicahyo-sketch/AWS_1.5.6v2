@@ -145,6 +145,7 @@ public class PdfReportActivity extends Activity {
         addCurrentWeather(rc, p);
         addSoil(rc, p);
         addAgronomyAnalysis(rc, p);
+        addFertilizerCalculations(rc, p, complete);
         addOptRisk(rc, p);
         addRecommendations(rc, p);
         addHistory(rc, p, complete);
@@ -278,8 +279,115 @@ public class PdfReportActivity extends Activity {
         rc.line();
     }
 
+    /** Explicitly print calculated product doses, lime/dolomite calculation, and actual-use records. */
+    private void addFertilizerCalculations(ReportCanvas rc, android.content.SharedPreferences p, boolean complete) {
+        rc.section("4. HASIL PERHITUNGAN PUPUK DAN DOLOMIT");
+        String crop = pref("crop", "Tanaman pertanian");
+        double needN = num(pref("last_need_n_kg_ha", ""));
+        double needP = num(pref("last_need_p2o5_kg_ha", ""));
+        double needK = num(pref("last_need_k2o_kg_ha", ""));
+        rc.subheading("A. Kebutuhan unsur hara hasil analisis agronomi");
+        rc.kv("Komoditas dan fase", crop + " • " + phaseText());
+        rc.kv("Kebutuhan skrining per hektare", "N " + show(needN) + " kg N/ha; P₂O₅ " + show(needP) + " kg P₂O₅/ha; K₂O " + show(needK) + " kg K₂O/ha");
+        rc.text("Kebutuhan tersebut adalah estimasi skrining dari data tersimpan, fase, target hasil, kelas tanah dan riwayat pupuk. Bukan hasil rekomendasi laboratorium atau kalibrasi STCR/PUTS spesifik lokasi.");
+
+        rc.subheading("B. Konversi kebutuhan menjadi dosis produk pupuk");
+        JSONArray products;
+        try { products = new JSONArray(pref("fert_conv_result_items", "[]")); }
+        catch (Exception badJson) { products = new JSONArray(); }
+        String calculatedCrop = pref("fert_conv_result_crop", "");
+        double targetN = num(pref("fert_conv_result_target_n", ""));
+        double targetP = num(pref("fert_conv_result_target_p2o5", ""));
+        double targetK = num(pref("fert_conv_result_target_k2o", ""));
+        double savedArea = num(pref("fert_conv_result_area_m2", ""));
+        double currentArea = num(pref("farm_area_m2", ""));
+        if (!(currentArea > 0)) currentArea = num(pref("farm_area_ha", "")) * 10000.0;
+        boolean matchingArea = (!(savedArea > 0) && !(currentArea > 0))
+                || (savedArea > 0 && currentArea > 0 && Math.abs(savedArea-currentArea) <= 1.0);
+        boolean matchingNeeds = near(targetN, needN) && near(targetP, needP) && near(targetK, needK);
+        boolean matchingCrop = !calculatedCrop.isEmpty() && AgronomyEngine.normalizeCrop(calculatedCrop).equalsIgnoreCase(AgronomyEngine.normalizeCrop(crop));
+        if (products.length() == 0) {
+            rc.text("Belum ada hasil konversi dosis produk tersimpan. Buka Analisis Agronomi → Konversi Dosis Pupuk, masukkan pupuk yang tersedia dan pilih Hitung Konversi.");
+            String priorSummary = pref("fert_conv_result_summary", "");
+            if (!priorSummary.trim().isEmpty()) rc.text(priorSummary);
+        } else {
+            long created = p.getLong("fert_conv_result_created", 0L);
+            if (created > 0L) {
+                try { rc.kv("Waktu hitung terakhir", java.time.Instant.ofEpochMilli(created).atZone(WIB).format(PRINT_DATE) + " WIB"); }
+                catch (Exception ignored) { }
+            }
+            String status = matchingCrop && matchingNeeds && matchingArea
+                    ? "SESUAI dengan komoditas, target hara dan luas saat ini"
+                    : "KONVERSI LAMA / TIDAK SEPENUHNYA SESUAI — hitung ulang sebelum digunakan";
+            rc.kv("Status hasil konversi", status);
+            rc.kv("Target saat konversi", "N " + show(targetN) + "; P₂O₅ " + show(targetP) + "; K₂O " + show(targetK) + " kg/ha; komoditas " + (calculatedCrop.isEmpty()?"tidak tercatat":calculatedCrop));
+            for (int i = 0; i < products.length(); i++) {
+                JSONObject item = products.optJSONObject(i);
+                if (item == null) continue;
+                String dose = show(item.optDouble("doseKgHa", Double.NaN)) + " kg/ha";
+                if (!item.isNull("totalKg") && Double.isFinite(item.optDouble("totalKg", Double.NaN)))
+                    dose += " • total " + show(item.optDouble("totalKg", Double.NaN)) + " kg pada luas saat konversi";
+                rc.kv(item.optString("product", "Pupuk"), dose + "; kadar label N/P₂O₅/K₂O "
+                        + show(item.optDouble("nPct", Double.NaN)) + "/"
+                        + show(item.optDouble("pPct", Double.NaN)) + "/"
+                        + show(item.optDouble("kPct", Double.NaN)) + "%");
+            }
+            rc.kv("Hara tersuplai dibanding target", "N " + show(num(pref("fert_conv_result_delivered_n", ""))) + "/" + show(targetN)
+                    + "; P₂O₅ " + show(num(pref("fert_conv_result_delivered_p2o5", ""))) + "/" + show(targetP)
+                    + "; K₂O " + show(num(pref("fert_conv_result_delivered_k2o", ""))) + "/" + show(targetK) + " kg/ha");
+        }
+        rc.text("Konversi matematis memakai kadar hara (%) pada label pupuk. Ini bukan bukti pupuk telah diaplikasikan; pemakaian aktual hanya dihitung sebagai riwayat bila dicatat pada Catatan Lapangan.");
+
+        rc.subheading("C. Perhitungan kebutuhan dolomit");
+        if (p.getBoolean("limecalc_has_result", false)) {
+            String limeCrop = pref("limecalc_crop", "");
+            if (!limeCrop.isEmpty() && !AgronomyEngine.normalizeCrop(limeCrop).equalsIgnoreCase(AgronomyEngine.normalizeCrop(crop)))
+                rc.kv("Peringatan komoditas", "Hasil kalkulator disimpan untuk " + limeCrop + ", sedangkan komoditas laporan adalah " + crop + ". Hitung ulang bila perlu.");
+            rc.kv("Komoditas / tipe tanah", (limeCrop.isEmpty()?"tidak tercatat":limeCrop) + " / " + pref("limecalc_texture", "tidak tercatat"));
+            rc.kv("pH awal → target / ΔpH", show(num(pref("limecalc_current_ph", ""))) + " → " + show(num(pref("limecalc_target_ph", ""))) + " / " + show(num(pref("limecalc_delta_ph", ""))));
+            rc.kv("Faktor CaCO₃-ekuivalen / efektivitas", show(num(pref("limecalc_rate_t_ha_per_ph", ""))) + " t/ha/unit pH / " + show(num(pref("limecalc_neutralizing_pct", ""))) + "%");
+            rc.kv("CaCO₃-ekuivalen estimasi", show(num(pref("limecalc_caco3_equivalent_t_ha", ""))) + " t/ha");
+            rc.kv("Dosis dolomit hasil hitung", show(num(pref("limecalc_dolomite_t_ha", ""))) + " t/ha = " + show(num(pref("limecalc_dolomite_kg_ha", ""))) + " kg/ha");
+            rc.kv("Luas kalkulator / total dolomit", show(num(pref("limecalc_area_ha", ""))) + " ha / " + show(num(pref("limecalc_total_kg", ""))) + " kg");
+            rc.text(pref("limecalc_summary", "Ringkasan kalkulator dolomit tidak tersedia."));
+        } else {
+            rc.text("Belum ada hasil perhitungan dolomit tersimpan. Gunakan Kalkulator Dolomit di Analisis Agronomi untuk menghitung dosis dan total berdasarkan luas.");
+        }
+        rc.text("Estimasi dolomit di aplikasi adalah model pH-only, bukan pengukuran kebutuhan kapur laboratorium. Validasi dengan pH-buffer, Al-dd/H-dd, CEC/KTK serta kebutuhan Ca/Mg; jangan aplikasi hanya berdasarkan pH tanpa mempertimbangkan tanah dan komoditas.");
+
+        rc.subheading("D. Pupuk yang dicatat sudah digunakan");
+        JSONArray history;
+        try { history = new JSONArray(p.getString("fert_history", "[]")); }
+        catch (Exception badHistory) { history = new JSONArray(); }
+        int shown = 0;
+        int limit = complete ? 12 : 5;
+        for (int i = history.length() - 1; i >= 0 && shown < limit; i--) {
+            JSONObject item = history.optJSONObject(i);
+            if (item == null || !AgronomyEngine.normalizeCrop(item.optString("crop", "")).equalsIgnoreCase(AgronomyEngine.normalizeCrop(crop))) continue;
+            StringBuilder detail = new StringBuilder();
+            detail.append(item.optString("date", "tanggal tidak tercatat"))
+                    .append(" • ").append(item.optString("product", "Pupuk"))
+                    .append(" • ").append(show(item.optDouble("dose", Double.NaN))).append(" ").append(item.optString("unit", ""))
+                    .append(" • ").append(item.optString("category", "kategori tidak tercatat"));
+            String npk = item.optString("nPct", "") + "/" + item.optString("pPct", "") + "/" + item.optString("kPct", "");
+            if (!"//".equals(npk)) detail.append(" • kadar N/P₂O₅/K₂O " + npk + "%");
+            if (!item.optString("method", "").trim().isEmpty()) detail.append(" • cara aplikasi: ").append(item.optString("method", ""));
+            if (!item.optString("stage", "").trim().isEmpty()) detail.append(" • fase: ").append(item.optString("stage", ""));
+            if (!item.optString("note", "").trim().isEmpty()) detail.append(" • catatan: ").append(item.optString("note", ""));
+            rc.text("• " + detail);
+            shown++;
+        }
+        if (shown == 0) rc.text("Belum ada riwayat pupuk aktual untuk komoditas ini. Hasil konversi produk di atas tidak otomatis berarti pupuk sudah digunakan.");
+        else if (!complete && history.length() > shown) rc.text("Laporan ringkas menampilkan hingga " + limit + " catatan pupuk terbaru untuk komoditas ini; gunakan laporan lengkap untuk rincian lebih banyak.");
+        rc.line();
+    }
+
+    private boolean near(double a, double b) {
+        return Double.isFinite(a) && Double.isFinite(b) && Math.abs(a - b) <= 0.10;
+    }
+
     private void addOptRisk(ReportCanvas rc, android.content.SharedPreferences p) {
-        rc.section("4. RISIKO HAMA DAN PENYAKIT (OPT)");
+        rc.section("5. RISIKO HAMA DAN PENYAKIT (OPT)");
         String crop = pref("crop", "Tanaman pertanian");
         double t = num(pref("om_temp", "")), rh = num(pref("om_rh", "")), rain = num(pref("om_rain", "")), wind = num(pref("om_wind_speed", ""));
         rc.text(AgronomyEngine.optRisk(crop, t, rh, rain, wind, recentOpt(p, crop)));
@@ -288,7 +396,7 @@ public class PdfReportActivity extends Activity {
     }
 
     private void addHistory(ReportCanvas rc, android.content.SharedPreferences p, boolean complete) {
-        rc.section("6. RIWAYAT KEGIATAN LAPANGAN");
+        rc.section("7. RIWAYAT KEGIATAN LAPANGAN");
         List<HistoryItem> items = new ArrayList<>();
         collect(items, p.getString("field_notes_v153", "[]"), "LAPANG", "observation", "action");
         collect(items, p.getString("fert_history", "[]"), "PUPUK", "product", "note");
@@ -349,7 +457,7 @@ public class PdfReportActivity extends Activity {
     }
 
     private void addRecommendations(ReportCanvas rc, android.content.SharedPreferences p) {
-        rc.section("5. REKOMENDASI TEKNIS");
+        rc.section("6. REKOMENDASI TEKNIS");
         String crop=pref("crop","Tanaman pertanian"); AgronomyEngine.CropProfile cp=AgronomyEngine.profile(crop); String mode=pref("farm_cultivation_mode","Konvensional / PHT");
         double ph=num(pref("soil_ph","")),ec=num(pref("soil_ec_us_cm","")),ece=num(pref("soil_ece_ds_m","")),m=num(pref("soil_moisture_pct",""));
         double vpd=num(pref("om_vpd","")),rain=num(pref("om_rain","")),et0=num(pref("om_et0","")); int hst=(int)Math.round(num(pref("farm_hst","-1")));
@@ -372,13 +480,13 @@ public class PdfReportActivity extends Activity {
     private void addAi(ReportCanvas rc, android.content.SharedPreferences p) {
         String ai = pref("last_ai_advice", "");
         if (ai.trim().isEmpty()) return;
-        rc.section("7. CATATAN REKOMENDASI AI TERAKHIR");
+        rc.section("8. CATATAN REKOMENDASI AI TERAKHIR");
         rc.text(ai);
         rc.line();
     }
 
     private void addSources(ReportCanvas rc) {
-        rc.section("8. DASAR ILMIAH DAN BATASAN INTERPRETASI");
+        rc.section("9. DASAR ILMIAH DAN BATASAN INTERPRETASI");
         rc.text("- FAO-56 Penman-Monteith untuk ET0 dan kerangka Kc/ETc.");
         rc.text("- Pendekatan status hara tanah / pemupukan spesifik lokasi; persamaan STCR yang presisi memerlukan kalibrasi tanah-komoditas-setempat.");
         rc.text("- PHT/IPM dan ambang ekonomi: keputusan pengendalian mengikuti hasil monitoring, bukan cuaca saja.");

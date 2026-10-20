@@ -57,7 +57,7 @@ public class AgronomyActivity extends Activity {
         findViewById(R.id.agroFieldNotes).setOnClickListener(v->startActivity(new Intent(this,FieldNotesActivity.class)));
         findViewById(R.id.agroPdf).setOnClickListener(v->startActivity(new Intent(this,PdfReportActivity.class)));
         findViewById(R.id.agroAiButton).setOnClickListener(v->requestAi());
-        findViewById(R.id.agroFertilizerConvert).setOnClickListener(v -> FertilizerConverterDialog.show(this, prefs));
+        findViewById(R.id.agroFertilizerConvert).setOnClickListener(v -> FertilizerConverterDialog.show(this, prefs, this::render));
         findViewById(R.id.agroDolomiteCalculator).setOnClickListener(v -> DolomiteCalculatorDialog.show(this, prefs, this::render));
         findViewById(R.id.agroNotes).setOnClickListener(v->showNotes());
         render();
@@ -100,8 +100,7 @@ public class AgronomyActivity extends Activity {
         s.append("Rentang pH profil komoditas: ").append(show(cp.phMin)).append("–").append(show(cp.phMax)).append("; hasil: ").append(AgronomyEngine.classifyPH(ph,cp)).append("\n");
         s.append("pH tanah ").append(show(ph)).append(" -> ").append(AgronomyEngine.classifyPH(ph,cp)).append("\n");
         s.append("Basis klasifikasi N: ").append(prefs.getString("soil_n_classification_basis", NitrogenInference.BASIS_INFERRED)).append("\n");
-        if (prefs.getBoolean("limecalc_has_result", false))
-            s.append("KALKULATOR DOLOMIT (estimasi, bukan hasil uji kapur): ").append(prefs.getString("limecalc_summary", "Belum dihitung.")).append("\n");
+        appendDolomiteCalculation(s, crop);
         s.append("Metode N/P/K: ").append(method).append("\n");
         s.append("N tersedia: ").append(show(n)).append(" mg/kg\n");
         if (AgronomyEngine.hasValidNThresholds(nLow,nHigh)) {
@@ -164,6 +163,7 @@ public class AgronomyActivity extends Activity {
         s.append("INDIKATOR & BATAS: kelas P/K merupakan screening sesuai pilihan metode. Untuk N, ambang rendah/tinggi khusus metode yang valid dipakai bila tersedia; jika kosong atau generik, kelas N-total ditaksir dari N tersedia dengan asumsi utama 2% (sensitivitas 1–3%) sehingga dukungan N tanah tidak otomatis dianggap nol. Jika N tersedia tidak ada, dukungan tanah N belum dapat diperkirakan. Angka pupuk adalah estimasi awal, bukan rekomendasi laboratorium atau STCR/PUTS terkalibrasi.\n");
         if ("Komoditas umum".equals(cp.name)) s.append("PERHATIAN: komoditas belum memiliki profil spesifik di aplikasi; kebutuhan musim memakai baseline umum dan ketidakpastian tinggi. Verifikasi dengan rekomendasi penyuluh/laboratorium setempat.\n");
         s.append("PENTING: bukan QUEFTS/STCR penuh. Gunakan persamaan STCR/PUTS lokal bila tersedia.\n");
+        appendFertilizerProductsAndUsage(s, crop, nn, pp, kk, areaM2);
         s.append("\n4. RISK SCREENING PREDIKSI POTENSI OPT\n");
         s.append(AgronomyEngine.optRisk(crop,temp,rh,rain,num(pref("om_wind_speed","")),recent("opt_history",6),hst)).append("\n");
         s.append("\n5. DATABASE & REKOMENDASI TEKNIS\n");
@@ -174,6 +174,120 @@ public class AgronomyActivity extends Activity {
         report.setText(compact);
         renderAgronomyReportCards(compact);
         prefs.edit().putString("last_agronomy_analysis",compact).apply();
+    }
+
+    /** Show computed lime details explicitly; these are estimates, not a laboratory lime requirement. */
+    private void appendDolomiteCalculation(StringBuilder s, String currentCrop) {
+        if (!prefs.getBoolean("limecalc_has_result", false)) {
+            s.append("KALKULATOR DOLOMIT: belum ada hasil perhitungan tersimpan. Buka Kalkulator Dolomit untuk menghitung estimasi dan simpan hasilnya.\n");
+            return;
+        }
+        String calculatedCrop = prefs.getString("limecalc_crop", "");
+        s.append("HASIL PERHITUNGAN DOLOMIT (estimasi pH-only, bukan hasil uji laboratorium)\n");
+        s.append("Komoditas kalkulator: ").append(calculatedCrop.isEmpty() ? "tidak tercatat" : calculatedCrop);
+        if (!calculatedCrop.isEmpty() && !same(calculatedCrop, currentCrop))
+            s.append(" — PERHATIAN: hasil ini dihitung untuk komoditas berbeda dari pilihan saat ini.");
+        s.append("\n");
+        s.append("pH awal → target: ").append(show(num(prefs.getString("limecalc_current_ph", ""))))
+                .append(" → ").append(show(num(prefs.getString("limecalc_target_ph", ""))))
+                .append("; ΔpH ").append(show(num(prefs.getString("limecalc_delta_ph", "")))).append(".\n");
+        s.append("Tekstur tanah: ").append(prefs.getString("limecalc_texture", "tidak tercatat"))
+                .append("; faktor CaCO₃-ekuivalen: ").append(show(num(prefs.getString("limecalc_rate_t_ha_per_ph", ""))))
+                .append(" t/ha/unit pH; efektivitas netralisasi dolomit: ")
+                .append(show(num(prefs.getString("limecalc_neutralizing_pct", "")))).append("%.\n");
+        s.append("Kebutuhan CaCO₃-ekuivalen estimasi: ").append(show(num(prefs.getString("limecalc_caco3_equivalent_t_ha", ""))))
+                .append(" t/ha. Dosis dolomit hasil hitung: ").append(show(num(prefs.getString("limecalc_dolomite_t_ha", ""))))
+                .append(" t/ha = ").append(show(num(prefs.getString("limecalc_dolomite_kg_ha", "")))).append(" kg/ha.\n");
+        s.append("Luas yang digunakan kalkulator: ").append(show(num(prefs.getString("limecalc_area_ha", ""))))
+                .append(" ha; total dolomit untuk luas tersebut: ")
+                .append(show(num(prefs.getString("limecalc_total_kg", "")))).append(" kg.\n");
+        s.append("Ringkasan kalkulator: ").append(prefs.getString("limecalc_summary", "Tidak ada ringkasan."))
+                .append("\nCatatan: estimasi pH-only; validasi dosis dengan uji buffer/Al-dd/H-dd/CEC dan kebutuhan Ca/Mg sebelum aplikasi.\n");
+    }
+
+    /** Distinguish mathematically converted product doses from fertilizer actually recorded as applied. */
+    private void appendFertilizerProductsAndUsage(StringBuilder s, String crop, double nNeed, double pNeed, double kNeed, String areaText) {
+        s.append("\nHASIL KONVERSI KEBUTUHAN HARA KE PRODUK PUPUK\n");
+        JSONArray items;
+        try { items = new JSONArray(prefs.getString("fert_conv_result_items", "[]")); }
+        catch (Exception badJson) { items = new JSONArray(); }
+        String savedCrop = prefs.getString("fert_conv_result_crop", "");
+        double savedN = num(prefs.getString("fert_conv_result_target_n", ""));
+        double savedP = num(prefs.getString("fert_conv_result_target_p2o5", ""));
+        double savedK = num(prefs.getString("fert_conv_result_target_k2o", ""));
+        double savedArea = num(prefs.getString("fert_conv_result_area_m2", ""));
+        double currentArea = num(areaText);
+        boolean sameNeed = near(savedN, nNeed) && near(savedP, pNeed) && near(savedK, kNeed);
+        boolean sameArea = (!Double.isFinite(savedArea) && !Double.isFinite(currentArea))
+                || (Double.isFinite(savedArea) && Double.isFinite(currentArea) && Math.abs(savedArea - currentArea) <= 1.0);
+        boolean sameCrop = !savedCrop.isEmpty() && same(savedCrop, crop);
+        if (items.length() == 0) {
+            String oldSummary = prefs.getString("fert_conv_result_summary", "");
+            if (prefs.getLong("fert_conv_result_created", 0L) > 0L && !oldSummary.trim().isEmpty()) {
+                s.append("Hasil konversi tersimpan, tetapi tidak ada dosis produk positif yang dihasilkan oleh kombinasi saat itu. Ringkasan: ")
+                        .append(oldSummary.replace("\n", " • ")).append("\n");
+            } else {
+                s.append("Belum ada hasil konversi dosis produk yang tersimpan. Buka tombol Konversi Dosis Pupuk, hitung dengan pupuk yang tersedia, lalu simpan hasil melalui tombol Hitung Konversi.\n");
+            }
+        } else {
+            long calculatedAt = prefs.getLong("fert_conv_result_created", 0L);
+            s.append("Komoditas saat konversi: ").append(savedCrop.isEmpty() ? "tidak tercatat" : savedCrop).append("; ");
+            if (calculatedAt > 0L) {
+                try { s.append("waktu hitung ").append(new java.text.SimpleDateFormat("dd-MM-yyyy HH:mm", Locale.getDefault()).format(new java.util.Date(calculatedAt))).append(". "); }
+                catch (Exception ignored) { }
+            }
+            if (sameCrop && sameNeed && sameArea) {
+                s.append("STATUS: sesuai dengan komoditas, kebutuhan N/P₂O₅/K₂O dan luas saat ini.\n");
+            } else {
+                s.append("STATUS: HASIL KONVERSI TERAKHIR — tidak sepenuhnya cocok dengan kebutuhan/luas/komoditas saat ini; hitung ulang sebelum digunakan.\n");
+                s.append("Target saat konversi: N ").append(show(savedN)).append("; P₂O₅ ").append(show(savedP)).append("; K₂O ").append(show(savedK)).append(" kg/ha.\n");
+            }
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject item = items.optJSONObject(i);
+                if (item == null) continue;
+                s.append("• ").append(item.optString("product", "Pupuk"))
+                        .append(": ").append(show(item.optDouble("doseKgHa", Double.NaN))).append(" kg/ha");
+                if (!item.isNull("totalKg") && Double.isFinite(item.optDouble("totalKg", Double.NaN)))
+                    s.append("; total hitung ").append(show(item.optDouble("totalKg", Double.NaN))).append(" kg pada luas saat konversi");
+                s.append("; kadar label N/P₂O₅/K₂O ")
+                        .append(show(item.optDouble("nPct", Double.NaN))).append("/")
+                        .append(show(item.optDouble("pPct", Double.NaN))).append("/")
+                        .append(show(item.optDouble("kPct", Double.NaN))).append("%.\n");
+            }
+            s.append("Hara tersuplai dibanding target (kg/ha): N ")
+                    .append(show(num(prefs.getString("fert_conv_result_delivered_n", "")))).append("/").append(show(savedN))
+                    .append("; P₂O₅ ").append(show(num(prefs.getString("fert_conv_result_delivered_p2o5", "")))).append("/").append(show(savedP))
+                    .append("; K₂O ").append(show(num(prefs.getString("fert_conv_result_delivered_k2o", "")))).append("/").append(show(savedK)).append(".\n");
+        }
+        s.append("Catatan penting: hasil konversi adalah dosis matematis berdasarkan kadar label produk dan bukan bukti bahwa pupuk benar-benar sudah diaplikasikan. Catat pemakaian aktual pada Riwayat Pemupukan.\n");
+
+        s.append("\nPUPUK YANG DICATAT SUDAH DIGUNAKAN (RIWAYAT PEMUPUKAN)\n");
+        int count = 0;
+        try {
+            JSONArray history = new JSONArray(prefs.getString("fert_history", "[]"));
+            for (int i = history.length() - 1; i >= 0 && count < 6; i--) {
+                JSONObject o = history.optJSONObject(i);
+                if (o == null || !same(o.optString("crop", ""), crop)) continue;
+                if (count > 0) s.append("\n");
+                s.append("• ").append(o.optString("date", "tanggal tidak tercatat"))
+                        .append(" — ").append(o.optString("product", "Pupuk"))
+                        .append(" (kategori ").append(o.optString("category", "tidak tercatat"))
+                        .append("): ").append(show(o.optDouble("dose", Double.NaN))).append(" ").append(o.optString("unit", ""));
+                String nPct = o.optString("nPct", ""), pPct = o.optString("pPct", ""), kPct = o.optString("kPct", "");
+                if (!nPct.isEmpty() || !pPct.isEmpty() || !kPct.isEmpty())
+                    s.append("; kadar N/P₂O₅/K₂O ").append(nPct.isEmpty()?"--":nPct).append("/").append(pPct.isEmpty()?"--":pPct).append("/").append(kPct.isEmpty()?"--":kPct).append("%");
+                if (!o.optString("method", "").trim().isEmpty()) s.append("; cara aplikasi: ").append(o.optString("method", ""));
+                if (!o.optString("stage", "").trim().isEmpty()) s.append("; fase: ").append(o.optString("stage", ""));
+                if (!o.optString("note", "").trim().isEmpty()) s.append("; catatan: ").append(o.optString("note", ""));
+                count++;
+            }
+        } catch (Exception ignored) { }
+        if (count == 0) s.append("Belum ada riwayat penggunaan pupuk untuk komoditas ini. Dosis hasil konversi di atas tidak otomatis tercatat sebagai pemakaian aktual.\n");
+        else s.append("\nRiwayat menampilkan maksimal 6 catatan terbaru untuk komoditas yang dipilih.\n");
+    }
+
+    private boolean near(double a, double b) {
+        return Double.isFinite(a) && Double.isFinite(b) && Math.abs(a - b) <= 0.10;
     }
 
     private double resolveTBase(String crop, double profileTbase) {

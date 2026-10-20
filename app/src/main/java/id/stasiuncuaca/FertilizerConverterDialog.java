@@ -14,6 +14,8 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.util.Locale;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 /**
  * Converts nutrient requirements (kg/ha of N, P2O5, K2O) to farmer-selected
@@ -29,6 +31,10 @@ public final class FertilizerConverterDialog {
     private static final int MUTED = 0xFF9DB0BC;
 
     public static void show(Activity activity, SharedPreferences prefs) {
+        show(activity, prefs, null);
+    }
+
+    public static void show(Activity activity, SharedPreferences prefs, Runnable onCalculated) {
         float density = activity.getResources().getDisplayMetrics().density;
         int pad = Math.max(12, Math.round(14 * density));
         ScrollView scroll = new ScrollView(activity);
@@ -121,14 +127,26 @@ public final class FertilizerConverterDialog {
             saved.apply();
             double[] dose = nonnegativeLeastSquares(matrix, target);
             double[] delivered = new double[3];
+            JSONArray calculatedProducts = new JSONArray();
             StringBuilder out = new StringBuilder("ESTIMASI DOSIS PRODUK\n");
             double area = numberString(prefs.getString("farm_area_m2", ""));
             if (!(area > 0)) area = numberString(prefs.getString("farm_area_ha", "")) * 10000.0;
+            if (!(area > 0)) area = Double.NaN;
             for (int i = 0; i < products.length; i++) {
                 if (dose[i] > 0.0001) {
                     out.append(String.format(Locale.US, "• %s: %.2f kg/ha", names[i], dose[i]));
-                    if (area > 0) out.append(String.format(Locale.US, " (%.2f kg untuk %.2f m²)", dose[i] * area / 10000.0, area));
+                    if (Double.isFinite(area)) out.append(String.format(Locale.US, " (%.2f kg untuk %.2f m²)", dose[i] * area / 10000.0, area));
                     out.append("\n");
+                    try {
+                        JSONObject product = new JSONObject();
+                        product.put("product", names[i]);
+                        product.put("doseKgHa", dose[i]);
+                        product.put("totalKg", Double.isFinite(area) ? dose[i] * area / 10000.0 : JSONObject.NULL);
+                        product.put("nPct", matrix[0][i] * 100.0);
+                        product.put("pPct", matrix[1][i] * 100.0);
+                        product.put("kPct", matrix[2][i] * 100.0);
+                        calculatedProducts.put(product);
+                    } catch (Exception ignored) { }
                 }
                 for (int j = 0; j < 3; j++) delivered[j] += matrix[j][i] * dose[i];
             }
@@ -138,7 +156,23 @@ public final class FertilizerConverterDialog {
             if (residual > 0.5) out.append("PERHATIAN: kombinasi pupuk yang dimasukkan tidak dapat memenuhi semua target sekaligus. Tambah/ubah produk atau terima kekurangan/kelebihan yang tercantum; jangan menganggapnya tepat.");
             else out.append("Kesesuaian matematis baik untuk kadar label yang dimasukkan; cek tetap dosis label, waktu aplikasi dan SOP lokal.");
             out.append("\n\nCatatan: ini mengonversi kebutuhan hara menjadi produk, bukan validasi kebutuhan agronomi. Nilai soil meter 8-in-1 adalah input screening; gunakan rekomendasi spesifik lokasi atau laboratorium jika tersedia.");
+            // Save the calculated product doses so the agronomy dashboard and printable report
+            // can show the same calculation without treating it as proof of field application.
+            prefs.edit()
+                    .putString("fert_conv_result_items", calculatedProducts.toString())
+                    .putString("fert_conv_result_summary", out.toString())
+                    .putString("fert_conv_result_crop", prefs.getString("crop", "Tanaman pertanian"))
+                    .putString("fert_conv_result_target_n", Double.toString(target[0]))
+                    .putString("fert_conv_result_target_p2o5", Double.toString(target[1]))
+                    .putString("fert_conv_result_target_k2o", Double.toString(target[2]))
+                    .putString("fert_conv_result_delivered_n", Double.toString(delivered[0]))
+                    .putString("fert_conv_result_delivered_p2o5", Double.toString(delivered[1]))
+                    .putString("fert_conv_result_delivered_k2o", Double.toString(delivered[2]))
+                    .putString("fert_conv_result_area_m2", Double.isFinite(area) ? Double.toString(area) : "")
+                    .putLong("fert_conv_result_created", System.currentTimeMillis())
+                    .apply();
             result.setText(out.toString());
+            if (onCalculated != null) onCalculated.run();
         }));
         dialog.show();
     }

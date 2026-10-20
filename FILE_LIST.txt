@@ -2,6 +2,7 @@
 ./.gitignore
 ./AGRONOMY_NOTES.md
 ./CROP_PROFILES_SAYURAN.md
+./FILE_LIST.txt
 ./LOCAL_BUILD.md
 ./MODEL_MATEMATIKA_DAN_ALUR_v1.5.7.md
 ./PATCH_NOTES.md
@@ -13,6 +14,7 @@
 ./PATCH_NOTES_FIX15_MACRO_WEATHER_PROVIDERS.md
 ./PATCH_NOTES_FIX16_WEATHERAPI_OPENWEATHER.md
 ./PATCH_NOTES_FIX17_BUILD_ERRORS.md
+./PATCH_NOTES_FIX18_FERTILIZER_DOLOMITE_REPORT.md
 ./PATCH_NOTES_FIX4_FIELD_NOTES_WEATHER_FERTILIZER.md
 ./PATCH_NOTES_FIX5_SAVE_GPS_MODEL.md
 ./PATCH_NOTES_FIX6_PDF_REPORT.md
@@ -45,6 +47,7 @@
 ./app/src/main/java/id/stasiuncuaca/SettingsActivity.java
 ./app/src/main/java/id/stasiuncuaca/UsbSoilMeter.java
 ./app/src/main/java/id/stasiuncuaca/WeatherMacroModel.java
+./app/src/main/res/drawable-nodpi/ic_launcher_art.png
 ./app/src/main/res/drawable/bg_button.xml
 ./app/src/main/res/drawable/bg_chip.xml
 ./app/src/main/res/drawable/bg_edit.xml
@@ -52,7 +55,6 @@
 ./app/src/main/res/drawable/bg_root.xml
 ./app/src/main/res/drawable/ic_launcher_background.xml
 ./app/src/main/res/drawable/ic_launcher_foreground.xml
-./app/src/main/res/drawable-nodpi/ic_launcher_art.png
 ./app/src/main/res/layout/activity_agronomy.xml
 ./app/src/main/res/layout/activity_csv_download.xml
 ./app/src/main/res/layout/activity_field_notes.xml
@@ -71,15 +73,14 @@
 ./app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
 ./app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 ./app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
+./app/src/main/res/values-night/colors.xml
 ./app/src/main/res/values/colors.xml
 ./app/src/main/res/values/strings.xml
 ./app/src/main/res/values/themes.xml
-./app/src/main/res/values-night/colors.xml
 ./build.gradle
-./gradle/wrapper/gradle-wrapper.properties
 ./gradle.properties
+./gradle/wrapper/gradle-wrapper.properties
 ./gradlew
 ./gradlew.bat
 ./patch.py
 ./settings.gradle
-./FILE_LIST.txt
