@@ -1,0 +1,21 @@
+diff --git a/app/src/main/java/id/stasiuncuaca/DolomiteCalculatorDialog.java b/app/src/main/java/id/stasiuncuaca/DolomiteCalculatorDialog.java
+index afdc21c55bf7c510a018851339cc2362e7942168..0000000000000000000000000000000000000000 100644
+--- a/app/src/main/java/id/stasiuncuaca/DolomiteCalculatorDialog.java
++++ b/app/src/main/java/id/stasiuncuaca/DolomiteCalculatorDialog.java
+@@ -15,5 +15,8 @@
+ import android.widget.Spinner;
+ import android.widget.TextView;
+ import android.widget.Toast;
+ 
++import org.json.JSONArray;
++import org.json.JSONObject;
++
+ import java.util.Locale;
+diff --git a/app/src/main/java/id/stasiuncuaca/FieldNotesActivity.java b/app/src/main/java/id/stasiuncuaca/FieldNotesActivity.java
+index 8488d27e11c21cdb2a775c92cb2e06537c1217c5..0000000000000000000000000000000000000000 100644
+--- a/app/src/main/java/id/stasiuncuaca/FieldNotesActivity.java
++++ b/app/src/main/java/id/stasiuncuaca/FieldNotesActivity.java
+@@ -2630 +2630 @@
+-    private String historyFileName(String key) {
++    private static String historyFileName(String key) {
+*** End Patch
