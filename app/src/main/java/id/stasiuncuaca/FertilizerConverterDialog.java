@@ -146,7 +146,9 @@ public final class FertilizerConverterDialog {
                         product.put("pPct", matrix[1][i] * 100.0);
                         product.put("kPct", matrix[2][i] * 100.0);
                         calculatedProducts.put(product);
-                    } catch (Exception ignored) { }
+                    } catch (Exception jsonError) {
+                        // Keep the calculation usable even if a result item cannot be serialized.
+                    }
                 }
                 for (int j = 0; j < 3; j++) delivered[j] += matrix[j][i] * dose[i];
             }

@@ -2,7 +2,7 @@
 fa92c775cfbce07b7cdbe813d7b8c12a62d7736e82323e1a609373c38d8a69bb  ./.gitignore
 718a8635d655763bc070f8f0874519d797bce3904a180aa3add765aed9928ca7  ./AGRONOMY_NOTES.md
 939ca6fe5f65b8f60e0d3d554d252542e2eb5439bfa36190ac6b12c9e3cf351a  ./CROP_PROFILES_SAYURAN.md
-e651e28800293ea2ab07bc2a89cfef0e159006d0b97f1d3caeb6240cc67b6d5b  ./FILE_LIST.txt
+87c5616ebc4e2009364f753ab388392e74f25356aec8c3021bad3c2d0ee57dcd  ./FILE_LIST.txt
 1f3eacfde7aa0414887667903d77152d39323aa340a795ed068f0e2b3a8fe581  ./LOCAL_BUILD.md
 bc625f33ff8c8e92e1f06bd7ae13aebdb3316ac420d1e0b526a055b29a427d1a  ./MODEL_MATEMATIKA_DAN_ALUR_v1.5.7.md
 9539e15cac9fac2788c3bda57b93ed9960124edd0408193b7d14a926ee1834a5  ./PATCH_NOTES.md
@@ -15,6 +15,7 @@ b07e71861e358287039240c3b594c6c3919534e7c9e6c050f5e96a98b72d4ffb  ./PATCH_NOTES_
 75406ea2171864cb7db29a15be590000ff537e052d31d279fd21d7ec43b0fbd7  ./PATCH_NOTES_FIX16_WEATHERAPI_OPENWEATHER.md
 f1265132e9723068fae89367b733426a7677322991877c04fdbf5335b8c930bd  ./PATCH_NOTES_FIX17_BUILD_ERRORS.md
 f05db34923b4bfd3ae38bde5f9b9c16f40c513d84fcc9d3b1420ce12ecfb00d4  ./PATCH_NOTES_FIX18_FERTILIZER_DOLOMITE_REPORT.md
+08eb240c052a26c2d4089c78036c6722b5764fab55b70aefcef91da67509bfe4  ./PATCH_NOTES_FIX19_COMPILER_CATCH_SCOPE.md
 2190895fcd386b19ead8e6b88008942a76d5aa92a01fa0691e8bb7bc46be12d8  ./PATCH_NOTES_FIX4_FIELD_NOTES_WEATHER_FERTILIZER.md
 ab07c474a2def927b3910f170c367a967a47ab7bc85f0220a387dcfca07fc469  ./PATCH_NOTES_FIX5_SAVE_GPS_MODEL.md
 9ff907b8a37cc07de8dfbcf76f411ee753bd037e2a46e91506f5b84f101379ba  ./PATCH_NOTES_FIX6_PDF_REPORT.md
@@ -38,7 +39,7 @@ af1eec9f5c8ae36d7695dbd4f88f6fe7caec48dc856a3c349e9d2822ac867f63  ./app/src/main
 673d50e439b102631dbac6170373c3148dc1b62f08b456292f5b02208525ffff  ./app/src/main/java/id/stasiuncuaca/CropDatabase.java
 52e66421cdfc37b31296ee3ad4ede1cd93b825e894e66c59f380a3d6753632cf  ./app/src/main/java/id/stasiuncuaca/CsvDownloadActivity.java
 2bb764b84cc9e3e2cabe8521453e0768b052130efefb3f4070e8a1f0ab2a22bf  ./app/src/main/java/id/stasiuncuaca/DolomiteCalculatorDialog.java
-f265fd75734f98920fc81aac55dc7f49bd44815a3c9367306ee176be2b7e3699  ./app/src/main/java/id/stasiuncuaca/FertilizerConverterDialog.java
+0d0a47baeeaa1766ca890feeb64012c18e3dbd6bd2fe74048423d556d92f3576  ./app/src/main/java/id/stasiuncuaca/FertilizerConverterDialog.java
 68c5d88cc156a7007524ddceb15a16d92ffa13ff0f1e8167cfb25bfcefb0df2a  ./app/src/main/java/id/stasiuncuaca/FieldNotesActivity.java
 9883f785d81c6098fe6dd284c185e08458fb40e2792bf512b9c0f1b634307944  ./app/src/main/java/id/stasiuncuaca/LightConversion.java
 c2e260f31dc2e3fd44de99f4df013f3a0d171e81d9ea7491410d5ca9866584cb  ./app/src/main/java/id/stasiuncuaca/MainActivity.java
@@ -47,7 +48,6 @@ d1a8e367e5c3e22756b3cc78747e50104612340507ac72ceaf3b94b3b6269897  ./app/src/main
 7817170e5adaf032f92df8daf0df0e2e72c1bbd3e11dd778ea015488a7943802  ./app/src/main/java/id/stasiuncuaca/SettingsActivity.java
 34971d9b02bd28992dd1e74a3b4ad10e71d6fb7a972abc883c869bdf6b2ea0db  ./app/src/main/java/id/stasiuncuaca/UsbSoilMeter.java
 b4c9ebc08f5c8829796892d246cd72ad90d7a5dd3025f7159c1bce640008d181  ./app/src/main/java/id/stasiuncuaca/WeatherMacroModel.java
-bdb10a729b2017bd1078d3bbe175f5953936cad0e2f43b692e73c95861b45f30  ./app/src/main/res/drawable-nodpi/ic_launcher_art.png
 3341dc206de6f9cd1fce4bda44d2df808ee823ec8a4f0d79b7d0e43081ee8918  ./app/src/main/res/drawable/bg_button.xml
 ab352221e166258136a4161fff22da5ef74ebca57bca8bcdf3fa3343e73746b1  ./app/src/main/res/drawable/bg_chip.xml
 4cdb7fcc902e81095ebc72a3a53057b89e12a23c127499f022ab23efb211d204  ./app/src/main/res/drawable/bg_edit.xml
@@ -55,6 +55,7 @@ b1549d8c6cfb22798fcf42931e9528cbc7ac1f5151705b4dd384c04f2b1749ea  ./app/src/main
 f65cec9ff2c488e8e908279ceba46f0df0a4a0668c09ea0fad6dfb22c429d60d  ./app/src/main/res/drawable/bg_root.xml
 fb248cdd12f90de70d2c35b7c4cca1fc2d27fb5ecf2de8e3089da7ebf87f032e  ./app/src/main/res/drawable/ic_launcher_background.xml
 a23628420234a0167644469db7a54bdc01328c256e10629c08fc324fb00fbe3d  ./app/src/main/res/drawable/ic_launcher_foreground.xml
+bdb10a729b2017bd1078d3bbe175f5953936cad0e2f43b692e73c95861b45f30  ./app/src/main/res/drawable-nodpi/ic_launcher_art.png
 790ea355a28b2dc003954634169103d5e0fdfff9a336ab025b9805f9d8dfb4cd  ./app/src/main/res/layout/activity_agronomy.xml
 8c9adc066efc49e176c7a1bdf0f6ddeee986b4e5466b76203c49531ea3753e4f  ./app/src/main/res/layout/activity_csv_download.xml
 bb55212e76f318107da4d660a55892baa62fc56aded9a9f9d413278ef6020c0f  ./app/src/main/res/layout/activity_field_notes.xml
@@ -73,13 +74,13 @@ b18345fd3075baafa3a155645c7907b9db7e33a3a32e6cfa238df3ea2fc1e5c7  ./app/src/main
 8f89dce00a2b7761b98f0fc0ca782d2e51ac92d8d18f1d9236fa5f0cda5ab841  ./app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
 c21cf5964327a926e25607793d5520783bf0cb53542bcb0a20f5a8ec140b51f6  ./app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 c21cf5964327a926e25607793d5520783bf0cb53542bcb0a20f5a8ec140b51f6  ./app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
-8996d61b36ee534d08730b30d66d49f34863a0163190c93f022658146216ec7c  ./app/src/main/res/values-night/colors.xml
 1c1569ba58fc8c6432cfb50c36b9e2f33551c840f91369a50e65008d3fd04946  ./app/src/main/res/values/colors.xml
 8f50661a8530d4a997d6c0010a98809311200cfce0cb083be07b7484bf22ccbc  ./app/src/main/res/values/strings.xml
 7bdbf036e8ae1e0d93c03c093aa4e1a7fe13d9423a45ecc6630bdb4bd4556bce  ./app/src/main/res/values/themes.xml
+8996d61b36ee534d08730b30d66d49f34863a0163190c93f022658146216ec7c  ./app/src/main/res/values-night/colors.xml
 10e6cb18fe1925a886808bf14caf94050ac7377fd133b4e6cb8df13d1b7358e8  ./build.gradle
-bc8367c192e070904faf117324d3a82a46dff108e0eaaf0b816698264c06cd6c  ./gradle.properties
 6a9a777fa531164ee2e0f320af40c9cfc12a333a466c76d97d0e9b52a9970b64  ./gradle/wrapper/gradle-wrapper.properties
+bc8367c192e070904faf117324d3a82a46dff108e0eaaf0b816698264c06cd6c  ./gradle.properties
 57cfeef74c7fd93b209dae24e09f4a30e2fb2532a81ef5dad0f6ae7a29375c09  ./gradlew
 d0564afe9e6ee5ada13806ea4984e70f00d624eaddec336937bf8c1e916e189d  ./gradlew.bat
 fce87f4f0156b8376694fc015669028d9d7063df7507906ef1644890d06f9885  ./patch.py
