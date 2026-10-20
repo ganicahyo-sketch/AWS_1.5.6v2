@@ -1,3 +1,8 @@
+## FIX22 — Perbaikan kompilasi FIX21
+- `DolomiteCalculatorDialog.java`: menambahkan impor `JSONArray` dan `JSONObject` yang dipakai saat membaca histori catatan lapangan.
+- `FieldNotesActivity.java`: membuat helper `historyFileName(String)` menjadi static agar bisa dipanggil dari `latestFieldNotePhValue(...)`.
+- Tidak mengubah logika kalkulator maupun fitur aplikasi lainnya.
+
 ## Perapian hasil analisis untuk petani
 - Hasil analisis di layar disusun ulang agar saran tindakan dibaca lebih dahulu, diikuti sumber data, kondisi tanah, perkiraan pupuk, cuaca, peringatan OPT, catatan kebun, dan rincian tambahan.
 - Antarbagian diberi jarak, judul dibuat lebih jelas, ukuran teks hasil analisis diperbesar, dan istilah teknis utama diberi penjelasan yang lebih mudah dipahami.

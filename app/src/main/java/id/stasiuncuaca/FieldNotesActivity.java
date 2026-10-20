@@ -2627,7 +2627,7 @@ public class FieldNotesActivity extends Activity {
         return false;
     }
 
-    private String historyFileName(String key) {
+    private static String historyFileName(String key) {
         String safeKey = key == null ? "history" : key.replaceAll("[^A-Za-z0-9_-]", "_");
         return "history_" + safeKey + ".json";
     }
